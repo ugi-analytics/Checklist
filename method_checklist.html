@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</title>
 <meta name="theme-color" content="#0B1A3F">
+<meta name="color-scheme" content="dark light">
 <link rel="icon" type="image/png" href="img/favicon.png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -63,8 +64,9 @@
 
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
+  html { background: #0B1A3F; }
   body {
-    margin: 0; background: #0B1A3F; color: var(--ink); position: relative; min-height: 100vh;
+    margin: 0; background: transparent; color: var(--ink); min-height: 100vh;
     font: 400 16px/1.55 'IBM Plex Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -74,21 +76,23 @@
 
   /* ---------- Фон на всю сторінку ---------- */
   /* Фото й вуаль — фіксовані шари під контентом (background-attachment: fixed не працює на iOS) */
-  .page-bg, .page-veil { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
-  .page-bg {
-    background: #0B1A3F url("img/bg.jpg") no-repeat 72% 30% / cover;
+  .page-bg, .page-veil { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .page-bg { background: #0B1A3F; }
+  .page-bg img {
+    width: 100%; height: 100%; object-fit: cover; object-position: 72% 30%; display: block;
   }
   .page-veil {
     background:
       linear-gradient(to right, rgba(11,26,63,.55), rgba(11,26,63,.15) 70%),
       linear-gradient(to bottom, rgba(11,26,63,.1) 0, rgba(11,26,63,.55) 45vh, rgba(8,18,44,.86) 85vh);
   }
-  @media (max-width: 960px) { .page-bg { background-image: url("img/bg-960.jpg"); } }
+  /* увесь контент — над фоновими шарами */
+  .masthead, main, footer { position: relative; z-index: 1; }
 
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
 
   /* ---------- Шапка ---------- */
-  .masthead { color: #fff; position: relative; }
+  .masthead { color: #fff; }
   .masthead .wrap { padding-top: clamp(150px, 30vw, 330px); padding-bottom: 26px; }
   .masthead h1 {
     font: 800 clamp(1.3rem, 3.8vw, 1.9rem)/1.2 'Montserrat', sans-serif;
@@ -261,7 +265,10 @@
 
   /* ---------- Мобільна ---------- */
   @media (max-width: 560px) {
-    .page-bg { background-size: auto min(72vh, 600px); background-position: 70% top; }
+    .page-bg img {
+      position: absolute; top: 0; width: auto; height: min(72vh, 600px); max-width: none;
+      left: calc((100vw - min(108vh, 900px)) * .7);
+    }
     .masthead .wrap { padding-top: 200px; padding-bottom: 22px; }
     .emblem { width: 140px; top: 32px; right: 16px; }
     .masthead p { font-size: .88rem; }
@@ -304,7 +311,10 @@
 </head>
 <body>
 
-<div class="page-bg" role="img" aria-label="Нічне місто, службовий автомобіль поліції та інспекційний чекліст"></div>
+<div class="page-bg">
+  <img src="img/bg.jpg" srcset="img/bg-960.jpg 960w, img/bg.jpg 1536w" sizes="(max-width: 560px) 900px, 100vw"
+       alt="" fetchpriority="high" decoding="async">
+</div>
 <div class="page-veil" aria-hidden="true"></div>
 
 <header class="masthead">
