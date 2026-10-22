@@ -62,14 +62,14 @@
   /* Фото й вуаль — фіксовані шари під контентом (background-attachment: fixed не працює на iOS) */
   .page-bg, .page-veil { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
   .page-bg {
-    background: #0B1A3F url("img/hero.jpg") no-repeat 72% 30% / cover;
+    background: #0B1A3F url("img/bg.jpg") no-repeat 72% 30% / cover;
   }
   .page-veil {
     background:
       linear-gradient(to right, rgba(11,26,63,.55), rgba(11,26,63,.15) 70%),
       linear-gradient(to bottom, rgba(11,26,63,.1) 0, rgba(11,26,63,.55) 45vh, rgba(8,18,44,.86) 85vh);
   }
-  @media (max-width: 960px) { .page-bg { background-image: url("img/hero-960.jpg"); } }
+  @media (max-width: 960px) { .page-bg { background-image: url("img/bg-960.jpg"); } }
 
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
 
@@ -82,6 +82,16 @@
     text-shadow: 0 2px 18px rgba(0,0,0,.55);
   }
   .masthead p { margin: 0; font-size: .95rem; color: rgba(255,255,255,.82); text-shadow: 0 1px 10px rgba(0,0,0,.6); }
+  .emblem {
+    position: absolute; z-index: 1; display: block;
+    width: clamp(132px, 19vw, 270px); aspect-ratio: 1;
+    top: clamp(28px, 5vw, 76px); right: max(16px, calc((100vw - 1180px) / 2));
+  }
+  .emblem::before {                  /* синє сяйво, як на фото */
+    content: ""; position: absolute; inset: -14%; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(70,140,255,.55), rgba(70,140,255,0));
+  }
+  .emblem img { position: relative; width: 100%; height: 100%; display: block; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)); }
   .masthead .flag { display: flex; width: 72px; height: 5px; border-radius: 3px; overflow: hidden; margin-bottom: 14px; }
   .masthead .flag::before, .masthead .flag::after { content: ""; flex: 1; }
   .masthead .flag::before { background: #2F6BE0; }
@@ -235,8 +245,9 @@
 
   /* ---------- Мобільна ---------- */
   @media (max-width: 560px) {
-    .page-bg { background-size: auto min(72vh, 600px); background-position: right top; }
-    .masthead .wrap { padding-top: min(46vh, 330px); padding-bottom: 22px; }
+    .page-bg { background-size: auto min(72vh, 600px); background-position: 70% top; }
+    .masthead .wrap { padding-top: 200px; padding-bottom: 22px; }
+    .emblem { width: 140px; top: 32px; right: 16px; }
     .masthead p { font-size: .88rem; }
     .step { padding-left: 0; }
     .step::before { display: none; }
@@ -262,6 +273,8 @@
     body { background: #fff; color: #000; font-size: 11pt; }
     .masthead { background: #fff !important; color: #000; border-bottom: 3px solid #000; }
     .page-bg, .page-veil, .masthead .flag { display: none; }
+    .emblem { position: static; width: 90px; margin: 0 0 8px 16px; }
+    .emblem::before { display: none; }
     .masthead .wrap { padding-top: 12px; }
     .masthead h1, .masthead p, .step-head h2 { text-shadow: none; color: #000; }
     .masthead p { color: #333; }
@@ -274,10 +287,14 @@
 </head>
 <body>
 
-<div class="page-bg" role="img" aria-label="Нічне місто, службовий автомобіль поліції та інспекційний чекліст зі знаком УГІ ГУНП в Полтавській області"></div>
+<div class="page-bg" role="img" aria-label="Нічне місто, службовий автомобіль поліції та інспекційний чекліст"></div>
 <div class="page-veil" aria-hidden="true"></div>
 
 <header class="masthead">
+  <picture class="emblem">
+    <source srcset="img/emblem.webp" type="image/webp">
+    <img src="img/emblem.png" alt="Знак Управління головної інспекції ГУНП в Полтавській області" width="256" height="256">
+  </picture>
   <div class="wrap">
     <span class="flag" aria-hidden="true"></span>
     <h1>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</h1>
