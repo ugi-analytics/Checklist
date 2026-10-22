@@ -1,511 +1,652 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</title>
+<meta name="theme-color" content="#1F4FA3">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EEF1F6;
+    --surface: #FFFFFF;
+    --surface-2: #F5F7FA;
+    --ink: #13213C;
+    --muted: #5B6577;
+    --line: #D8DEE8;
+    --blue: #1F4FA3;
+    --blue-soft: #E3EBF8;
+    --yellow: #F2B705;
+    --ref-bg: #FFF4CC;
+    --ref-ink: #6B4E00;
+    --done: #2E7D4F;
+    --done-soft: #E2F2E8;
+    --warn: #B3261E;
+    --mark: #FFE27A;
+    --shadow: 0 1px 2px rgba(19,33,60,.06), 0 8px 24px -12px rgba(19,33,60,.18);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0C1424; --surface: #142038; --surface-2: #1A2843; --ink: #E6ECF5; --muted: #98A4B8;
+      --line: #263656; --blue: #7FA7EE; --blue-soft: #1C2D50; --yellow: #F5C431;
+      --ref-bg: #3A3110; --ref-ink: #F7DA7A; --done: #5BC487; --done-soft: #16352A;
+      --warn: #FF8A80; --mark: #6B5A12; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0C1424; --surface: #142038; --surface-2: #1A2843; --ink: #E6ECF5; --muted: #98A4B8;
+    --line: #263656; --blue: #7FA7EE; --blue-soft: #1C2D50; --yellow: #F5C431;
+    --ref-bg: #3A3110; --ref-ink: #F7DA7A; --done: #5BC487; --done-soft: #16352A;
+    --warn: #FF8A80; --mark: #6B5A12; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
 
-    <style>
-        /* Застосовуємо Montserrat Bold до головного заголовка та заголовків розділів */
-        h1, h2 {
-            font-family: 'Montserrat', sans-serif !important;
-            font-weight: 700 !important;
-        }
-        .chevron { transition: transform 0.3s ease; }
-        .rotate-180 { transform: rotate(180deg); }
-        .task-checked { opacity: 0.4; text-decoration: line-through; transition: all 0.3s ease; }
-        .item-row { transition: background-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease; }
-    </style>
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 400 16px/1.55 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- Шапка ---------- */
+  .masthead {
+    background: var(--blue); color: #fff; position: relative; overflow: hidden;
+  }
+  :root[data-theme="dark"] .masthead { background: #13306A; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .masthead { background: #13306A; } }
+  .masthead::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--yellow);
+  }
+  .masthead .wrap { display: flex; gap: 20px; align-items: center; padding-top: 28px; padding-bottom: 34px; }
+  .masthead a { flex-shrink: 0; width: 72px; height: 72px; display: block; }
+  .masthead img {
+    width: 72px; height: 72px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+    border: 3px solid rgba(255,255,255,.85); background: #fff;
+  }
+  .masthead h1 {
+    font: 800 clamp(1.25rem, 3.6vw, 1.75rem)/1.2 'Montserrat', sans-serif;
+    margin: 0 0 6px; letter-spacing: -.01em; text-wrap: balance;
+  }
+  .masthead p { margin: 0; font-size: .95rem; color: rgba(255,255,255,.82); }
+  .theme-btn {
+    margin-left: auto; align-self: flex-start; flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,.35);
+    background: rgba(255,255,255,.1); color: #fff; display: grid; place-items: center;
+  }
+  .theme-btn:hover { background: rgba(255,255,255,.2); }
+  .theme-btn svg { width: 20px; height: 20px; }
+
+  /* ---------- Липка панель ---------- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .toolbar .wrap { padding-top: 12px; padding-bottom: 12px; display: grid; gap: 10px; }
+  .progress-row { display: flex; align-items: center; gap: 12px; }
+  .progress-track {
+    flex: 1; height: 10px; border-radius: 99px; background: var(--line); overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0; background: var(--yellow); border-radius: 99px;
+    transition: width .35s ease, background-color .35s ease;
+  }
+  .progress-fill.full { background: var(--done); }
+  .progress-label { font-weight: 600; font-size: .9rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .progress-label span { color: var(--muted); font-weight: 400; }
+
+  .search-row { display: flex; gap: 8px; }
+  .search {
+    flex: 1; position: relative;
+  }
+  .search svg { position: absolute; left: 12px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+  .search input {
+    width: 100%; height: 44px; padding: 0 40px 0 40px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface); outline: none;
+  }
+  .search input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .search input::placeholder { color: var(--muted); }
+  .search .clear {
+    position: absolute; right: 6px; top: 50%; translate: 0 -50%; width: 32px; height: 32px;
+    border: 0; background: transparent; color: var(--muted); border-radius: 8px; display: none;
+  }
+  .search.has-text .clear { display: grid; place-items: center; }
+  .tool-btn {
+    height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface); font-size: .9rem; font-weight: 500; white-space: nowrap;
+  }
+  .tool-btn:hover { border-color: var(--blue); color: var(--blue); }
+  .tool-btn.danger:hover { border-color: var(--warn); color: var(--warn); }
+
+  /* ---------- Маршрут ---------- */
+  main { padding: 28px 0 64px; }
+  .route { list-style: none; margin: 0; padding: 0; position: relative; }
+  .step { position: relative; padding-left: 60px; padding-bottom: 28px; }
+  .step::before {                      /* лінія маршруту */
+    content: ""; position: absolute; left: 21px; top: 44px; bottom: 0; width: 2px;
+    background: var(--line);
+  }
+  .step:last-child::before { display: none; }
+  .step.complete::before { background: var(--done); }
+  .step-num {
+    position: absolute; left: 0; top: 0; width: 44px; height: 44px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--surface); color: var(--blue);
+    border: 2px solid var(--blue);
+    font: 800 1.05rem/1 'Montserrat', sans-serif;
+    transition: background-color .3s, border-color .3s, color .3s;
+  }
+  .step.complete .step-num { background: var(--done); border-color: var(--done); color: #fff; }
+  .step-num svg { width: 22px; height: 22px; }
+
+  .step-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 44px; padding-top: 8px; margin-bottom: 12px; }
+  .step-head h2 {
+    margin: 0; font: 700 1.15rem/1.3 'Montserrat', sans-serif; letter-spacing: -.005em; text-wrap: balance;
+  }
+  .step-count { font-size: .85rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .step.complete .step-count { color: var(--done); font-weight: 600; }
+
+  /* Крок 0 — брифінг */
+  .step.brief .step-num { background: var(--yellow); border-color: var(--yellow); color: #13213C; }
+  .brief-card {
+    background: var(--surface); border-radius: 14px; box-shadow: var(--shadow);
+    border-left: 5px solid var(--yellow); padding: 16px 18px; font-size: .97rem;
+  }
+  .brief-card strong { font-weight: 600; }
+
+  /* Пункти */
+  .tasks { background: var(--surface); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .task + .task { border-top: 1px solid var(--line); }
+  .task-row { display: flex; align-items: stretch; }
+  .check {
+    flex-shrink: 0; width: 60px; display: grid; place-items: center; position: relative; cursor: pointer;
+  }
+  .check input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .box {
+    width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--muted);
+    display: grid; place-items: center; transition: background-color .15s, border-color .15s; background: var(--surface);
+  }
+  .box svg { width: 16px; height: 16px; color: #fff; opacity: 0; transform: scale(.6); transition: opacity .15s, transform .2s; }
+  .check input:checked + .box { background: var(--done); border-color: var(--done); }
+  .check input:checked + .box svg { opacity: 1; transform: scale(1); }
+  .check input:focus-visible + .box { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+  .task-toggle {
+    flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    text-align: left; background: transparent; border: 0; padding: 14px 16px 14px 0; min-height: 60px;
+  }
+  .task-title { font-weight: 500; font-size: 1rem; line-height: 1.35; transition: color .2s; }
+  .task.done .task-title { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+  .hint-cue {
+    flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+    font-size: .82rem; color: var(--blue); font-weight: 500;
+  }
+  .hint-cue svg { width: 18px; height: 18px; transition: transform .25s ease; }
+  .task.open .hint-cue svg { transform: rotate(180deg); }
+  .task-toggle:hover .task-title { color: var(--blue); }
+
+  .hint {
+    display: grid; grid-template-rows: 0fr; transition: grid-template-rows .28s ease;
+  }
+  .task.open .hint { grid-template-rows: 1fr; }
+  .hint > div { overflow: hidden; }
+  .hint-body {
+    margin: 0 16px 16px 60px; padding: 14px 16px; border-radius: 10px;
+    background: var(--surface-2); font-size: .95rem; color: var(--ink);
+  }
+  .hint-body h3 { margin: 0 0 8px; font: 600 .85rem/1.3 'IBM Plex Sans', sans-serif; color: var(--muted); }
+  .hint-body ul { margin: 0; padding-left: 1.1em; }
+  .hint-body li { margin: 0 0 .6em; padding-left: .2em; }
+  .hint-body li:last-child { margin-bottom: 0; }
+  .hint-body li::marker { color: var(--blue); }
+  .ref {
+    display: inline; background: var(--ref-bg); color: var(--ref-ink); font-weight: 500; font-size: .9em;
+    padding: .1em .4em; border-radius: 5px; box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
+  .em { font-weight: 600; }
+  .deadline { color: var(--warn); font-weight: 600; }
+  mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+  .empty {
+    display: none; text-align: center; color: var(--muted); padding: 40px 16px;
+    background: var(--surface); border-radius: 14px; box-shadow: var(--shadow);
+  }
+  .empty.show { display: block; }
+  .hidden-by-search { display: none !important; }
+
+  .finish {
+    margin-top: 4px; padding: 18px; border-radius: 14px; text-align: center;
+    background: var(--done-soft); color: var(--done); font-weight: 600; display: none;
+  }
+  .finish.show { display: block; }
+
+  footer { text-align: center; color: var(--muted); font-size: .82rem; padding-bottom: 32px; }
+
+  /* ---------- Мобільна ---------- */
+  @media (max-width: 560px) {
+    .masthead .wrap { gap: 14px; padding-top: 20px; padding-bottom: 26px; }
+    .masthead a, .masthead img { width: 54px; height: 54px; }
+    .masthead p { font-size: .88rem; }
+    .step { padding-left: 0; }
+    .step::before { display: none; }
+    .step-num { position: static; width: 34px; height: 34px; font-size: .9rem; flex-shrink: 0; }
+    .step-num svg { width: 18px; height: 18px; }
+    .step-head { justify-content: flex-start; align-items: center; padding-top: 0; }
+    .step-head h2 { font-size: 1.05rem; flex: 1; }
+    .check { width: 52px; }
+    .hint-body { margin-left: 16px; }
+    .hint-cue .lbl { display: none; }
+    .tool-btn .lbl { display: none; }
+    .tool-btn { padding: 0 12px; }
+  }
+  @media (min-width: 561px) { .step-head .step-num-inline { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+
+  /* ---------- Друк ---------- */
+  @media print {
+    .toolbar, .theme-btn, .hint-cue, footer { display: none !important; }
+    body { background: #fff; color: #000; font-size: 11pt; }
+    .masthead { background: #fff !important; color: #000; border-bottom: 3px solid #000; }
+    .masthead::after { display: none; }
+    .masthead p { color: #333; }
+    .tasks, .brief-card { box-shadow: none; border: 1px solid #999; }
+    .hint { grid-template-rows: 1fr !important; }
+    .step { break-inside: avoid-page; }
+    .task { break-inside: avoid; }
+  }
+</style>
 </head>
-<body class="bg-gradient-to-br from-[#090d16] via-[#111e42] to-[#090d16] min-h-screen p-4 md:p-8 text-[#e2e8f0] font-sans antialiased">
+<body>
 
-    <div class="max-w-3xl mx-auto space-y-5">
-        
-        <div class="bg-slate-900/90 backdrop-blur-md rounded-2xl shadow-2xl p-6 border border-slate-800/60 flex items-center justify-between gap-4 relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-blue-500 via-sky-400 to-blue-600"></div>
-            <div>
-                <h1 class="text-xl md:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                    📘 Алгоритм перевірки підрозділів заступниками відповідальних ГУНП
-                </h1>
-                <p class="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
-                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Інтерактивні підказки та роз'яснення алгоритмів перевірки підрозділів ГУНП
-                </p>
-            </div>
-            <a href="https://lh3.googleusercontent.com/u/0/d/19OvsmuAvfL6JK04_f55WWt0JlWHiiPfI" target="_blank" class="shrink-0 transition transform hover:scale-105 active:scale-95">
-                <img src="https://lh3.googleusercontent.com/u/0/d/19OvsmuAvfL6JK04_f55WWt0JlWHiiPfI" alt="УГІ ГУНП" class="w-16 h-16 md:w-20 md:h-20 rounded-full border-2 border-slate-700/80 object-cover shadow-lg">
-            </a>
-        </div>
-
-        <div class="bg-slate-900/60 backdrop-blur rounded-2xl p-4 border border-slate-800/80 shadow-xl space-y-4">
-            <div class="relative">
-                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 text-sm">🔍</span>
-                <input type="text" id="search-input" placeholder="Швидкий пошук за ключовими словами чи наказами..." class="w-full pl-9 pr-4 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition">
-            </div>
-
-            <div>
-                <div class="flex justify-between text-xs font-medium text-slate-400 mb-1.5">
-                    <span>Прогрес перевірки підрозділу</span>
-                    <span id="progress-text">0 з 0 (0%)</span>
-                </div>
-                <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                    <div id="progress-bar" class="bg-gradient-to-r from-blue-500 to-sky-400 h-full w-0 transition-all duration-300 ease-out"></div>
-                </div>
-            </div>
-
-            <div class="flex justify-between items-center gap-2 text-xs pt-1 border-t border-slate-800/40">
-                <button id="reset-btn" class="text-rose-400 hover:text-rose-300 font-medium transition flex items-center gap-1">🔄 Скинути прогрес</button>
-                <div class="flex gap-2">
-                    <button id="open-all-btn" class="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 rounded-lg text-slate-300 font-medium transition">🔓 Розгорнути все</button>
-                    <button id="close-all-btn" class="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 rounded-lg text-slate-300 font-medium transition">🔒 Згорнути все</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="sections-container" class="space-y-4">
-            <div class="bg-blue-900/30 border-l-4 border-blue-500 rounded-r-xl p-4 mb-5 shadow-lg backdrop-blur-sm">
-    <div class="flex gap-3">
-        <div class="shrink-0 text-blue-400">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-        </div>
-        <p class="text-xs md:text-sm text-slate-200 leading-relaxed">
-            <span class="font-bold text-blue-400">Перед прибуттям до підрозділу</span> заступник відповідального по ГУНП обов'язково вмикає портативний відеореєстратор та засобами зв'язку повідомляє сектор аналітичної роботи УГІ ГУНП про початок перевірки.
-        </p>
+<header class="masthead">
+  <div class="wrap">
+    <a href="https://lh3.googleusercontent.com/u/0/d/19OvsmuAvfL6JK04_f55WWt0JlWHiiPfI" target="_blank" rel="noopener">
+      <img src="https://lh3.googleusercontent.com/u/0/d/19OvsmuAvfL6JK04_f55WWt0JlWHiiPfI" alt="Емблема УГІ ГУНП">
+    </a>
+    <div>
+      <h1>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</h1>
+      <p>Порядок дій, що перевіряти та на які норми посилатися</p>
     </div>
+    <button class="theme-btn" id="theme-btn" type="button" aria-label="Змінити тему оформлення" title="Світла / темна тема">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="wrap">
+    <div class="progress-row">
+      <div class="progress-track" role="progressbar" aria-label="Прогрес перевірки" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-track">
+        <div class="progress-fill" id="progress-bar"></div>
+      </div>
+      <div class="progress-label" id="progress-text">0 з 0 <span>· 0%</span></div>
+    </div>
+    <div class="search-row">
+      <label class="search" id="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="text" id="search-input" placeholder="Пошук: слово або № наказу" enterkeyhint="search" aria-label="Пошук у чеклісті" autocomplete="off">
+        <button class="clear" type="button" id="search-clear" aria-label="Очистити пошук">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </label>
+      <button class="tool-btn" type="button" id="toggle-all-btn" aria-label="Розгорнути всі підказки">
+        <span class="lbl" id="toggle-all-lbl">Усі підказки</span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-4px" id="toggle-all-ico"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
+      </button>
+      <button class="tool-btn danger" type="button" id="reset-btn" aria-label="Скинути відмітки">
+        <span class="lbl">Скинути</span>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
+    </div>
+  </div>
 </div>
-            
-            <div class="section-block bg-slate-900/70 backdrop-blur rounded-2xl p-5 border border-slate-800/80 shadow-xl space-y-1">
-                <h2 class="text-base font-bold text-sky-400 border-b border-slate-800 pb-2.5 flex items-center gap-2">
-                    <span class="w-1.5 h-4 bg-sky-500 rounded-full"></span> 1. Вхід до адміністративної будівлі та чергова частина
-                </h2>
-                
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-1" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Загальний стан адміністративної будівлі</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                         <ul class="list-disc pl-4 space-y-2">
-                        <li>Перед входом до адміністративного приміщення оглянути загальний стан адміністративної будівлі.</p> 
-                        <li>Перевірити наявність на вході інформаційного знаку <span class="text-amber-400">«Ведеться відеоспостереження»</span>.</p> 
-                        <li>Перевірити справність роботи переговорного пристрою «Черговий-вулиця» (домофону).</p>
-                    </div>
-                </div>
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-2" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Інформаційні стенди у холі</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <p>Після входу до приміщення оглянути інформаційні стенди на предмет актуальності інформації (керівництво МВС, НПУ, ГУНП, а також графіки прийому громадян керівництвом підрозділу).</p>
-                    </div>
-                </div>
+<main>
+  <div class="wrap">
+    <ol class="route" id="route"></ol>
+    <div class="empty" id="empty">Нічого не знайдено. Спробуйте інше слово або номер наказу.</div>
+    <div class="finish" id="finish">Усі пункти перевірено. Залишилося оформити рапорт до 12:00 наступного дня.</div>
+  </div>
+</main>
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-3" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Чергова частина</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner space-y-2">
-                        <p class="font-semibold text-sky-400">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                            <li>Перевірити наявність щотижневих графіків чергування особового складу (відповідність особового складу в нарядах, наявність рапортів про внесення змін до графіку) – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">пп. 1,2 р. VIII Інструкції, затвердженої наказом МВС від 27.04.2020 № 357</span>.</li>
-                            <li>Перевірити своєчасність отримання матеріалів ЄО виконавцями (із затримкою понад 3 днів) та наявність відповідних підписів у журналі отримання матеріалів єдиного обліку – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">п. 10 р. ІІ Порядку, затвердженого наказом МВС від 08.02.2019 № 100</span>.</li>
-                            <li>Перевірити записи у журналі реєстрації інструктажів при поводженні з вогнепальною зброєю та Книзі нарядів,у тому числі відмітки про приймання зброї у попереднього наряду минулої зміни.</li>
-                            <li>Перевірити наявність металошукача та його справність.</li>
-                        </ul>
-                    </div>
-                </div>
+<footer>Відмітки зберігаються лише на цьому пристрої.</footer>
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-4" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Відеоспостереження, інструктаж та пропускний режим</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner space-y-2">
-                        <p class="font-semibold text-sky-400">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                            <li>Перевірити справність системи стаціонарного відеоспостереження, наявність та актуальність наказу щодо визначення відповідальної особи за контроль за функціонування стаціонарної системи підрозділу; перегляд відеозаписів; копіювання та видача відеозаписів. Наявність журналу обліку копіювання та видачі відеозаписів зі стаціонарної системи  – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">пп. 2,3 р. V Порядку, затвердженого наказом МВС від 18.12.2018 № 1026</span>.</li>
-                            <li>Перевірити акитуальність наказу щодо визначення відповідальної особи (осіб) за зберігання, видачу та приймання портативних відеореєстраторів; облік, зберігання та видачу інформації, отриманої з портативних відеореєстраторів; належне ведення відповідної документації – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">п. 1 р. ІІ Порядку, затвердженого наказом МВС від 18.12.2018 № 1026</span>.</li>
-                            <li>Перевірити стан ведення журналу обліку видачі, повернення портативного відеореєстратора та карт пам’яті, копіювання цифрової інформації та журналу обліку копіювання та видачі відеозаписів зі стаціонарної системи, технічних приладів і технічних засобів фото- і кінозйомки, відеозапису.</li>
-                            <li>Перевірити якість проведення інструктажу добових нарядів шляхом перегляду відеозапису із стаціонарної системи, при цьому звернути увагу чи є доступ до стаціонарної системи у осіб, які не визначені наказом.</li>
-                            <li>Перевірити дотримання пропускного режиму, зокрема облік відвідувачів у відповідному журналі – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">абз. 2 п. 8 р. VI Інструкції, затвердженої наказом МВС від 23.05.2019 № 440</span>.</li>
-                            <li>Перевірити наявність необлікованих відвідувачів, а також перебування громадян вище 1 поверху адміністративної будівлі – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300"> п.п. 2 п. 4 наказу ГУНП від 18.01.2025 № 108</span>.</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
+<script>
+/* =====================================================================
+   ЗМІСТ ЧЕКЛІСТА
+   Щоб змінити пункт — редагуйте текст нижче. Розмітка в тексті:
+     [[...]]  — посилання на нормативний акт (жовта плашка)
+     **...**  — виділення (жирний)
+     !!...!!  — термін / дедлайн (червоний)
+   id пунктів (task-1 … task-14) не змінюйте — за ними зберігаються відмітки.
+   Новий пункт — новий id, наприклад task-15.
+   ===================================================================== */
+const BRIEF = '**Перед прибуттям до підрозділу** заступник відповідального по ГУНП обов’язково вмикає портативний відеореєстратор та засобами зв’язку повідомляє сектор аналітичної роботи УГІ ГУНП про початок перевірки.';
 
-            <div class="section-block bg-slate-900/70 backdrop-blur rounded-2xl p-5 border border-slate-800/80 shadow-xl space-y-1">
-                <h2 class="text-base font-bold text-sky-400 border-b border-slate-800 pb-2.5 flex items-center gap-2">
-                    <span class="w-1.5 h-4 bg-sky-500 rounded-full"></span> 2. Перевірка нарядів ГРПП/СОГ
-                </h2>
-                
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-5" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Зовнішній вигляд та опитування поліцейських</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Перевірити зовнішній вигляд поліцейських на предмет відповідності форменого одягу, при цьому звернути увагу на стан зношеності однострою та охайності поліцейського, а також наявність світловідбиваючих жилетів – <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">Правила, затверджені наказом МВС від 19.08.2021 № 718</span>.</p>
-                        <li>Здійснити опитування на предмет знань алгоритмів дій поліцейських (антитерористичних, на місці вибухів).</p>
-                    </div>
-                </div>
+const SECTIONS = [
+  {
+    title: 'Вхід до адміністративної будівлі та чергова частина',
+    tasks: [
+      { id: 'task-1', title: 'Загальний стан адміністративної будівлі', points: [
+        'Перед входом до адміністративного приміщення оглянути загальний стан адміністративної будівлі.',
+        'Перевірити наявність на вході інформаційного знаку **«Ведеться відеоспостереження»**.',
+        'Перевірити справність роботи переговорного пристрою «Черговий-вулиця» (домофону).'
+      ]},
+      { id: 'task-2', title: 'Інформаційні стенди у холі', points: [
+        'Після входу до приміщення оглянути інформаційні стенди на предмет актуальності інформації (керівництво МВС, НПУ, ГУНП, а також графіки прийому громадян керівництвом підрозділу).'
+      ]},
+      { id: 'task-3', title: 'Чергова частина', points: [
+        'Перевірити наявність щотижневих графіків чергування особового складу (відповідність особового складу в нарядах, наявність рапортів про внесення змін до графіку) — [[пп. 1, 2 р. VIII Інструкції, затвердженої наказом МВС від 27.04.2020 № 357]].',
+        'Перевірити своєчасність отримання матеріалів ЄО виконавцями (із затримкою понад 3 днів) та наявність відповідних підписів у журналі отримання матеріалів єдиного обліку — [[п. 10 р. ІІ Порядку, затвердженого наказом МВС від 08.02.2019 № 100]].',
+        'Перевірити записи у журналі реєстрації інструктажів при поводженні з вогнепальною зброєю та Книзі нарядів, у тому числі відмітки про приймання зброї у попереднього наряду минулої зміни.',
+        'Перевірити наявність металошукача та його справність.'
+      ]},
+      { id: 'task-4', title: 'Відеоспостереження, інструктаж та пропускний режим', points: [
+        'Перевірити справність системи стаціонарного відеоспостереження, наявність та актуальність наказу щодо визначення відповідальної особи за контроль за функціонуванням стаціонарної системи підрозділу; перегляд відеозаписів; копіювання та видача відеозаписів. Наявність журналу обліку копіювання та видачі відеозаписів зі стаціонарної системи — [[пп. 2, 3 р. V Порядку, затвердженого наказом МВС від 18.12.2018 № 1026]].',
+        'Перевірити актуальність наказу щодо визначення відповідальної особи (осіб) за зберігання, видачу та приймання портативних відеореєстраторів; облік, зберігання та видачу інформації, отриманої з портативних відеореєстраторів; належне ведення відповідної документації — [[п. 1 р. ІІ Порядку, затвердженого наказом МВС від 18.12.2018 № 1026]].',
+        'Перевірити стан ведення журналу обліку видачі, повернення портативного відеореєстратора та карт пам’яті, копіювання цифрової інформації та журналу обліку копіювання та видачі відеозаписів зі стаціонарної системи, технічних приладів і технічних засобів фото- і кінозйомки, відеозапису.',
+        'Перевірити якість проведення інструктажу добових нарядів шляхом перегляду відеозапису із стаціонарної системи, при цьому звернути увагу, чи є доступ до стаціонарної системи в осіб, які не визначені наказом.',
+        'Перевірити дотримання пропускного режиму, зокрема облік відвідувачів у відповідному журналі — [[абз. 2 п. 8 р. VI Інструкції, затвердженої наказом МВС від 23.05.2019 № 440]].',
+        'Перевірити наявність необлікованих відвідувачів, а також перебування громадян вище 1 поверху адміністративної будівлі — [[пп. 2 п. 4 наказу ГУНП від 18.01.2025 № 108]].'
+      ]}
+    ]
+  },
+  {
+    title: 'Перевірка нарядів ГРПП/СОГ',
+    tasks: [
+      { id: 'task-5', title: 'Зовнішній вигляд та опитування поліцейських', points: [
+        'Перевірити зовнішній вигляд поліцейських на предмет відповідності форменого одягу, при цьому звернути увагу на стан зношеності однострою та охайності поліцейського, а також наявність світловідбивних жилетів — [[Правила, затверджені наказом МВС від 19.08.2021 № 718]].',
+        'Здійснити опитування на предмет знань алгоритмів дій поліцейських (антитерористичних, на місці вибухів).'
+      ]},
+      { id: 'task-6', title: 'Екіпірування, аптечки та технічні засоби', points: [
+        'Перевірити наявність особистих аптечок (турнікети), спеціальних засобів (кайданки, гумові кийки, балончики) відповідно до [[п. 10 р. XIV Інструкції, затвердженої наказом МВС від 27.04.2020 № 357]].',
+        'Перевірити бронежилети (повинні бути не менше 4 класу захисту).',
+        'Наявність портативних відеореєстраторів відповідно до [[Порядку, затвердженого наказом МВС від 18.12.2018 № 1026]].',
+        'Перевірити наявність та технічний стан цифрових радіостанцій. Також приділити увагу навичкам поводження з радіостанціями (поліцейський повинен вимкнути свою радіостанцію, потім увімкнути її та вийти на зв’язок із черговою частиною, застосовуючи визначені позивні та правила виходу в радіоефір).',
+        'У наряду ГРПП перевірити наявність газоаналізатора «Dräger» та наявність нових (запакованих) мундштуків до нього.'
+      ]},
+      { id: 'task-7', title: 'Бланкова продукція', points: [
+        'Перевірити наявність бланкової продукції (заяви, пояснення тощо), а також бланків суворої звітності: протоколи про вчинення адміністративного правопорушення (ГБ/ПДР), постанови (ГБ/ПДР), тимчасові дозволи на право керування транспортними засобами, термінові заборонні приписи стосовно кривдника.'
+      ]}
+    ]
+  },
+  {
+    title: 'Службовий транспорт підрозділу',
+    tasks: [
+      { id: 'task-8', title: 'Дорожня документація', points: [
+        'Перевірити наявність відповідних документів (копії свідоцтва про реєстрацію ТЗ, копії страхового полісу, копії дозволу на використання проблискових маячків, у разі їх присутності на авто).',
+        'Перевірити стан заповнення дорожніх листів (відмітки про проходження технічного та медичного оглядів, а також чи внесені відомості про видачу пального) — [[п. 12 р. ІІІ Порядку, затвердженого наказом МВС від 07.09.2017 № 757]].',
+        'Перевірити відповідність пробігу одометра та дорожнього листа (встановити, чи відсутні розбіжності, особливо на транспортних засобах, що використовуються не для несення служби у добових нарядах).'
+      ]},
+      { id: 'task-9', title: 'Комплектування та технічний стан', points: [
+        'Перевірити комплектування: аптечка, вогнегасник, знак аварійної зупинки, конуси, стрічка для огородження місця події.',
+        'Перевірити технічний стан (гума на осях за сезоном, технічна справність авто: зачиняються дверцята на замок, світлові покажчики повороту, фари тощо).',
+        'Перевірити справність автомобільного відеореєстратора (для ГРПП — цілісність пломб на ньому).',
+        'Надати оцінку загальному стану автомобіля, його салону (відсутність пошкоджень, порядок в авто).'
+      ]},
+      { id: 'task-10', title: 'Стан заповнення журналів', points: [
+        'Переглянути журнал виїзду та повернення службового автотранспорту (чи всі авто, що на виїзді, записані).',
+        'Переглянути журнал обліку інструктажів водіїв (звірка даних із водіями, які виїхали на лінію).'
+      ]}
+    ]
+  },
+  {
+    title: 'Службові приміщення та територія',
+    tasks: [
+      { id: 'task-11', title: 'Обстеження кабінетів та умови праці', points: [
+        'Здійснити обстеження службових приміщень на предмет виявлення заборонених речей (тих, що можуть бути використані для катування, речових доказів, спиртних напоїв тощо).',
+        'Надати оцінку загальному стану кабінетів (умови праці, порядок у кабінетах, наявність та відповідність інформаційних табличок із номером кабінету, служби та даних про поліцейських).'
+      ]},
+      { id: 'task-12', title: 'Стан території, бокси та безпека периметру', points: [
+        'Оглянути стан території (захаращеність, охайність, нумерація боксів, таблички, опечатування тощо).',
+        'Перевірити захищеність периметру (освітлення вночі, колючий дріт, «сліпі зони» у системі відеоспостереження).'
+      ]}
+    ]
+  },
+  {
+    title: 'Умови зберігання речових доказів',
+    tasks: [
+      { id: 'task-13', title: 'Кімната зберігання речових доказів та вилучені ТЗ', points: [
+        'Перевірити стан зберігання речових доказів (кімната + великогабаритні, де все повинно бути розкладено по поличках, дрібні обов’язково розкладені по картонних коробках / пластикових ящиках).',
+        'Перевірити стан опечатування, наявність бирок та витягів з **ІП «Речові докази»**.',
+        'Звернути окрему увагу на облік та опечатування вилученого транспорту.',
+        'Перевірити справність сигналізації кімнати речових доказів та великогабаритних боксів для зберігання речових доказів.'
+      ]}
+    ]
+  },
+  {
+    title: 'Оформлення результатів перевірки',
+    hintTitle: 'Що та як оформлювати',
+    tasks: [
+      { id: 'task-14', title: 'Складання рапорту та терміни завантаження в СЕД', hintTitle: 'Що та як оформлювати', points: [
+        'Оформити рапорт / доповідну записку (опис за блоками + фотоматеріали), при цьому зазначати як негативні тенденції, так і виявлений позитив.',
+        'Після розроблення проєкту документ погоджується з поліцейськими сектору аналітичної роботи УГІ ГУНП, після чого завантажується в **СЕД** на ім’я начальника ГУНП за власним підписом !!не пізніше 12:00 наступного дня!!.'
+      ]}
+    ]
+  }
+];
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-6" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Екіпірування, аптечки та технічні засоби</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Перевірити наявність особистих аптечок (турнікети), спеціальних засобів (кайданки, гумові кийки, балончики)  відповідно до <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300"> п. 10 р. XIV Інструкції, затвердженої наказом МВС від 27.04.2020  № 357</span>.</p>
-                        <li>Перевірити бронежилети (повинні бути не менше 4 класу захисту).</p>
-                        <li>Наявність портативних відеореєстраторів відповідно до <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300">Порядку, затвердженого наказом МВС від 18.12.2018 № 1026.</p>
-                        <li>Перевірити наявність та технічний стан цифрових радіостанцій. Також приділити увагу навичкам поводження із радостанціями (поліцейський повинен вимкнути свою радіостанцію, потім увімкнути її та вийти на зв'яхзок із черговою частиною, застосовуючи визначені позивні та правила виходу в радіоефір).</p>
-                        <li>У наряду ГРПП перевірити наявність газонаналізатора "Dräger" та наявність нових (запакованих) мундштуків до нього.</p>
-                    </div>
-                </div>
+/* ===================================================================== */
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-7" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Бланкова продукція</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <p>Перевірити наявність бланкової продукції (заяви пояснення тощо, а також бланків суворої звітності: протоколи про вчинення адміністративного правопорушення (ГБ/ПДР), постанови (ГБ/ПДР), тимчасові дозволи на право керування транспортними засобами, термінові заборонні приписи стосовно кривдника.</p>
-                    </div>
-                </div>
-            </div>
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const ICON_CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const ICON_CAM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>';
 
-            <div class="section-block bg-slate-900/70 backdrop-blur rounded-2xl p-5 border border-slate-800/80 shadow-xl space-y-1">
-                <h2 class="text-base font-bold text-sky-400 border-b border-slate-800 pb-2.5 flex items-center gap-2">
-                    <span class="w-1.5 h-4 bg-sky-500 rounded-full"></span> 3. Службовий транспорт підрозділу
-                </h2>
-                
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-8" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Дорожня документація</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Перевірити наявність відповідних документів (копії свідоцтва про реєстрацію ТЗ, копії страхового полісу, копії дозволу на використання проблискових маячків, у разі їх присутності на авто).</p>
-                        <li>Перевірити стан заповнення дорожніх листів (відмітки про проходження технічного та медичного оглядів,  а також чи внесені відомості про видачу пального) - <span class="inline-block bg-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono text-amber-300"> п. 12 р. ІІІ Порядку, затвердженого наказом МВС від 07.09.2017  № 757</span>.</p>
-                        <li>Перевірити відповідність пробігу одометра та дорожнього листа (встановити чи відсутні розбіжності, особливо на транспортних засобах, що використовуються не для несення служби у добових нарядах.</p>
-                    </div>
-                </div>
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-9" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Комплектування та технічний стан</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Перевірити комплектування: аптечка, вогнегасник, знак аварійної зупинки, конуси, стрічка для огородження місця події.</p> 
-                        <li>Перевірити технічний стан (гума на осях за сезоном, технічна справність авто (зачиняються дверцята на замок; світлові покажчики повороту, фари тощо).</p>
-                        <li>Перевірити справність автомобільного відеореєстратора (для ГРПП – цілісність пломб на ньому).</p> 
-                        <li>Надати оцінку загальному стану автомобіля, його салону (відсутність пошкоджень, порядки в авто).</p>
-</p>
-                    </div>
-                </div>
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function fmt(s) {
+  return esc(s)
+    .replace(/\[\[(.+?)\]\]/g, '<span class="ref">$1</span>')
+    .replace(/\*\*(.+?)\*\*/g, '<span class="em">$1</span>')
+    .replace(/!!(.+?)!!/g, '<span class="deadline">$1</span>');
+}
 
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30 border-t border-slate-800/50">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-10" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Стан заповнення журналів</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Переглянути журнал виїзду та повернення службового автотранспорту (чи усі авто, що на виїзді записані).<p>
-                        <li>Переглянути журнал обліку інструктажів водіїв (звірка даних із водіями, які виїхали на лінію).</p>
-                    </div>
-                </div>
-            </div>
+/* ---------- Побудова ---------- */
+const route = document.getElementById('route');
+let html = `
+  <li class="step brief">
+    <div class="step-num" aria-hidden="true">${ICON_CAM}</div>
+    <div class="step-head"><h2>Перед прибуттям</h2></div>
+    <div class="brief-card">${fmt(BRIEF)}</div>
+  </li>`;
 
-            <div class="section-block bg-slate-900/70 backdrop-blur rounded-2xl p-5 border border-slate-800/80 shadow-xl space-y-1">
-                <h2 class="text-base font-bold text-sky-400 border-b border-slate-800 pb-2.5 flex items-center gap-2">
-                    <span class="w-1.5 h-4 bg-sky-500 rounded-full"></span> 4. Службові приміщення та територія
-                </h2>
-                
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-11" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Обстеження кабінетів та умови праці</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Здійснити обстеження службових приміщень на предмет виявлення заборонених речей (ті, можуть бути використані для катування, речових доказів, спиртних напоїв тощо).</p>
-                        <li>Надати оцінку загальному стану кабінетів (умови праці, порядки кабінетах, наявність та відповідність інформаційних табличок із номером кабінету, служби та даних на поліцейських).</p>
-                    </div>
-                </div>
-            <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-12" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Стан території, бокси та безпека периметру</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-2">
-                        <li>Оглянути стан території (захаращеність, охайність, нумерація боксів, таблички, опечатування тощо).</p> 
-                        <li>Перевірити захищеність периметру (освітлення вночі, колючий дріт, «сліпі зони» у системі відеоспостереження).</p>
-                    </div>
-                </div>
-            </div>
-              
-            <div class="section-block bg-slate-900/70 backdrop-blur rounded-2xl p-5 border border-slate-800/80 shadow-xl space-y-1">
-                <h2 class="text-base font-bold text-sky-400 border-b border-slate-800 pb-2.5 flex items-center gap-2">
-                    <span class="w-1.5 h-4 bg-sky-500 rounded-full"></span> 5. Умови зберіганні речових доказів
-                </h2>
-                
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-13" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Кімната зберігання речових доказів та вилучені ТЗ</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner space-y-2">
-                        <p class="font-semibold text-sky-400">Що та як перевіряти:</p>
-                        <ul class="list-disc pl-4 space-y-1">
-                            <li>Перевірити стан зберігання речових доказів (кімната + великогабаритні , де все повинно бути розкладено по поличках, дрібні обов’язково розкладені по картонних коробках/пластикових ящиках). </li>
-                            <li>Перевірити стан опечатування, наявність бирок та витягів із <span class="text-amber-400">ІП «Речові докази»</span>.</li>
-                            <li>Звернути окрему увагу на облік та опечатування вилученого транспорту.</li>
-                            <li>Перевірити справність сигналізації кімнати речових доказів та великогабаритних боксів для зберігання речових доказів.</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-                            
-         <div class="section-block bg-slate-900/70 backdrop-blur rounded-2xl p-5 border border-slate-800/80 shadow-xl space-y-1">
-                <h2 class="text-base font-bold text-sky-400 border-b border-slate-800 pb-2.5 flex items-center gap-2">
-                    <span class="w-1.5 h-4 bg-sky-500 rounded-full"></span> 6. Оформлення результатів перевірки
-                </h2>
-                
-                <div class="item-row py-2.5 px-1 rounded-xl hover:bg-slate-800/30">
-                    <div class="flex items-center justify-between gap-4">
-                        <label class="flex items-center gap-3 cursor-pointer select-none group flex-1">
-                            <input type="checkbox" id="task-14" class="task-checkbox w-4 h-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500/30 transition">
-                            <span class="font-medium text-sm text-slate-200 group-hover:text-white transition">Складання рапорту та терміни завантаження в СЕД</span>
-                        </label>
-                        <button type="button" class="text-xs text-slate-300 bg-slate-800/40 hover:bg-slate-700/60 hover:text-sky-400 border border-slate-700/50 hover:border-sky-500/30 px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1.5 shrink-0 transition transform active:scale-95 shadow-sm info-btn">
-                            <span>Підказка</span>
-                            <svg class="chevron w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"></path></svg>
-                        </button>
-                    </div>
-                    <div class="hidden mt-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed shadow-inner">
-                        <p class="font-semibold text-sky-400 mb-1">Що та як оформлювати:</p>
-                        <p>Оформити рапорт/доповідну записку (опис за блоками + фотоматеріали) при цьому зазначати як негативні тендеції, так і виявлений позитив. Після розроблення проєкту, документ погоджується із поліцейськими сектору аналітичної роботи УГІ ГУНП, а вже після чого завантажується в <span class="text-amber-400">СЕД</span> на ім'я начальника ГУНП за власним підписом <span class="text-rose-400 font-medium">не пізніше 12:00 год. наступного дня</span>.</p>
-                    </div>
-                </div>
-            </div>
-
-        </div>
+SECTIONS.forEach((sec, si) => {
+  html += `
+  <li class="step section" data-section="${si}">
+    <div class="step-num" aria-hidden="true"><span class="n">${si + 1}</span></div>
+    <div class="step-head">
+      <h2>${esc(sec.title)}</h2>
+      <span class="step-count"></span>
     </div>
+    <div class="tasks">`;
+  sec.tasks.forEach(t => {
+    const hid = 'hint-' + t.id;
+    html += `
+      <div class="task" data-id="${t.id}">
+        <div class="task-row">
+          <label class="check" title="Відмітити як перевірене">
+            <input type="checkbox" class="task-checkbox" id="${t.id}" aria-label="Перевірено: ${esc(t.title)}">
+            <span class="box">${ICON_CHECK}</span>
+          </label>
+          <button type="button" class="task-toggle" aria-expanded="false" aria-controls="${hid}">
+            <span class="task-title">${esc(t.title)}</span>
+            <span class="hint-cue"><span class="lbl">Підказка</span>${ICON_CHEV}</span>
+          </button>
+        </div>
+        <div class="hint" id="${hid}">
+          <div><div class="hint-body">
+            <h3>${esc(t.hintTitle || 'Що та як перевіряти')}</h3>
+            <ul>${t.points.map(p => `<li data-raw="${esc(p)}">${fmt(p)}</li>`).join('')}</ul>
+          </div></div>
+        </div>
+      </div>`;
+  });
+  html += `</div></li>`;
+});
+route.innerHTML = html;
 
-    <script>
-        // Керування підказками (клік по кнопці)
-        document.querySelectorAll('.info-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const infoBlock = btn.closest('.item-row').querySelector('.hidden, .block');
-                const chevron = btn.querySelector('.chevron');
-                
-                if (infoBlock.classList.contains('hidden')) {
-                    infoBlock.classList.replace('hidden', 'block');
-                    chevron.classList.add('rotate-180');
-                } else {
-                    infoBlock.classList.replace('block', 'hidden');
-                    chevron.classList.remove('rotate-180');
-                }
-            });
-        });
+/* На мобільному номер кроку переносимо в заголовок */
+document.querySelectorAll('.step').forEach(step => {
+  const num = step.querySelector('.step-num');
+  const head = step.querySelector('.step-head');
+  const mq = window.matchMedia('(max-width: 560px)');
+  const place = () => { mq.matches ? head.prepend(num) : step.prepend(num); };
+  place(); mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place);
+});
 
-        // Оновлення прогресу та збереження у LocalStorage
-        function updateProgress() {
-            const checkboxes = document.querySelectorAll('.task-checkbox');
-            const total = checkboxes.length;
-            let checkedCount = 0;
+/* ---------- Підказки ---------- */
+function setOpen(task, open) {
+  task.classList.toggle('open', open);
+  task.querySelector('.task-toggle').setAttribute('aria-expanded', open);
+}
+document.querySelectorAll('.task-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const task = btn.closest('.task');
+    setOpen(task, !task.classList.contains('open'));
+    syncToggleAll();
+  });
+});
 
-            checkboxes.forEach(cb => {
-                const labelText = cb.nextElementSibling;
-                if (cb.checked) {
-                    checkedCount++;
-                    labelText.classList.add('task-checked');
-                    localStorage.setItem(cb.id, 'true');
-                } else {
-                    labelText.classList.remove('task-checked');
-                    localStorage.removeItem(cb.id);
-                }
-            });
+const toggleAllBtn = document.getElementById('toggle-all-btn');
+const toggleAllLbl = document.getElementById('toggle-all-lbl');
+function visibleTasks() { return [...document.querySelectorAll('.task:not(.hidden-by-search)')]; }
+function syncToggleAll() {
+  const vis = visibleTasks();
+  const allOpen = vis.length && vis.every(t => t.classList.contains('open'));
+  toggleAllLbl.textContent = allOpen ? 'Згорнути все' : 'Усі підказки';
+  toggleAllBtn.setAttribute('aria-label', allOpen ? 'Згорнути всі підказки' : 'Розгорнути всі підказки');
+  toggleAllBtn.dataset.open = allOpen ? '1' : '';
+}
+toggleAllBtn.addEventListener('click', () => {
+  const open = !toggleAllBtn.dataset.open;
+  visibleTasks().forEach(t => setOpen(t, open));
+  syncToggleAll();
+});
 
-            const percent = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
-            document.getElementById('progress-bar').style.width = percent + '%';
-            document.getElementById('progress-text').innerText = `${checkedCount} з ${total} (${percent}%)`;
-        }
+/* ---------- Прогрес ---------- */
+const boxes = [...document.querySelectorAll('.task-checkbox')];
+function updateProgress() {
+  let done = 0;
+  boxes.forEach(cb => {
+    cb.closest('.task').classList.toggle('done', cb.checked);
+    if (cb.checked) { done++; store.set(cb.id, 'true'); } else { store.del(cb.id); }
+  });
+  const total = boxes.length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  const bar = document.getElementById('progress-bar');
+  bar.style.width = pct + '%';
+  bar.classList.toggle('full', pct === 100);
+  document.getElementById('progress-track').setAttribute('aria-valuenow', pct);
+  document.getElementById('progress-text').innerHTML = `${done} з ${total} <span>· ${pct}%</span>`;
+  document.getElementById('finish').classList.toggle('show', pct === 100);
 
-        // Завантаження збереженого стану при старті сторінки
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.task-checkbox').forEach(cb => {
-                if (localStorage.getItem(cb.id) === 'true') {
-                    cb.checked = true;
-                }
-            });
-            updateProgress();
-        });
+  document.querySelectorAll('.step.section').forEach(step => {
+    const cbs = step.querySelectorAll('.task-checkbox');
+    const d = [...cbs].filter(c => c.checked).length;
+    const complete = d === cbs.length;
+    step.classList.toggle('complete', complete);
+    step.querySelector('.step-count').textContent = `${d} з ${cbs.length}`;
+    const n = step.querySelector('.step-num');
+    n.innerHTML = complete ? ICON_CHECK : `<span class="n">${+step.dataset.section + 1}</span>`;
+  });
+}
+boxes.forEach(cb => {
+  if (store.get(cb.id) === 'true') cb.checked = true;
+  cb.addEventListener('change', updateProgress);
+});
+updateProgress();
 
-        document.querySelectorAll('.task-checkbox').forEach(cb => {
-            cb.addEventListener('change', updateProgress);
-        });
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (confirm('Зняти всі відмітки й почати перевірку спочатку?')) {
+    boxes.forEach(cb => { cb.checked = false; });
+    updateProgress();
+  }
+});
 
-        // Кнопка «Скинути прогрес»
-        document.getElementById('reset-btn').addEventListener('click', () => {
-            if(confirm('Скинути весь відмічений прогрес перевірки?')) {
-                document.querySelectorAll('.task-checkbox').forEach(cb => {
-                    cb.checked = false;
-                    localStorage.removeItem(cb.id);
-                });
-                updateProgress();
-            }
-        });
+/* ---------- Пошук ---------- */
+const input = document.getElementById('search-input');
+const searchWrap = document.getElementById('search-wrap');
+const titles = new Map();
+document.querySelectorAll('.task').forEach(t => titles.set(t, t.querySelector('.task-title').textContent));
 
-        // Розумний локальний пошук за вмістом
-        document.getElementById('search-input').addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase().trim();
-            
-            document.querySelectorAll('.item-row').forEach(row => {
-                const text = row.innerText.toLowerCase();
-                if (text.includes(query)) {
-                    row.style.display = ''; 
-                } else {
-                    row.style.display = 'none'; 
-                }
-            });
+function highlight(text, q) {
+  if (!q) return esc(text);
+  const lower = text.toLowerCase();
+  let out = '', i = 0, j;
+  while ((j = lower.indexOf(q, i)) !== -1) {
+    out += esc(text.slice(i, j)) + '<mark>' + esc(text.slice(j, j + q.length)) + '</mark>';
+    i = j + q.length;
+  }
+  return out + esc(text.slice(i));
+}
+function highlightFormatted(raw, q) {
+  // підсвічуємо лише текст поза тегами
+  const html = fmt(raw);
+  if (!q) return html;
+  return html.replace(/(^|>)([^<]+)(?=<|$)/g, (m, a, txt) => {
+    const div = document.createElement('div'); div.innerHTML = txt;
+    return a + highlight(div.textContent, q);
+  });
+}
 
-            // Маскування порожніх секцій
-            document.querySelectorAll('.section-block').forEach(section => {
-                const visibleRows = section.querySelectorAll('.item-row:not([style*="display: none"])');
-                if (visibleRows.length === 0 && query !== '') {
-                    section.style.display = 'none';
-                } else {
-                    section.style.display = '';
-                }
-            });
-        });
+function runSearch() {
+  const q = input.value.toLowerCase().trim();
+  searchWrap.classList.toggle('has-text', !!q);
+  let any = false;
+  document.querySelectorAll('.task').forEach(task => {
+    const title = titles.get(task);
+    const lis = task.querySelectorAll('li');
+    const hay = (title + ' ' + [...lis].map(li => li.textContent).join(' ')).toLowerCase();
+    const match = !q || hay.includes(q);
+    task.classList.toggle('hidden-by-search', !match);
+    task.querySelector('.task-title').innerHTML = highlight(title, q);
+    lis.forEach(li => { li.innerHTML = highlightFormatted(li.dataset.raw, q); });
+    if (q && match) {
+      const inBody = [...lis].some(li => li.textContent.toLowerCase().includes(q));
+      if (inBody) setOpen(task, true);
+    }
+    if (match) any = true;
+  });
+  document.querySelectorAll('.step.section').forEach(step => {
+    step.classList.toggle('hidden-by-search', !step.querySelector('.task:not(.hidden-by-search)'));
+  });
+  document.querySelector('.step.brief').classList.toggle('hidden-by-search', !!q);
+  document.getElementById('empty').classList.toggle('show', !any);
+  syncToggleAll();
+}
+input.addEventListener('input', runSearch);
+document.getElementById('search-clear').addEventListener('click', () => { input.value = ''; runSearch(); input.focus(); });
+input.addEventListener('keydown', e => { if (e.key === 'Escape') { input.value = ''; runSearch(); } });
 
-        // Дії кнопок глобального розгортання/згортання
-        document.getElementById('open-all-btn').addEventListener('click', () => {
-            document.querySelectorAll('.item-row').forEach(row => {
-                if(row.style.display !== 'none') {
-                    const info = row.querySelector('.hidden, .block');
-                    if (info) info.classList.replace('hidden', 'block');
-                    const chevron = row.querySelector('.chevron');
-                    if (chevron) chevron.classList.add('rotate-180');
-                }
-            });
-        });
-
-        document.getElementById('close-all-btn').addEventListener('click', () => {
-            document.querySelectorAll('.item-row').forEach(row => {
-                const info = row.querySelector('.hidden, .block');
-                if (info) info.classList.replace('block', 'hidden');
-                const chevron = row.querySelector('.chevron');
-                if (chevron) chevron.classList.remove('rotate-180');
-            });
-        });
-    </script>
+/* ---------- Тема ---------- */
+const root = document.documentElement;
+const savedTheme = store.get('checklist-theme');
+if (savedTheme) root.dataset.theme = savedTheme;
+document.getElementById('theme-btn').addEventListener('click', () => {
+  const isDark = root.dataset.theme
+    ? root.dataset.theme === 'dark'
+    : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = isDark ? 'light' : 'dark';
+  store.set('checklist-theme', root.dataset.theme);
+});
+</script>
 </body>
 </html>
