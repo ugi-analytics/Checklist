@@ -4,7 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</title>
-<meta name="theme-color" content="#1F4FA3">
+<meta name="theme-color" content="#0B1A3F">
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -59,32 +61,30 @@
   .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
 
   /* ---------- Шапка ---------- */
-  .masthead {
-    background: var(--blue); color: #fff; position: relative; overflow: hidden;
+  .masthead { --navy: #0B1A3F; background: var(--navy); color: #fff; position: relative; }
+  .hero-img {
+    position: relative; height: clamp(220px, 40vw, 440px); overflow: hidden; background: var(--navy);
   }
-  :root[data-theme="dark"] .masthead { background: #13306A; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .masthead { background: #13306A; } }
+  .hero-img img {
+    width: 100%; height: 100%; object-fit: cover; object-position: 72% 42%; display: block;
+  }
+  .hero-img::after {                     /* перехід картинки в смугу з назвою */
+    content: ""; position: absolute; inset: auto 0 0 0; height: 45%;
+    background: linear-gradient(to bottom, rgba(11,26,63,0), var(--navy));
+  }
   .masthead::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--yellow);
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+    background: linear-gradient(to right, #1F5BD8 0 50%, var(--yellow) 50% 100%);
   }
-  .masthead .wrap { display: flex; gap: 20px; align-items: center; padding-top: 28px; padding-bottom: 34px; }
-  .masthead a { flex-shrink: 0; width: 72px; height: 72px; display: block; }
-  .masthead img {
-    width: 72px; height: 72px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
-    border: 3px solid rgba(255,255,255,.85); background: #fff;
+  .masthead .wrap {
+    display: flex; gap: 18px; align-items: center; padding-top: 4px; padding-bottom: 30px;
+    margin-top: -54px; position: relative; z-index: 1;
   }
   .masthead h1 {
     font: 800 clamp(1.25rem, 3.6vw, 1.75rem)/1.2 'Montserrat', sans-serif;
     margin: 0 0 6px; letter-spacing: -.01em; text-wrap: balance;
   }
-  .masthead p { margin: 0; font-size: .95rem; color: rgba(255,255,255,.82); }
-  .theme-btn {
-    margin-left: auto; align-self: flex-start; flex-shrink: 0;
-    width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,255,255,.35);
-    background: rgba(255,255,255,.1); color: #fff; display: grid; place-items: center;
-  }
-  .theme-btn:hover { background: rgba(255,255,255,.2); }
-  .theme-btn svg { width: 20px; height: 20px; }
+  .masthead p { margin: 0; font-size: .95rem; color: rgba(255,255,255,.78); }
 
   /* ---------- Липка панель ---------- */
   .toolbar {
@@ -234,8 +234,9 @@
 
   /* ---------- Мобільна ---------- */
   @media (max-width: 560px) {
-    .masthead .wrap { gap: 14px; padding-top: 20px; padding-bottom: 26px; }
-    .masthead a, .masthead img { width: 54px; height: 54px; }
+    .hero-img { height: 210px; }
+    .hero-img img { object-position: 82% 40%; }
+    .masthead .wrap { gap: 14px; margin-top: -40px; padding-bottom: 24px; align-items: flex-end; }
     .masthead p { font-size: .88rem; }
     .step { padding-left: 0; }
     .step::before { display: none; }
@@ -257,10 +258,11 @@
 
   /* ---------- Друк ---------- */
   @media print {
-    .toolbar, .theme-btn, .hint-cue, footer { display: none !important; }
+    .toolbar, .hint-cue, footer { display: none !important; }
     body { background: #fff; color: #000; font-size: 11pt; }
     .masthead { background: #fff !important; color: #000; border-bottom: 3px solid #000; }
-    .masthead::after { display: none; }
+    .masthead::after, .hero-img { display: none; }
+    .masthead .wrap { margin-top: 0; padding-top: 12px; }
     .masthead p { color: #333; }
     .tasks, .brief-card { box-shadow: none; border: 1px solid #999; }
     .hint { grid-template-rows: 1fr !important; }
@@ -272,17 +274,15 @@
 <body>
 
 <header class="masthead">
+  <div class="hero-img">
+    <img src="img/hero.jpg" srcset="img/hero-960.jpg 960w, img/hero.jpg 1536w" sizes="100vw"
+         alt="Нічне місто, службовий автомобіль поліції та інспекційний чекліст зі знаком УГІ ГУНП в Полтавській області" fetchpriority="high">
+  </div>
   <div class="wrap">
-    <a href="https://lh3.googleusercontent.com/u/0/d/19OvsmuAvfL6JK04_f55WWt0JlWHiiPfI" target="_blank" rel="noopener">
-      <img src="https://lh3.googleusercontent.com/u/0/d/19OvsmuAvfL6JK04_f55WWt0JlWHiiPfI" alt="Емблема УГІ ГУНП">
-    </a>
     <div>
       <h1>Алгоритм перевірки підрозділів заступниками відповідальних ГУНП</h1>
       <p>Порядок дій, що перевіряти та на які норми посилатися</p>
     </div>
-    <button class="theme-btn" id="theme-btn" type="button" aria-label="Змінити тему оформлення" title="Світла / темна тема">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-    </button>
   </div>
 </header>
 
@@ -297,7 +297,7 @@
     <div class="search-row">
       <label class="search" id="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="text" id="search-input" placeholder="Пошук: слово або № наказу" enterkeyhint="search" aria-label="Пошук у чеклісті" autocomplete="off">
+        <input type="text" id="search-input" placeholder="Пошук…" enterkeyhint="search" aria-label="Пошук у чеклісті" autocomplete="off">
         <button class="clear" type="button" id="search-clear" aria-label="Очистити пошук">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
@@ -305,6 +305,9 @@
       <button class="tool-btn" type="button" id="toggle-all-btn" aria-label="Розгорнути всі підказки">
         <span class="lbl" id="toggle-all-lbl">Усі підказки</span>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-4px" id="toggle-all-ico"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
+      </button>
+      <button class="tool-btn icon" type="button" id="theme-btn" aria-label="Змінити тему оформлення" title="Світла / темна тема">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
       </button>
       <button class="tool-btn danger" type="button" id="reset-btn" aria-label="Скинути відмітки">
         <span class="lbl">Скинути</span>
