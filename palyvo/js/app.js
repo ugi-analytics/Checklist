@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261023e";
-import * as U from "./ui.js?v=20261023e";
-import { litresWords } from "./words.js?v=20261023e";
-import { buildRegister, buildAct } from "./docs.js?v=20261023e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261023e";
-import * as X from "./crypto.js?v=20261023e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261023e";
+import * as C from "./core.js?v=20261023f";
+import * as U from "./ui.js?v=20261023f";
+import { litresWords } from "./words.js?v=20261023f";
+import { buildRegister, buildAct } from "./docs.js?v=20261023f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261023f";
+import * as X from "./crypto.js?v=20261023f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261023f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -67,6 +67,7 @@ function shell(content, { nav = true } = {}) {
       ${state.units.map((u) => `<option value="${u.id}" ${u.id === state.unitId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>` : "";
   const tab = (h, label, extra = "") => `<a href="#/${h}" class="${p === h || p.startsWith(h + "/") ? "on" : ""}">${label}${extra}</a>`;
   const pending = isAdmin() && state.pendingCount ? `<span class="badge">${state.pendingCount}</span>` : "";
+  content = String(content).replace(/<h2 class="display">((?:\p{Extended_Pictographic}|[✓✍])\uFE0F?)\s*/gu, '<h2 class="display ttl"><span class="ico">$1</span>');
   $app.innerHTML = `
   <header class="hero"><div class="wrap">
     <div class="topbar"><img src="img/hub_icon_small.png" alt="">
@@ -92,13 +93,13 @@ function authCard(inner, width = 460) { return `<div class="auth" style="max-wid
 
 // ============================================================ сторінки входу
 function pageNotConfigured() {
-  shell(authCard(`<h2 class="display">Портал ще не налаштовано</h2>
+  shell(authCard(`<h2 class="display">⚙️ Портал ще не налаштовано</h2>
     <p>Не заповнено параметри Firebase у файлі <code>js/config.js</code>.</p>
     <p class="muted">Для перегляду інтерфейсу без бази відкрийте <a href="?demo=1">демо-режим</a>.</p>`), { nav: false });
 }
 
 function pageLogin() {
-  shell(authCard(`<h2 class="display">Вхід до порталу</h2>
+  shell(authCard(`<h2 class="display">🔑 Вхід до порталу</h2>
     <form class="js-login" autocomplete="on">
       <label class="f">E-mail<input name="email" type="email" required autofocus autocomplete="username"></label>
       <label class="f">Пароль<input name="pw" type="password" required autocomplete="current-password"></label>
@@ -133,7 +134,7 @@ function pageMfaCode() {
 }
 
 function pageForgot() {
-  shell(authCard(`<h2 class="display">Відновлення пароля</h2>
+  shell(authCard(`<h2 class="display">✉️ Відновлення пароля</h2>
     <p class="muted">Вкажіть e-mail, з яким реєструвалися, — надішлемо лист із посиланням для встановлення нового пароля.</p>
     <form class="js-forgot"><label class="f">E-mail<input name="email" type="email" required></label>
       <button class="btn primary">Надіслати лист</button></form>
@@ -154,7 +155,7 @@ function profileFields(p = {}) {
 const readProfile = (f) => ({ requested_unit: f.unit.value.trim(), full_name: f.full_name.value.trim(), position: f.position.value.trim(), phone: f.phone.value.trim() });
 
 function pageRegister() {
-  shell(authCard(`<h2 class="display">Заявка на реєстрацію</h2>
+  shell(authCard(`<h2 class="display">📝 Заявка на реєстрацію</h2>
     <p class="muted">Після підтвердження адміністратором ви отримаєте доступ до шаблону свого підрозділу.</p>
     <form class="js-reg" autocomplete="off">${profileFields()}
       <label class="f">E-mail * (буде логіном; на нього приходить лист для відновлення пароля)<input name="email" type="email" required autocomplete="username"></label>
@@ -179,7 +180,7 @@ function pageRegister() {
 }
 
 function pagePending() {
-  shell(authCard(`<h2 class="display">Заявку надіслано ✓</h2>
+  shell(authCard(`<h2 class="display">⏳ Заявку надіслано</h2>
     <p>Адміністратор перевірить її та прив'яже ваш обліковий запис до підрозділу <b>${esc(state.me.requested_unit)}</b>.
       Після підтвердження оновіть сторінку — відкриється робоча частина порталу.</p>
     ${state.mfa && !state.mfa.emailVerified ? `<div class="flash info">✉️ Ми надіслали лист на <b>${esc(state.authUser.email)}</b> — перейдіть за посиланням у ньому,
@@ -193,12 +194,12 @@ function pagePending() {
 }
 
 function pageBlocked() {
-  shell(authCard(`<h2 class="display">Доступ закрито</h2>
+  shell(authCard(`<h2 class="display">⛔ Доступ закрито</h2>
     <p>Обліковий запис ${state.me.status === "rejected" ? "відхилено" : "заблоковано"}. Зверніться до адміністратора порталу.</p>`), { nav: false });
 }
 
 function pageNoProfile() {
-  shell(authCard(`<h2 class="display">Профіль не знайдено</h2>
+  shell(authCard(`<h2 class="display">👤 Профіль не знайдено</h2>
     <p class="muted">Ваш обліковий запис видалено або заявку ще не створено. Можете подати заявку повторно.</p>
     <form class="js-reapply">${profileFields()}<button class="btn primary">Подати заявку</button></form>`, 620), { nav: false });
   $app.querySelector(".js-reapply").addEventListener("submit", async (e) => {
@@ -213,7 +214,7 @@ function pageSetup() {
   const lockedEmail = ADMIN_EMAIL && !DEMO ? ADMIN_EMAIL : "";
   const steps = (n) => `<p class="muted">Крок ${n} з 3 · далі — вхід із кодом із телефона</p>`;
   if (!state.authUser) {
-    shell(authCard(`<h2 class="display">Перший запуск порталу</h2>${steps(1)}
+    shell(authCard(`<h2 class="display">🚀 Перший запуск порталу</h2>${steps(1)}
       <p class="muted">Створіть обліковий запис адміністратора області${lockedEmail ? ` (лише для <b>${esc(lockedEmail)}</b>)` : ""}.</p>
       <form class="js-setup1" autocomplete="off">
         <label class="f">E-mail адміністратора<input name="email" type="email" required value="${esc(lockedEmail)}" ${lockedEmail ? "readonly" : ""}></label>
@@ -233,7 +234,7 @@ function pageSetup() {
     return;
   }
   if (!state.mfa || !state.mfa.emailVerified) {
-    shell(authCard(`<h2 class="display">Підтвердіть e-mail</h2>${steps(2)}
+    shell(authCard(`<h2 class="display">✉️ Підтвердіть e-mail</h2>${steps(2)}
       <p>Ми надіслали лист на <b>${esc(state.authUser.email)}</b>. Відкрийте його та перейдіть за посиланням (перевірте й «Спам»),
         потім поверніться сюди й натисніть «Я підтвердив».</p>
       <div class="row"><button class="btn primary js-done">✓ Я підтвердив</button><button class="btn js-resend">Надіслати лист ще раз</button></div>
@@ -250,11 +251,11 @@ function pageSetup() {
     $app.querySelector(".js-out").addEventListener("click", async (e) => { e.preventDefault(); await store.signOut(); });
     return;
   }
-  shell(authCard(`<h2 class="display">Підрозділ і ключ адміністратора</h2>${steps(3)}
+  shell(authCard(`<h2 class="display">🛡️ Підрозділ і ключ адміністратора</h2>${steps(3)}
     <form class="js-setup" autocomplete="off">
       <label class="f">Ваш підрозділ<input name="unit" required value="УГІ ГУНП"></label>
       <div class="two"><label class="f">ПІБ<input name="full_name" required></label><label class="f">Посада<input name="position"></label></div>
-      <div class="flash info" style="margin:12px 0">🔐 <b>Ключ адміністратора</b> — окрема фраза (не пароль від входу). Нею ви відкриваєте зведення
+      <div class="note">🔐 <b>Ключ адміністратора</b> — окрема фраза (не пароль від входу). Нею ви відкриваєте зведення
         по області й відновлюєте ключі підрозділів, якщо ті їх забудуть. Її не знає ніхто, крім вас, і її <b>неможливо відновити</b>:
         запишіть на папері й зберігайте як ключ від сейфа.</div>
       <div class="two"><label class="f">Ключ адміністратора (від 10 символів, краще фраза)<input name="ak" type="password" required minlength="10"></label>
@@ -369,10 +370,10 @@ function pageRulesOld() {
 
 // Ключ адміністратора, якщо портал створено ще версією без шифрування
 function pageAdminKeyCreate() {
-  shell(authCard(`<h2 class="display">🔐 Створіть ключ адміністратора</h2>
+  shell(authCard(`<h2 class="display">🛡️ Створіть ключ адміністратора</h2>
     <p>Портал переведено на шифрування даних. Залишилось створити <b>ключ адміністратора</b> — окрему фразу (не пароль від входу).
       Нею ви відкриваєте зведення по області й встановлюєте новий ключ підрозділу, якщо той його забуде.</p>
-    <div class="flash info" style="margin:12px 0">Ключ адміністратора знаєте лише ви, і його <b>неможливо відновити</b>: запишіть на папері
+    <div class="note">Ключ адміністратора знаєте лише ви, і його <mark>неможливо відновити</mark>: запишіть на папері
       й зберігайте окремо від пароля, як ключ від сейфа.</div>
     <form class="js-akcreate" autocomplete="off">
       <div class="two"><label class="f">Ключ адміністратора (від 10 символів, краще фраза)<input name="ak" type="password" required minlength="10"></label>
@@ -394,12 +395,12 @@ function pageAdminKeyCreate() {
 }
 
 function pagePassword() {
-  shell(authCard(`<h2 class="display">Зміна пароля</h2>
+  shell(authCard(`<h2 class="display">🔒 Зміна пароля</h2>
     <form class="js-pw"><label class="f">Поточний пароль<input name="old" type="password" required></label>
       <label class="f">Новий пароль (від 8 символів, літери й цифри)<input name="n1" type="password" required minlength="8"></label>
       <label class="f">Повторіть новий пароль<input name="n2" type="password" required minlength="8"></label>
       <button class="btn primary">Зберегти</button></form>
-    ${isAdmin() ? `<hr style="border-color:rgba(148,163,184,.25);margin:22px 0"><h2 class="display">Зміна ключа адміністратора</h2>
+    ${isAdmin() ? `<hr style="border-color:rgba(148,163,184,.25);margin:22px 0"><h2 class="display">🛡️ Зміна ключа адміністратора</h2>
       <form class="js-akchange" autocomplete="off"><label class="f">Поточний ключ адміністратора<input name="old" type="password" required></label>
         <label class="f">Новий ключ (від 10 символів)<input name="n1" type="password" required minlength="10"></label>
         <label class="f">Повторіть новий ключ<input name="n2" type="password" required minlength="10"></label>
@@ -508,13 +509,13 @@ function bindAdminKeyForm(after) {
 function pageUnitKey(mode, u) {
   const mine = state.me.unit_id === u.id;
   if (mode === "init") {
-    shell(`<div class="auth" style="max-width:680px"><div class="panel"><h2 class="display">🔐 Створіть ключ підрозділу</h2>
-      <p>Дані підрозділу <b>${esc(u.name)}</b> (автопарк, реквізити, показники за місяці) шифруються ще у вашому браузері — у базі
+    shell(`<div class="auth" style="max-width:680px"><div class="panel"><h2 class="display">🔑 Створіть ключ підрозділу</h2>
+      <div class="note"><p><b class="hl">${esc(u.name)}</b> <i>(автопарк, реквізити, показники за місяці)</i> шифруються ще у вашому браузері — у базі
         вони лежать як незрозумілий набір символів. Відкрити їх можна лише <b>ключем підрозділу</b>.</p>
-      <ul style="line-height:1.6"><li>Придумайте фразу з кількох слів (від 10 символів), наприклад <i>«Лубни-пальне-синій-кіт»</i>.</li>
-        <li>Передайте її колегам свого підрозділу особисто чи службовим порядком — <b>не через пошту чи месенджери</b>.</li>
+      <ul><li>Придумайте фразу з кількох слів (від 10 символів), наприклад <i>«Лубни-пальне-синій-кіт»</i>.</li>
+        <li>Передайте її колегам свого підрозділу особисто чи службовим порядком — <mark>не через пошту чи месенджери</mark>.</li>
         <li>Кожен колега введе її один раз на своєму комп'ютері.</li>
-        <li>Якщо ключ забудуть усі — адміністратор порталу зможе встановити новий, дані не загубляться.</li></ul>
+        <li>Якщо ключ забудуть усі — адміністратор порталу зможе встановити новий, дані не загубляться.</li></ul></div>
       ${mine ? "" : `<div class="flash info">Ви створюєте ключ для чужого підрозділу — не забудьте передати його цьому підрозділу.</div>`}
       <form class="js-kinit" autocomplete="off"><div class="two">
         <label class="f">Ключ підрозділу<input name="k1" type="password" required minlength="10"></label>
@@ -542,8 +543,8 @@ function pageUnitKey(mode, u) {
     });
     return;
   }
-  shell(`<div class="auth" style="max-width:620px"><div class="panel"><h2 class="display">🔐 Ключ підрозділу</h2>
-    <p>Дані підрозділу <b>${esc(u.name)}</b> зашифровано. Введіть ключ підрозділу — його знають ваші колеги, які працюють із порталом.</p>
+  shell(`<div class="auth" style="max-width:620px"><div class="panel"><h2 class="display">🔑 Ключ підрозділу</h2>
+    <div class="note"><p>Дані підрозділу <b class="hl">${esc(u.name)}</b> зашифровано. Введіть ключ підрозділу — його знають ваші колеги, які працюють із порталом.</p></div>
     <form class="js-kopen" autocomplete="off"><label class="f">Ключ підрозділу<input name="k" type="password" required autofocus></label>${rememberBox}
       <button class="btn primary">Відкрити</button></form>
     <p class="muted" style="margin-top:12px">Ніхто не пам'ятає ключ? Зверніться до адміністратора порталу — він встановить новий ключ, дані збережуться.</p></div>
@@ -1067,8 +1068,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261023e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261023e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261023f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261023f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

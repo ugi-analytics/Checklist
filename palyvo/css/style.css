@@ -173,3 +173,24 @@ table.edit td.c { text-align:center; } table.edit input[type=checkbox] { width:1
   .frc .grid { grid-template-columns: 1fr; } .f4 { grid-template-columns: 1fr 1fr; } .wrap { padding: 0 14px 30px; }
   .title-row h1 { font-size: 1.5rem; }
 }
+
+/* ---------- скляні картки, заголовки з плиткою-іконкою, примітки (оформлення 2026-10) ---------- */
+.panel { background: linear-gradient(160deg, rgba(30,41,59,.58), rgba(15,23,42,.66)); border: 1px solid rgba(148,163,184,.2);
+  backdrop-filter: blur(14px) saturate(1.15); -webkit-backdrop-filter: blur(14px) saturate(1.15); box-shadow: 0 18px 50px rgba(2,6,23,.45); }
+.auth { margin: 34px auto; }
+.auth .panel { padding: 28px 30px; border-radius: 20px; }
+h2.ttl { display: flex; align-items: center; gap: 14px; margin: 0 0 18px; font-size: 1.45rem; }
+h2.ttl .ico { flex: none; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; line-height: 1;
+  background: linear-gradient(145deg, #fbbf24, #d97706); box-shadow: 0 6px 18px rgba(245,158,11,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+.note { background: rgba(2,6,23,.5); border: 1px solid rgba(148,163,184,.14); border-left: 3px solid #f59e0b; border-radius: 10px;
+  padding: 12px 16px; margin: 0 0 16px; color: #cbd5e1; line-height: 1.55; }
+.note p { margin: 0 0 8px; } .note p:last-child { margin: 0; }
+.note ul { margin: 6px 0 0; padding-left: 20px; } .note li { margin: 3px 0; }
+.note .hl { color: #7dd3fc; }
+mark { background: rgba(59,130,246,.35); color: #e0f2fe; border-radius: 4px; padding: 0 4px; font-weight: 600; }
+.auth label.f { color: #cbd5e1; font-size: .86rem; }
+.auth input:not([type=checkbox]), .auth select { background: rgba(2,6,23,.62); border-color: rgba(148,163,184,.28); padding: 11px 12px; }
+.auth input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,.22); }
+input[type=checkbox] { accent-color: #3b82f6; width: 17px; height: 17px; flex: none; }
+.auth form > .btn.primary { width: 100%; justify-content: space-between; padding: 12px 18px; font-weight: 700; }
+.auth form > .btn.primary::after { content: "→"; font-size: 1.15rem; }
