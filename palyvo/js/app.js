@@ -14,7 +14,7 @@ const DEMO = params.has("demo");
 let store = null;
 
 const state = { authUser: null, me: null, unitId: null, units: [], flash: null, setupDone: null,
-  mfa: null, adminPriv: null, keys: {} };
+  mfa: null, adminPriv: null, keys: {}, adminKeyReady: null };
 // ключі в пам'яті вкладки скидаються при виході
 function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; }
 const keyCacheId = (unitId) => `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser?.uid}:${unitId}`;
@@ -354,6 +354,32 @@ function pageMfaSetup(stage = {}) {
     } catch (err) { flash("err", store.errUa(err)); pageMfaSetup(stage); } finally { busy(false); }
   });
   bindOut();
+}
+
+// Ключ адміністратора, якщо портал створено ще версією без шифрування
+function pageAdminKeyCreate() {
+  shell(authCard(`<h2 class="display">🔐 Створіть ключ адміністратора</h2>
+    <p>Портал переведено на шифрування даних. Залишилось створити <b>ключ адміністратора</b> — окрему фразу (не пароль від входу).
+      Нею ви відкриваєте зведення по області й встановлюєте новий ключ підрозділу, якщо той його забуде.</p>
+    <div class="flash info" style="margin:12px 0">Ключ адміністратора знаєте лише ви, і його <b>неможливо відновити</b>: запишіть на папері
+      й зберігайте окремо від пароля, як ключ від сейфа.</div>
+    <form class="js-akcreate" autocomplete="off">
+      <div class="two"><label class="f">Ключ адміністратора (від 10 символів, краще фраза)<input name="ak" type="password" required minlength="10"></label>
+        <label class="f">Повторіть ключ<input name="ak2" type="password" required minlength="10"></label></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="ok" required> Я записав ключ адміністратора й зберігатиму його окремо від пароля</label>
+      <button class="btn primary">Створити ключ</button></form>`, 640));
+  $app.querySelector(".js-akcreate").addEventListener("submit", async (e) => {
+    e.preventDefault(); const f = e.target;
+    if (f.ak.value !== f.ak2.value) { flash("err", "Ключі не збігаються."); return pageAdminKeyCreate(); }
+    const kp = X.passProblem(f.ak.value, "Ключ адміністратора"); if (kp) { flash("err", kp); return pageAdminKeyCreate(); }
+    busy(true);
+    try {
+      await store.createAdminKeys(await X.newAdminKeys(f.ak.value));
+      state.adminKeyReady = true; store.log("admin_key_create", "");
+      flash("ok", "Ключ адміністратора створено. Тепер створіть ключ свого підрозділу.");
+      render();
+    } catch (err) { flash("err", store.errUa(err)); pageAdminKeyCreate(); } finally { busy(false); }
+  });
 }
 
 function pagePassword() {
@@ -981,6 +1007,7 @@ async function render() {
   if (state.me.status === "pending") return pagePending();
   if (state.me.status !== "active") return pageBlocked();
   if (store.mfaRequired && !(state.mfa && state.mfa.session)) return pageMfaSetup();
+  if (isAdmin() && state.adminKeyReady === false) return pageAdminKeyCreate();
   busy(true);
   try {
     const [p1, p2] = path.split("/");
@@ -1007,6 +1034,7 @@ async function onAuthChanged(user) {
     if (state.me && state.me.status === "active" && (!store.mfaRequired || (state.mfa && state.mfa.session))) {
       store.touchLogin();
       if (state.me.role === "admin") {
+        state.adminKeyReady = await store.hasAdminKey().catch(() => true);
         state.units = await store.listUnits().catch(() => []);
         state.pendingCount = (await store.listUsers().catch(() => [])).filter((u) => u.status === "pending").length;
         const ctx = sessionStorage.getItem("unitCtx");

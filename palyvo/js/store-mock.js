@@ -62,7 +62,9 @@ export function createStore() {
     async createUnit(name, settings) { const id = "un" + rid(); S.units[id] = { name, settings, n_vehicles: 0, created_at: nowIso() }; save(); return id; },
     async updateUnit(id, f) { Object.assign(S.units[id], clone(f)); save(); },
     async deleteUnit(id) { delete S.units[id]; for (const k of Object.keys(S.months)) if (k.startsWith(id + "/")) delete S.months[k]; save(); },
-    async getAdminPub() { if (!S.meta.admin_pub) err("x", "Ключ адміністратора ще не створено."); return clone(S.meta.admin_pub); },
+    async getAdminPub() { if (!S.meta.admin_pub) err("x", "Адміністратор порталу ще не завершив налаштування шифрування (ключ адміністратора не створено). Зверніться до нього."); return clone(S.meta.admin_pub); },
+    async hasAdminKey() { return !!S.meta.admin_pub; },
+    async createAdminKeys(k) { if (S.meta.admin_pub) err("permission-denied", "Ключ адміністратора вже існує."); S.meta.admin_pub = clone(k.pub); S.meta.admin_priv = clone(k.priv); save(); },
     async getAdminPriv() { if (!S.meta.admin_priv) err("x", "Ключ адміністратора ще не створено."); return clone(S.meta.admin_priv); },
     async setAdminPriv(p) { S.meta.admin_priv = clone(p); save(); },
     async initUnitCrypto(id, c, e, n) {

@@ -130,7 +130,15 @@ export function createStore(config) {
     async getUnit(id) { const s = await getDoc(doc(db, "units", id)); return s.exists() ? { id, ...s.data() } : null; },
     async createUnit(name, settings) { const r = doc(collection(db, "units")); await setDoc(r, { name, settings, n_vehicles: 0, created_at: nowIso() }); return r.id; },
     // ---------------------------------------------------------------- шифрування
-    async getAdminPub() { const s = await getDoc(doc(db, "meta", "admin_pub")); if (!s.exists()) throw new Error("Ключ адміністратора ще не створено."); return s.data(); },
+    async getAdminPub() { const s = await getDoc(doc(db, "meta", "admin_pub")); if (!s.exists()) throw new Error("Адміністратор порталу ще не завершив налаштування шифрування (ключ адміністратора не створено). Зверніться до нього."); return s.data(); },
+    async hasAdminKey() { return (await getDoc(doc(db, "meta", "admin_pub"))).exists(); },
+    // ключ адміністратора, якщо портал налаштовано попередньою версією (без шифрування)
+    async createAdminKeys(keys) {
+      const b = writeBatch(db);
+      b.set(doc(db, "meta", "admin_pub"), { ...keys.pub, at: nowIso() });
+      b.set(doc(db, "meta", "admin_priv"), { ...keys.priv, at: nowIso() });
+      await b.commit();
+    },
     async getAdminPriv() { const s = await getDoc(doc(db, "meta", "admin_priv")); if (!s.exists()) throw new Error("Ключ адміністратора ще не створено."); return s.data(); },
     setAdminPriv: (priv) => setDoc(doc(db, "meta", "admin_priv"), { ...priv, at: nowIso() }),
     // перше створення ключа підрозділу — у транзакції, щоб двоє колег одночасно не створили різні ключі
