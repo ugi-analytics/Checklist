@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261023f";
-import * as U from "./ui.js?v=20261023f";
-import { litresWords } from "./words.js?v=20261023f";
-import { buildRegister, buildAct } from "./docs.js?v=20261023f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261023f";
-import * as X from "./crypto.js?v=20261023f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261023f";
+import * as C from "./core.js?v=20261023g";
+import * as U from "./ui.js?v=20261023g";
+import { litresWords } from "./words.js?v=20261023g";
+import { buildRegister, buildAct } from "./docs.js?v=20261023g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261023g";
+import * as X from "./crypto.js?v=20261023g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261023g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -62,25 +62,30 @@ function currentYm(q) {
 function shell(content, { nav = true } = {}) {
   const me = state.me; const p = route().path;
   const unit = state.units.find((u) => u.id === state.unitId);
-  const unitChip = unit ? `<span class="chip unit-chip">${esc(unit.name)}</span>` : "";
+  const unitChip = unit && me && me.status === "active" ? `<span class="chip unit-chip">${esc(unit.name)}</span>` : "";
   const switcher = isAdmin() && state.units.length > 1 ? `<select class="js-unit-switch" title="Працювати з підрозділом">
       ${state.units.map((u) => `<option value="${u.id}" ${u.id === state.unitId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>` : "";
-  const tab = (h, label, extra = "") => `<a href="#/${h}" class="${p === h || p.startsWith(h + "/") ? "on" : ""}">${label}${extra}</a>`;
+  const tab = (h, icon, label, extra = "") => `<a href="#/${h}" class="tile ${p === h || p.startsWith(h + "/") || (h === "entry" && !p) ? "on" : ""}">
+    <span class="ti">${icon}</span><span class="tl">${label}${extra}</span><span class="chev">›</span></a>`;
   const pending = isAdmin() && state.pendingCount ? `<span class="badge">${state.pendingCount}</span>` : "";
   content = String(content).replace(/<h2 class="display">((?:\p{Extended_Pictographic}|[✓✍])\uFE0F?)\s*/gu, '<h2 class="display ttl"><span class="ico">$1</span>');
   $app.innerHTML = `
   <header class="hero"><div class="wrap">
-    <div class="topbar"><img src="img/hub_icon_small.png" alt="">
-      <div class="brand display grad">UGI-Analytics<small>Управління головної інспекції ГУНП в Полтавській області</small></div>
+    <div class="topbar"><div class="logo"><img src="img/hub_icon_small.png" alt=""></div>
+      <div class="brand"><div class="bname"><span class="display">UGI-Analytics</span>
+        <span class="online ${navigator.onLine ? "" : "off"}"><i></i><b>${navigator.onLine ? "ON-LINE" : "OFF-LINE"}</b></span></div>
+        <small>Управління головної інспекції ГУНП в Полтавській області</small></div>
       <div class="sp"></div>
       ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : ""}<br>
         ${me && me.status === "active" ? `<a href="#/password">змінити пароль</a> · ` : ""}<a href="#" class="js-logout">вийти</a></div>` : ""}
     </div>
-    <div class="title-row"><h1 class="display grad">Списання пального для МВО</h1>${unitChip}${switcher}
-      ${DEMO ? `<span class="chip" style="border-color:#f87171;color:#fecaca">ДЕМО-РЕЖИМ · дані не зберігаються</span>` : ""}</div>
-    ${nav && me && me.status === "active" ? `<nav class="tabs">
-      ${tab("entry", "✍️ Введення даних")}${tab("report", "📄 Звіт і акти")}${tab("fleet", "🚗 Автопарк і реквізити")}${tab("archive", "🗂️ Архів")}
-      ${isAdmin() ? tab("admin", "🛡️ Адміністрування", pending) : ""}</nav>` : ""}
+    <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
+      <div class="chips">${unitChip}${switcher}
+      ${DEMO ? `<span class="chip" style="border-color:#f87171;color:#fecaca">ДЕМО-РЕЖИМ · дані не зберігаються</span>` : ""}</div></div>
+    ${nav && me && me.status === "active" ? `<nav class="tiles">
+      ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
+      ${isAdmin() ? tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
+    <div class="motto">Контроль <i>/</i> Прозорість <i>/</i> Ефективність</div>
   </div></header>
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
   state.flash = null;
@@ -1068,13 +1073,15 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261023f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261023f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261023g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261023g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
   }
   if (!store) return render();
   window.addEventListener("hashchange", () => { window.onbeforeunload = null; render(); });
+  const net = () => { const el = document.querySelector(".online"); if (!el) return; el.classList.toggle("off", !navigator.onLine); el.querySelector("b").textContent = navigator.onLine ? "ON-LINE" : "OFF-LINE"; };
+  window.addEventListener("online", net); window.addEventListener("offline", net);
   store.onAuth(onAuthChanged);
 })();
