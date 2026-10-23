@@ -356,6 +356,17 @@ function pageMfaSetup(stage = {}) {
   bindOut();
 }
 
+// База ще працює за старими правилами доступу (без розділу для ключа адміністратора)
+function pageRulesOld() {
+  shell(authCard(`<h2 class="display">⚠️ Правила бази не оновлено</h2>
+    <p>Вхід із кодом працює, але база Firestore ще працює за <b>старими правилами доступу</b>, тому портал не може створити ключ адміністратора.</p>
+    <ol style="line-height:1.7;padding-left:20px"><li>Відкрийте console.firebase.google.com → проєкт <b>palyvo-mvo</b> → <b>Firestore Database</b> → вкладка <b>Rules</b>.</li>
+      <li>Видаліть увесь текст і вставте вміст файлу <b>Правила_Firestore.txt</b> (найновішого).</li>
+      <li>Натисніть <b>Publish</b>, зачекайте хвилину й натисніть кнопку нижче.</li></ol>
+    <button class="btn primary js-recheck">🔄 Перевірити ще раз</button>`, 620));
+  $app.querySelector(".js-recheck").addEventListener("click", () => onAuthChanged(store.currentUser()));
+}
+
 // Ключ адміністратора, якщо портал створено ще версією без шифрування
 function pageAdminKeyCreate() {
   shell(authCard(`<h2 class="display">🔐 Створіть ключ адміністратора</h2>
@@ -1007,6 +1018,7 @@ async function render() {
   if (state.me.status === "pending") return pagePending();
   if (state.me.status !== "active") return pageBlocked();
   if (store.mfaRequired && !(state.mfa && state.mfa.session)) return pageMfaSetup();
+  if (isAdmin() && state.adminKeyReady === "rules") return pageRulesOld();
   if (isAdmin() && state.adminKeyReady === false) return pageAdminKeyCreate();
   busy(true);
   try {
@@ -1034,7 +1046,7 @@ async function onAuthChanged(user) {
     if (state.me && state.me.status === "active" && (!store.mfaRequired || (state.mfa && state.mfa.session))) {
       store.touchLogin();
       if (state.me.role === "admin") {
-        state.adminKeyReady = await store.hasAdminKey().catch(() => true);
+        state.adminKeyReady = await store.hasAdminKey().catch((e) => (e && e.code === "permission-denied" ? "rules" : true));
         state.units = await store.listUnits().catch(() => []);
         state.pendingCount = (await store.listUsers().catch(() => [])).filter((u) => u.status === "pending").length;
         const ctx = sessionStorage.getItem("unitCtx");
