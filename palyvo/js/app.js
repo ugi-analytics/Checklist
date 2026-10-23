@@ -4,6 +4,8 @@ import * as U from "./ui.js";
 import { litresWords } from "./words.js";
 import { buildRegister, buildAct } from "./docs.js";
 import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js";
+import * as X from "./crypto.js";
+import { qrSvg } from "../vendor/qrcode.js";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -11,7 +13,11 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.has("demo");
 let store = null;
 
-const state = { authUser: null, me: null, unitId: null, units: [], flash: null, setupDone: null };
+const state = { authUser: null, me: null, unitId: null, units: [], flash: null, setupDone: null,
+  mfa: null, adminPriv: null, keys: {} };
+// ключі в пам'яті вкладки скидаються при виході
+function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; }
+const keyCacheId = (unitId) => `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser?.uid}:${unitId}`;
 
 // ============================================================ утиліти
 function flash(type, text) { state.flash = [type, text]; }
@@ -77,7 +83,7 @@ function shell(content, { nav = true } = {}) {
   </div></header>
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
   state.flash = null;
-  $app.querySelector(".js-logout")?.addEventListener("click", async (e) => { e.preventDefault(); await store.signOut(); go("#/login"); });
+  $app.querySelector(".js-logout")?.addEventListener("click", async (e) => { e.preventDefault(); forgetSessionKeys(); await store.signOut(); go("#/login"); });
   $app.querySelector(".js-unit-switch")?.addEventListener("change", (e) => {
     state.unitId = e.target.value; sessionStorage.setItem("unitCtx", state.unitId); render();
   });
@@ -102,8 +108,28 @@ function pageLogin() {
     <p class="muted">Немає облікового запису? <a href="#/register">Подати заявку на реєстрацію</a> — після підтвердження адміністратором ви зможете працювати.</p>`), { nav: false });
   $app.querySelector(".js-login").addEventListener("submit", async (e) => {
     e.preventDefault(); const f = e.target; busy(true);
-    try { await store.signIn(f.email.value, f.pw.value); } catch (err) { flash("err", store.errUa(err)); pageLogin(); } finally { busy(false); }
+    try { await store.signIn(f.email.value, f.pw.value); }
+    catch (err) { if (err.code === "mfa-required") return pageMfaCode(); flash("err", store.errUa(err)); pageLogin(); }
+    finally { busy(false); }
   });
+}
+
+// другий крок входу — код із телефона
+function pageMfaCode() {
+  shell(authCard(`<h2 class="display">🔐 Код із телефона</h2>
+    <p class="muted">Відкрийте на телефоні застосунок-автентифікатор (Google Authenticator / Microsoft Authenticator) і введіть
+      6-значний код для «Palyvo MVO».</p>
+    <form class="js-mfa" autocomplete="off"><label class="f">Код<input name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus
+      autocomplete="one-time-code" style="font-size:24px;letter-spacing:6px;text-align:center"></label>
+      <button class="btn primary">Увійти</button></form>
+    <p class="muted" style="margin-top:14px"><a href="#/login" class="js-back">← Інший обліковий запис</a></p>`), { nav: false });
+  $app.querySelector(".js-mfa").addEventListener("submit", async (e) => {
+    e.preventDefault(); busy(true);
+    try { await store.finishMfaSignIn(e.target.code.value); }
+    catch (err) { flash("err", store.errUa(err)); if (String(err.message).includes("застаріла")) pageLogin(); else pageMfaCode(); }
+    finally { busy(false); }
+  });
+  $app.querySelector(".js-back").addEventListener("click", (e) => { e.preventDefault(); pageLogin(); });
 }
 
 function pageForgot() {
@@ -145,6 +171,7 @@ function pageRegister() {
       state.registering = true;
       await store.signUp(f.email.value, f.pw.value);
       await store.createMyProfile(prof);
+      await store.sendVerify().catch(() => {});
       state.registering = false;
       await onAuthChanged(store.currentUser());
     } catch (err) { state.registering = false; flash("err", store.errUa(err)); pageRegister(); } finally { busy(false); }
@@ -155,8 +182,14 @@ function pagePending() {
   shell(authCard(`<h2 class="display">Заявку надіслано ✓</h2>
     <p>Адміністратор перевірить її та прив'яже ваш обліковий запис до підрозділу <b>${esc(state.me.requested_unit)}</b>.
       Після підтвердження оновіть сторінку — відкриється робоча частина порталу.</p>
+    ${state.mfa && !state.mfa.emailVerified ? `<div class="flash info">✉️ Ми надіслали лист на <b>${esc(state.authUser.email)}</b> — перейдіть за посиланням у ньому,
+      щоб підтвердити e-mail (перевірте й «Спам»). Без цього не вдасться налаштувати вхід із кодом із телефона.
+      <br><button class="btn sm js-resend" style="margin-top:8px">Надіслати лист ще раз</button></div>` : ""}
     <button class="btn sky js-reload">🔄 Перевірити ще раз</button>`), { nav: false });
-  $app.querySelector(".js-reload").addEventListener("click", () => onAuthChanged(store.currentUser()));
+  $app.querySelector(".js-reload").addEventListener("click", async () => { await store.reloadUser().catch(() => {}); onAuthChanged(store.currentUser()); });
+  $app.querySelector(".js-resend")?.addEventListener("click", async () => {
+    try { await store.sendVerify(); flash("ok", "Лист надіслано ще раз."); } catch (err) { flash("err", store.errUa(err)); } pagePending();
+  });
 }
 
 function pageBlocked() {
@@ -175,35 +208,152 @@ function pageNoProfile() {
   });
 }
 
+// Перший запуск: 1) обліковий запис адміністратора → 2) підтвердження e-mail → 3) підрозділ і ключ адміністратора
 function pageSetup() {
   const lockedEmail = ADMIN_EMAIL && !DEMO ? ADMIN_EMAIL : "";
-  shell(authCard(`<h2 class="display">Перший запуск порталу</h2>
-    <p class="muted">Створіть обліковий запис адміністратора області${lockedEmail ? ` (лише для <b>${esc(lockedEmail)}</b>)` : ""}.</p>
+  const steps = (n) => `<p class="muted">Крок ${n} з 3 · далі — вхід із кодом із телефона</p>`;
+  if (!state.authUser) {
+    shell(authCard(`<h2 class="display">Перший запуск порталу</h2>${steps(1)}
+      <p class="muted">Створіть обліковий запис адміністратора області${lockedEmail ? ` (лише для <b>${esc(lockedEmail)}</b>)` : ""}.</p>
+      <form class="js-setup1" autocomplete="off">
+        <label class="f">E-mail адміністратора<input name="email" type="email" required value="${esc(lockedEmail)}" ${lockedEmail ? "readonly" : ""}></label>
+        <div class="two"><label class="f">Пароль (від 8 символів, літери й цифри)<input name="pw" type="password" required minlength="8"></label>
+          <label class="f">Повторіть пароль<input name="pw2" type="password" required minlength="8"></label></div>
+        <button class="btn primary">Далі</button></form>`, 640), { nav: false });
+    $app.querySelector(".js-setup1").addEventListener("submit", async (e) => {
+      e.preventDefault(); const f = e.target;
+      if (f.pw.value !== f.pw2.value) { flash("err", "Паролі не збігаються."); return pageSetup(); }
+      const pp = pwProblem(f.pw.value); if (pp) { flash("err", pp); return pageSetup(); }
+      busy(true);
+      try {
+        try { await store.signUp(f.email.value, f.pw.value); await store.sendVerify().catch(() => {}); }
+        catch (err) { if (err.code === "auth/email-already-in-use") await store.signIn(f.email.value, f.pw.value); else throw err; }
+      } catch (err) { if (err.code === "mfa-required") return pageMfaCode(); flash("err", store.errUa(err)); pageSetup(); } finally { busy(false); }
+    });
+    return;
+  }
+  if (!state.mfa || !state.mfa.emailVerified) {
+    shell(authCard(`<h2 class="display">Підтвердіть e-mail</h2>${steps(2)}
+      <p>Ми надіслали лист на <b>${esc(state.authUser.email)}</b>. Відкрийте його та перейдіть за посиланням (перевірте й «Спам»),
+        потім поверніться сюди й натисніть «Я підтвердив».</p>
+      <div class="row"><button class="btn primary js-done">✓ Я підтвердив</button><button class="btn js-resend">Надіслати лист ще раз</button></div>
+      <p class="muted" style="margin-top:14px"><a href="#" class="js-out">Вийти</a></p>`, 560), { nav: false });
+    $app.querySelector(".js-done").addEventListener("click", async () => {
+      busy(true);
+      try { const ok = await store.reloadUser(); state.mfa = await store.mfaState(); if (!ok) flash("err", "E-mail ще не підтверджено — перейдіть за посиланням у листі."); }
+      catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+      pageSetup();
+    });
+    $app.querySelector(".js-resend").addEventListener("click", async () => {
+      try { await store.sendVerify(); flash("ok", "Лист надіслано ще раз."); } catch (err) { flash("err", store.errUa(err)); } pageSetup();
+    });
+    $app.querySelector(".js-out").addEventListener("click", async (e) => { e.preventDefault(); await store.signOut(); });
+    return;
+  }
+  shell(authCard(`<h2 class="display">Підрозділ і ключ адміністратора</h2>${steps(3)}
     <form class="js-setup" autocomplete="off">
       <label class="f">Ваш підрозділ<input name="unit" required value="УГІ ГУНП"></label>
       <div class="two"><label class="f">ПІБ<input name="full_name" required></label><label class="f">Посада<input name="position"></label></div>
-      <label class="f">E-mail адміністратора<input name="email" type="email" required value="${esc(lockedEmail)}" ${lockedEmail ? "readonly" : ""}></label>
-      <div class="two"><label class="f">Пароль (від 8 символів, літери й цифри)<input name="pw" type="password" required minlength="8"></label>
-        <label class="f">Повторіть пароль<input name="pw2" type="password" required minlength="8"></label></div>
-      <button class="btn primary">Створити й увійти</button></form>`, 640), { nav: false });
+      <div class="flash info" style="margin:12px 0">🔐 <b>Ключ адміністратора</b> — окрема фраза (не пароль від входу). Нею ви відкриваєте зведення
+        по області й відновлюєте ключі підрозділів, якщо ті їх забудуть. Її не знає ніхто, крім вас, і її <b>неможливо відновити</b>:
+        запишіть на папері й зберігайте як ключ від сейфа.</div>
+      <div class="two"><label class="f">Ключ адміністратора (від 10 символів, краще фраза)<input name="ak" type="password" required minlength="10"></label>
+        <label class="f">Повторіть ключ адміністратора<input name="ak2" type="password" required minlength="10"></label></div>
+      <label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="ok" required> Я записав ключ адміністратора й зберігатиму його окремо від пароля</label>
+      <button class="btn primary">Створити портал</button></form>`, 680), { nav: false });
   $app.querySelector(".js-setup").addEventListener("submit", async (e) => {
     e.preventDefault(); const f = e.target;
-    if (f.pw.value !== f.pw2.value) { flash("err", "Паролі не збігаються."); return pageSetup(); }
-    const pp = pwProblem(f.pw.value); if (pp) { flash("err", pp); return pageSetup(); }
+    if (f.ak.value !== f.ak2.value) { flash("err", "Ключі адміністратора не збігаються."); return pageSetup(); }
+    const kp = X.passProblem(f.ak.value, "Ключ адміністратора"); if (kp) { flash("err", kp); return pageSetup(); }
     busy(true);
     try {
-      state.registering = true;
-      try { await store.signUp(f.email.value, f.pw.value); }
-      catch (err) { if (err.code === "auth/email-already-in-use") await store.signIn(f.email.value, f.pw.value); else throw err; }
       const unitName = f.unit.value.trim();
       const settings = { ...C.DEFAULT_SETTINGS, dept: unitName, unit: unitName, act_owner: unitName, compiler: C.shortName(f.full_name.value) };
+      const keys = await X.newAdminKeys(f.ak.value);
+      await store.reloadUser().catch(() => {});
       await store.bootstrapAdmin({ full_name: f.full_name.value.trim(), position: f.position.value.trim(), phone: "", requested_unit: unitName },
-        unitName, settings);
-      state.registering = false; state.setupDone = true;
-      flash("ok", "Портал налаштовано. Створіть автопарк свого підрозділу.");
+        unitName, settings, keys);
+      state.setupDone = true;
+      flash("ok", "Портал створено. Залишилось налаштувати вхід із кодом із телефона.");
       await onAuthChanged(store.currentUser());
-    } catch (err) { state.registering = false; flash("err", store.errUa(err)); pageSetup(); } finally { busy(false); }
+    } catch (err) { flash("err", store.errUa(err)); pageSetup(); } finally { busy(false); }
   });
+}
+
+// Обов'язковий двофакторний вхід: підтвердження e-mail → прив'язка застосунку-автентифікатора на телефоні
+function pageMfaSetup(stage = {}) {
+  const m = state.mfa || {};
+  const out = `<p class="muted" style="margin-top:14px"><a href="#" class="js-out">Вийти</a></p>`;
+  const bindOut = () => $app.querySelector(".js-out")?.addEventListener("click", async (e) => { e.preventDefault(); forgetSessionKeys(); await store.signOut(); });
+  if (!m.emailVerified) {
+    shell(authCard(`<h2 class="display">🔐 Захищений вхід · крок 1 з 2</h2>
+      <p>Для роботи з порталом потрібен вхід із кодом із телефона. Спочатку підтвердіть e-mail <b>${esc(state.authUser.email)}</b>:
+        натисніть «Надіслати лист», відкрийте лист і перейдіть за посиланням, потім натисніть «Я підтвердив».</p>
+      <div class="row"><button class="btn sky js-send">✉️ Надіслати лист</button><button class="btn primary js-done">✓ Я підтвердив</button></div>${out}`, 560), { nav: false });
+    $app.querySelector(".js-send").addEventListener("click", async () => {
+      try { await store.sendVerify(); flash("ok", "Лист надіслано. Перевірте також «Спам»."); } catch (err) { flash("err", store.errUa(err)); } pageMfaSetup();
+    });
+    $app.querySelector(".js-done").addEventListener("click", async () => {
+      busy(true);
+      try { const ok = await store.reloadUser(); state.mfa = await store.mfaState(); if (!ok) flash("err", "E-mail ще не підтверджено — перейдіть за посиланням у листі."); }
+      catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+      render();
+    });
+    return bindOut();
+  }
+  if (m.enrolled && !m.session) {
+    shell(authCard(`<h2 class="display">🔐 Увійдіть із кодом</h2>
+      <p>Вхід із кодом із телефона для цього облікового запису вже налаштовано. Увійдіть ще раз — після пароля портал попросить 6-значний код.</p>
+      <button class="btn primary js-relogin">Увійти ще раз</button>`, 520), { nav: false });
+    $app.querySelector(".js-relogin").addEventListener("click", async () => { forgetSessionKeys(); await store.signOut(); });
+    return;
+  }
+  if (stage.needPw) {
+    shell(authCard(`<h2 class="display">🔐 Підтвердіть пароль</h2>
+      <p class="muted">З міркувань безпеки перед налаштуванням ще раз введіть пароль від порталу.</p>
+      <form class="js-re"><label class="f">Пароль<input name="pw" type="password" required autofocus></label><button class="btn primary">Далі</button></form>${out}`), { nav: false });
+    $app.querySelector(".js-re").addEventListener("submit", async (e) => {
+      e.preventDefault(); busy(true);
+      try { await store.reauth(e.target.pw.value); pageMfaSetup({ start: true }); } catch (err) { flash("err", store.errUa(err)); pageMfaSetup({ needPw: true }); } finally { busy(false); }
+    });
+    return bindOut();
+  }
+  if (!stage.secret) {
+    shell(authCard(`<h2 class="display">🔐 Захищений вхід · крок 2 з 2</h2>
+      <p>Встановіть на службовий або особистий смартфон безкоштовний застосунок <b>Google Authenticator</b> або <b>Microsoft Authenticator</b>
+        (Google Play / App Store). Він щохвилини показує новий 6-значний код, який портал питатиме після пароля.</p>
+      <p class="muted">Інтернет на телефоні для кодів не потрібен.</p>
+      <button class="btn primary js-start">Застосунок встановлено — показати QR-код</button>${out}`, 560), { nav: false });
+    const start = async () => {
+      busy(true);
+      try { const sec = await store.startTotp(); pageMfaSetup({ secret: sec }); }
+      catch (err) { if (err.code === "auth/requires-recent-login") return pageMfaSetup({ needPw: true }); flash("err", store.errUa(err)); pageMfaSetup(); }
+      finally { busy(false); }
+    };
+    $app.querySelector(".js-start").addEventListener("click", start);
+    if (stage.start) start();
+    return bindOut();
+  }
+  const keyGroups = String(stage.secret.key).replace(/(.{4})/g, "$1 ").trim();
+  shell(authCard(`<h2 class="display">🔐 Прив'яжіть телефон</h2>
+    <ol style="line-height:1.7;padding-left:20px"><li>У застосунку натисніть «+» → «Сканувати QR-код» і наведіть камеру на код нижче.</li>
+      <li>Введіть 6 цифр, які з'явилися в застосунку, і натисніть «Підтвердити».</li></ol>
+    <div style="text-align:center;margin:12px 0"><div style="display:inline-block;padding:8px;background:#fff;border-radius:12px">${qrSvg(stage.secret.uri, 5)}</div></div>
+    <p class="muted" style="text-align:center">Не сканується? Додайте вручну — назва «Palyvo MVO», ключ:<br><code style="font-size:15px;user-select:all">${esc(keyGroups)}</code></p>
+    <form class="js-enroll" autocomplete="off"><label class="f">Код із застосунку<input name="code" inputmode="numeric" maxlength="7" required autofocus
+      autocomplete="one-time-code" style="font-size:24px;letter-spacing:6px;text-align:center"></label>
+      <button class="btn primary">Підтвердити</button></form>${out}`, 560), { nav: false });
+  $app.querySelector(".js-enroll").addEventListener("submit", async (e) => {
+    e.preventDefault(); busy(true);
+    try {
+      await store.finishTotp(e.target.code.value);
+      state.mfa = await store.mfaState();
+      store.log("mfa_enroll", "");
+      if (state.mfa.session) { flash("ok", "Вхід із кодом налаштовано ✓"); await onAuthChanged(store.currentUser()); }
+      else { flash("ok", "Вхід із кодом налаштовано ✓ Увійдіть ще раз: пароль, потім код із телефона."); forgetSessionKeys(); await store.signOut(); }
+    } catch (err) { flash("err", store.errUa(err)); pageMfaSetup(stage); } finally { busy(false); }
+  });
+  bindOut();
 }
 
 function pagePassword() {
@@ -211,7 +361,20 @@ function pagePassword() {
     <form class="js-pw"><label class="f">Поточний пароль<input name="old" type="password" required></label>
       <label class="f">Новий пароль (від 8 символів, літери й цифри)<input name="n1" type="password" required minlength="8"></label>
       <label class="f">Повторіть новий пароль<input name="n2" type="password" required minlength="8"></label>
-      <button class="btn primary">Зберегти</button></form>`));
+      <button class="btn primary">Зберегти</button></form>
+    ${isAdmin() ? `<hr style="border-color:rgba(148,163,184,.25);margin:22px 0"><h2 class="display">Зміна ключа адміністратора</h2>
+      <form class="js-akchange" autocomplete="off"><label class="f">Поточний ключ адміністратора<input name="old" type="password" required></label>
+        <label class="f">Новий ключ (від 10 символів)<input name="n1" type="password" required minlength="10"></label>
+        <label class="f">Повторіть новий ключ<input name="n2" type="password" required minlength="10"></label>
+        <button class="btn sky">Змінити ключ адміністратора</button></form>` : ""}`));
+  $app.querySelector(".js-akchange")?.addEventListener("submit", async (e) => {
+    e.preventDefault(); const f = e.target;
+    if (f.n1.value !== f.n2.value) { flash("err", "Нові ключі не збігаються."); return pagePassword(); }
+    const kp = X.passProblem(f.n1.value, "Ключ адміністратора"); if (kp) { flash("err", kp); return pagePassword(); }
+    busy(true);
+    try { await store.setAdminPriv(await X.rewrapAdmin(await store.getAdminPriv(), f.old.value, f.n1.value)); store.log("admin_key_change", ""); flash("ok", "Ключ адміністратора змінено. Запишіть новий ключ."); go("#/entry"); }
+    catch (err) { flash("err", store.errUa(err)); pagePassword(); } finally { busy(false); }
+  });
   $app.querySelector(".js-pw").addEventListener("submit", async (e) => {
     e.preventDefault(); const f = e.target;
     if (f.n1.value !== f.n2.value) { flash("err", "Нові паролі не збігаються."); return pagePassword(); }
@@ -222,20 +385,61 @@ function pagePassword() {
   });
 }
 
-// ============================================================ дані підрозділу
-async function loadUnit() {
-  const u = await store.getUnit(state.unitId);
-  if (!u) return null;
-  u.settings = { ...C.DEFAULT_SETTINGS, ...(u.settings || {}) };
-  u.vehicles = (u.vehicles || []).map(C.normalizeVehicle);
+// ============================================================ дані підрозділу (з розшифруванням)
+class NeedKey extends Error { constructor(mode, unit) { super("need-key"); this.code = "need-key"; this.mode = mode; this.unit = unit; } }
+
+// ключ даних підрозділу: з пам'яті вкладки → з цього комп'ютера → ключем адміністратора (якщо відкрито)
+async function getUnitKey(u) {
+  if (state.keys[u.id]) return state.keys[u.id];
+  const cached = await X.keyCache.get(keyCacheId(u.id));
+  if (cached) { state.keys[u.id] = cached; return cached; }
+  if (isAdmin() && state.adminPriv && u.crypto && u.crypto.admin) {
+    const dk = await X.unwrapByAdmin(u.crypto.admin, state.adminPriv);
+    state.keys[u.id] = dk; return dk;
+  }
+  return null;
+}
+async function decUnit(u, dk) {
+  const data = u.enc ? await X.decJson(dk, u.enc, X.aadUnit(u.id)) : { settings: u.settings || {}, vehicles: [] };
+  u.settings = { ...C.DEFAULT_SETTINGS, ...(data.settings || {}) };
+  u.vehicles = (data.vehicles || []).map(C.normalizeVehicle);
+  u.dk = dk;
   return u;
 }
+async function loadUnit(id = state.unitId) {
+  const u = await store.getUnit(id);
+  if (!u) return null;
+  if (!u.crypto) throw new NeedKey("init", u);
+  const dk = await getUnitKey(u);
+  if (!dk) throw new NeedKey("unlock", u);
+  return decUnit(u, dk);
+}
+async function readMonth(unit, ym) {
+  const m = await store.getMonth(unit.id, ym);
+  if (!m) return null;
+  return m.enc ? { ...m, ...(await X.decJson(unit.dk, m.enc, X.aadMonth(unit.id, ym))) } : m;
+}
+async function writeMonth(unit, ym, data) {
+  await store.saveMonth(unit.id, ym, await X.encJson(unit.dk, data, X.aadMonth(unit.id, ym)));
+}
+async function listMonthsDec(unit) {
+  const ms = await store.listMonths(unit.id);
+  return Promise.all(ms.map(async (m) => (m.enc ? { ...m, ...(await X.decJson(unit.dk, m.enc, X.aadMonth(unit.id, m.ym))) } : m)));
+}
+async function writeUnit(unit, settings, vehicles) {
+  await store.saveUnitData(unit.id, await X.encJson(unit.dk, { settings, vehicles }, X.aadUnit(unit.id)), vehicles.filter((v) => v.active !== false).length);
+}
+async function rememberKey(unitId, dk, remember) {
+  const locked = await X.lockDown(dk);
+  state.keys[unitId] = locked;
+  if (remember) await X.keyCache.put(keyCacheId(unitId), locked);
+}
 async function monthState(unit, ym) {
-  const saved = await store.getMonth(unit.id, ym);
+  const saved = await readMonth(unit, ym);
   let entries, carried = null;
   if (saved) entries = saved.entries || {};
   else {
-    const prev = await store.getMonth(unit.id, C.prevYm(ym));
+    const prev = await readMonth(unit, C.prevYm(ym));
     entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} }) : {};
     if (prev) carried = C.prevYm(ym);
   }
@@ -245,6 +449,77 @@ async function monthState(unit, ym) {
 async function rowsFor(unit, ym) {
   const st = await monthState(unit, ym);
   return st.vehicles.map((v) => C.calcRow(v, st.entries[v.id]));
+}
+
+// ------------------------------------------------------------ ключ підрозділу: створення / введення
+const rememberBox = `<label style="display:flex;gap:8px;align-items:center;margin:10px 0"><input type="checkbox" name="remember" checked>
+  Запам'ятати ключ на цьому комп'ютері (не ставте на чужому чи спільному комп'ютері)</label>`;
+function adminKeyForm(note = "") {
+  return `<form class="js-akey panel" style="background:rgba(2,6,23,.45)" autocomplete="off"><h3>🔐 Ключ адміністратора</h3>
+    <p class="muted">${note || "Потрібен, щоб відкривати дані підрозділів. Діє до закриття вкладки або виходу."}</p>
+    <div class="row"><label class="f" style="flex:1;min-width:260px">Ключ адміністратора<input name="ak" type="password" required></label>
+      <button class="btn primary">Відкрити</button></div></form>`;
+}
+function bindAdminKeyForm(after) {
+  $app.querySelector(".js-akey")?.addEventListener("submit", async (e) => {
+    e.preventDefault(); busy(true);
+    try { state.adminPriv = await X.unlockAdmin(await store.getAdminPriv(), e.target.ak.value); store.log("admin_key_open", ""); flash("ok", "Ключ адміністратора відкрито."); }
+    catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+    after ? after() : render();
+  });
+}
+function pageUnitKey(mode, u) {
+  const mine = state.me.unit_id === u.id;
+  if (mode === "init") {
+    shell(`<div class="auth" style="max-width:680px"><div class="panel"><h2 class="display">🔐 Створіть ключ підрозділу</h2>
+      <p>Дані підрозділу <b>${esc(u.name)}</b> (автопарк, реквізити, показники за місяці) шифруються ще у вашому браузері — у базі
+        вони лежать як незрозумілий набір символів. Відкрити їх можна лише <b>ключем підрозділу</b>.</p>
+      <ul style="line-height:1.6"><li>Придумайте фразу з кількох слів (від 10 символів), наприклад <i>«Лубни-пальне-синій-кіт»</i>.</li>
+        <li>Передайте її колегам свого підрозділу особисто чи службовим порядком — <b>не через пошту чи месенджери</b>.</li>
+        <li>Кожен колега введе її один раз на своєму комп'ютері.</li>
+        <li>Якщо ключ забудуть усі — адміністратор порталу зможе встановити новий, дані не загубляться.</li></ul>
+      ${mine ? "" : `<div class="flash info">Ви створюєте ключ для чужого підрозділу — не забудьте передати його цьому підрозділу.</div>`}
+      <form class="js-kinit" autocomplete="off"><div class="two">
+        <label class="f">Ключ підрозділу<input name="k1" type="password" required minlength="10"></label>
+        <label class="f">Повторіть ключ<input name="k2" type="password" required minlength="10"></label></div>${rememberBox}
+        <button class="btn primary">Створити ключ і продовжити</button></form></div></div>`);
+    $app.querySelector(".js-kinit").addEventListener("submit", async (e) => {
+      e.preventDefault(); const f = e.target;
+      if (f.k1.value !== f.k2.value) { flash("err", "Ключі не збігаються."); return pageUnitKey(mode, u); }
+      const kp = X.passProblem(f.k1.value, "Ключ підрозділу"); if (kp) { flash("err", kp); return pageUnitKey(mode, u); }
+      busy(true);
+      try {
+        const pub = await store.getAdminPub();
+        const dk = await X.newDataKey();
+        const cryptoObj = { v: 1, pass: await X.wrapWithPass(dk, f.k1.value, X.aadPass(u.id)), admin: await X.wrapForAdmin(dk, pub) };
+        const enc = await X.encJson(dk, { settings: { ...C.DEFAULT_SETTINGS, ...(u.settings || {}) }, vehicles: u.vehicles || [] }, X.aadUnit(u.id));
+        await store.initUnitCrypto(u.id, cryptoObj, enc, (u.vehicles || []).length);
+        await rememberKey(u.id, dk, f.remember.checked);
+        store.log("unit_key_create", "", u.id);
+        flash("ok", "Ключ підрозділу створено. Дані підрозділу тепер шифруються.");
+        render();
+      } catch (err) {
+        if (err.code === "already-init") { flash("info", "Колега вже створив ключ цього підрозділу — введіть його."); return render(); }
+        flash("err", store.errUa(err)); pageUnitKey(mode, u);
+      } finally { busy(false); }
+    });
+    return;
+  }
+  shell(`<div class="auth" style="max-width:620px"><div class="panel"><h2 class="display">🔐 Ключ підрозділу</h2>
+    <p>Дані підрозділу <b>${esc(u.name)}</b> зашифровано. Введіть ключ підрозділу — його знають ваші колеги, які працюють із порталом.</p>
+    <form class="js-kopen" autocomplete="off"><label class="f">Ключ підрозділу<input name="k" type="password" required autofocus></label>${rememberBox}
+      <button class="btn primary">Відкрити</button></form>
+    <p class="muted" style="margin-top:12px">Ніхто не пам'ятає ключ? Зверніться до адміністратора порталу — він встановить новий ключ, дані збережуться.</p></div>
+    ${isAdmin() ? adminKeyForm("Як адміністратор ви можете відкрити будь-який підрозділ своїм ключем адміністратора.") : ""}</div>`);
+  $app.querySelector(".js-kopen").addEventListener("submit", async (e) => {
+    e.preventDefault(); const f = e.target; busy(true);
+    try {
+      const dk = await X.unwrapWithPass(u.crypto.pass, f.k.value, X.aadPass(u.id));
+      await rememberKey(u.id, dk, f.remember.checked);
+      render();
+    } catch (err) { flash("err", store.errUa(err)); pageUnitKey(mode, u); } finally { busy(false); }
+  });
+  bindAdminKeyForm();
 }
 
 // ============================================================ введення даних
@@ -278,7 +553,7 @@ async function pageEntry(q) {
   const info = st.carried ? `<div class="flash info" style="margin:0">↪️ Новий місяць: пробіг і залишок на початок перенесено з кінця ${C.monthTitle(st.carried)}. Введіть пробіг на кінець і видане пальне.</div>`
     : st.saved ? `<div class="flash ok" style="margin:0">💾 Дані за ${C.monthTitle(ym)} збережено · зміни зберігаються автоматично${st.saved.updated_at ? " · останнє збереження " + esc(st.saved.updated_at) : ""}</div>`
       : `<div class="flash info" style="margin:0">📝 Новий місяць без попередніх даних — заповніть початкові показники.</div>`;
-  const hasPrev = !!(await store.getMonth(unit.id, C.prevYm(ym)));
+  const hasPrev = !!(await store.getMonth(unit.id, C.prevYm(ym)));  // лише факт наявності — без розшифрування
   shell(`<div class="row" style="justify-content:space-between;margin-top:14px">${monthPicker(ym, "#/entry")}<div style="flex:1;min-width:280px">${info}</div></div>
     <div id="kpi"></div>
     ${hasPrev ? `<button class="btn sm js-prev">↪️ Підтягнути пробіг і залишок на початок з ${C.monthTitle(C.prevYm(ym))}</button>` : ""}
@@ -312,7 +587,7 @@ async function pageEntry(q) {
     const ss = $app.querySelector(".js-savestate");
     try {
       const snapshot = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
-      await store.saveMonth(unit.id, ym, { entries, snapshot });
+      await writeMonth(unit, ym, { entries, snapshot });
       touched.forEach((c) => { const s = c.querySelector(".saving"); s.classList.add("on"); setTimeout(() => s.classList.remove("on"), 1200); });
       if (ss) ss.textContent = "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
     } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
@@ -334,7 +609,7 @@ async function pageEntry(q) {
   refreshKpi();
   $app.querySelector(".js-prev")?.addEventListener("click", async () => {
     if (!confirm("Перезаписати «Пробіг на початок» і «Залишок на початок» значеннями на кінець попереднього місяця?")) return;
-    const prev = await store.getMonth(unit.id, C.prevYm(ym));
+    const prev = await readMonth(unit, C.prevYm(ym));
     const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} });
     for (const card of cardEls) {
       const e = co[card.dataset.vid]; if (!e) continue;
@@ -394,7 +669,7 @@ async function pageReport(q) {
 async function pageArchive() {
   const unit = await loadUnit();
   if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
-  const months = (await store.listMonths(unit.id)).reverse();
+  const months = (await listMonthsDec(unit)).reverse();
   const recs = months.map((m) => {
     const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} });
     const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id]));
@@ -446,7 +721,35 @@ async function pageFleet() {
       <h3 style="margin-top:16px">Члени комісії</h3>
       <table class="edit" id="mem"><thead><tr><th>Посада, звання, ПІБ (родовий відмінок)</th><th style="width:220px">ПІБ для підпису</th><th style="width:40px"></th></tr></thead><tbody></tbody></table>
       <button class="btn sm js-addmem" style="margin-top:10px">➕ Додати члена комісії</button></div>
+    <div class="panel"><h2>🔐 Ключ підрозділу</h2>
+      <p class="muted">Дані підрозділу зашифровано ключем підрозділу. Змінюйте ключ, якщо його міг дізнатися сторонній або з підрозділу
+        звільнився працівник (доступ до порталу йому також закриває адміністратор), — після зміни повідомте новий ключ колегам. Кнопка «Забути» прибирає ключ із цього комп'ютера (наступного разу його треба буде ввести).</p>
+      <form class="js-kchange row" autocomplete="off">
+        <label class="f">Поточний ключ<input name="old" type="password" required></label>
+        <label class="f">Новий ключ (від 10 символів)<input name="n1" type="password" required minlength="10"></label>
+        <label class="f">Повторіть новий ключ<input name="n2" type="password" required minlength="10"></label>
+        <button class="btn sky">Змінити ключ</button></form>
+      <button class="btn sm danger js-kforget" style="margin-top:10px">Забути ключ на цьому комп'ютері</button></div>
     <div class="stickybar"><button class="btn primary js-save">💾 Зберегти шаблон підрозділу</button><span class="muted js-st"></span></div>`);
+  $app.querySelector(".js-kchange").addEventListener("submit", async (e) => {
+    e.preventDefault(); const f = e.target;
+    if (f.n1.value !== f.n2.value) { flash("err", "Нові ключі не збігаються."); return render(); }
+    const kp = X.passProblem(f.n1.value, "Ключ підрозділу"); if (kp) { flash("err", kp); return render(); }
+    busy(true);
+    try {
+      const fresh = await store.getUnit(unit.id);
+      const dk = await X.unwrapWithPass(fresh.crypto.pass, f.old.value, X.aadPass(unit.id), true);
+      await store.setUnitPass(unit.id, await X.wrapWithPass(dk, f.n1.value, X.aadPass(unit.id)));
+      store.log("unit_key_change", "", unit.id);
+      flash("ok", "Ключ підрозділу змінено. Колеги, які вже ввели ключ на своїх комп'ютерах, працюють далі; на новому комп'ютері знадобиться новий ключ.");
+    } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+    render();
+  });
+  $app.querySelector(".js-kforget").addEventListener("click", async () => {
+    if (!confirm("Прибрати ключ підрозділу з цього комп'ютера? Наступного разу його доведеться ввести.")) return;
+    await X.keyCache.del(keyCacheId(unit.id)); delete state.keys[unit.id];
+    flash("ok", "Ключ прибрано з цього комп'ютера."); render();
+  });
 
   const vbody = $app.querySelector("#veh tbody"), mbody = $app.querySelector("#mem tbody");
   const addVeh = (v) => {
@@ -489,7 +792,7 @@ async function pageFleet() {
     }).filter((v) => v.name);
     const st = $app.querySelector(".js-st"); st.textContent = "Збереження…"; busy(true);
     try {
-      await store.updateUnit(unit.id, { settings, vehicles });
+      await writeUnit(unit, settings, vehicles);
       store.log("fleet_save", `${vehicles.length} авто`, unit.id);
       flash("ok", "Шаблон підрозділу збережено.");
       go(onboarding && vehicles.length ? "#/entry" : "#/fleet");
@@ -543,16 +846,24 @@ async function pageAdmin(sub, q) {
   } else if (tab === "units") {
     body = `<div class="panel"><h2>Підрозділи</h2><div class="row" style="margin-bottom:14px">
       <label class="f">Новий підрозділ<input class="js-newunit" placeholder="напр. Кременчуцьке РУП ГУНП" style="min-width:320px"></label><button class="btn sky js-ucreate">➕ Створити</button></div>
-      <table class="list"><thead><tr><th>Назва</th><th class="num">Користувачів</th><th class="num">Авто</th><th>Дії</th></tr></thead><tbody>
+      ${state.adminPriv ? "" : adminKeyForm("Відкрийте ключ адміністратора, щоб встановлювати новий ключ підрозділу, який його забув.")}
+      <table class="list"><thead><tr><th>Назва</th><th class="num">Користувачів</th><th class="num">Авто</th><th>Шифрування</th><th>Дії</th></tr></thead><tbody>
       ${units.map((u) => `<tr data-id="${u.id}"><td><div class="row" style="gap:6px"><input class="js-uname" value="${esc(u.name)}" style="min-width:300px"><button class="btn sm js-urename">Перейменувати</button></div></td>
-        <td class="num">${usersIn(u.id)}</td><td class="num">${(u.vehicles || []).filter((v) => v.active !== false).length}</td>
-        <td><button class="btn sm js-open">Відкрити як підрозділ →</button> ${usersIn(u.id) ? "" : `<button class="btn sm danger js-unitdel">🗑 Видалити</button>`}</td></tr>`).join("")}
+        <td class="num">${usersIn(u.id)}</td><td class="num">${u.n_vehicles ?? 0}</td>
+        <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
+        <td><button class="btn sm js-open">Відкрити як підрозділ →</button> ${usersIn(u.id) ? "" : `<button class="btn sm danger js-unitdel">🗑 Видалити</button>`}
+          ${u.crypto && state.adminPriv ? `<button class="btn sm js-rkshow">🔑 Новий ключ підрозділу</button>
+          <form class="js-rk row" hidden autocomplete="off" style="margin-top:8px"><input name="n1" type="password" placeholder="новий ключ (від 10 символів)" required minlength="10">
+            <input name="n2" type="password" placeholder="повторіть" required minlength="10"><button class="btn sm primary">Встановити</button></form>` : ""}</td></tr>`).join("")}
       </tbody></table></div>`;
+  } else if (tab === "summary" && !state.adminPriv) {
+    body = adminKeyForm("Зведення по області формується з даних усіх підрозділів, а вони зашифровані. Введіть ключ адміністратора.");
   } else if (tab === "summary") {
     const ym = currentYm(q);
     const rowsSum = await Promise.all(units.map(async (u) => {
-      const unit = { ...u, settings: { ...C.DEFAULT_SETTINGS, ...(u.settings || {}) }, vehicles: (u.vehicles || []).map(C.normalizeVehicle) };
-      const m = await store.getMonth(u.id, ym);
+      if (!u.crypto) return { u, n: 0, done: 0, err: 0, t: null };
+      const unit = await decUnit(u, await getUnitKey(u));
+      const m = await readMonth(unit, ym);
       if (!m) return { u, n: unit.vehicles.filter((v) => v.active).length, done: 0, err: 0, t: null };
       const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} });
       const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id]));
@@ -577,6 +888,7 @@ async function pageAdmin(sub, q) {
   }
   shell(tabs + body);
   bindMonthPicker();
+  bindAdminKeyForm();
   const act = async (fn, okMsg) => { busy(true); try { await fn(); if (okMsg) flash("ok", okMsg); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); render(); } };
 
   $app.querySelectorAll(".js-unitsel").forEach((s) => s.addEventListener("change", () => {
@@ -621,6 +933,19 @@ async function pageAdmin(sub, q) {
   $app.querySelectorAll(".js-urename").forEach((b) => b.addEventListener("click", () => {
     const tr = b.closest("[data-id]"); act(() => store.updateUnit(tr.dataset.id, { name: tr.querySelector(".js-uname").value.trim() }), "Назву змінено.");
   }));
+  $app.querySelectorAll(".js-rkshow").forEach((b) => b.addEventListener("click", () => { const f = b.parentElement.querySelector(".js-rk"); f.hidden = !f.hidden; }));
+  $app.querySelectorAll(".js-rk").forEach((f) => f.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (f.n1.value !== f.n2.value) { flash("err", "Ключі не збігаються."); return render(); }
+    const kp = X.passProblem(f.n1.value, "Ключ підрозділу"); if (kp) { flash("err", kp); return render(); }
+    const id = f.closest("[data-id]").dataset.id;
+    act(async () => {
+      const u = await store.getUnit(id);
+      const dk = await X.unwrapByAdmin(u.crypto.admin, state.adminPriv, true);
+      await store.setUnitPass(id, await X.wrapWithPass(dk, f.n1.value, X.aadPass(id)));
+      store.log("unit_key_reset", unitName(id), id);
+    }, `Новий ключ підрозділу «${unitName(id)}» встановлено. Передайте його підрозділу особисто.`);
+  }));
   $app.querySelectorAll(".js-open").forEach((b) => b.addEventListener("click", () => {
     state.unitId = b.closest("[data-id]").dataset.id; sessionStorage.setItem("unitCtx", state.unitId); go("#/entry");
   }));
@@ -655,6 +980,7 @@ async function render() {
   if (!state.me) return state.setupDone ? pageNoProfile() : pageSetup();
   if (state.me.status === "pending") return pagePending();
   if (state.me.status !== "active") return pageBlocked();
+  if (store.mfaRequired && !(state.mfa && state.mfa.session)) return pageMfaSetup();
   busy(true);
   try {
     const [p1, p2] = path.split("/");
@@ -665,6 +991,7 @@ async function render() {
     if (p1 === "admin") return await pageAdmin(p2, q);
     return await pageEntry(q);
   } catch (err) {
+    if (err && err.code === "need-key") return pageUnitKey(err.mode, err.unit);
     console.error(err);
     shell(`<div class="panel"><h2>Помилка</h2><p>${esc(store.errUa(err))}</p><button class="btn" onclick="location.reload()">Оновити сторінку</button></div>`);
   } finally { busy(false); }
@@ -672,10 +999,12 @@ async function render() {
 
 async function onAuthChanged(user) {
   if (state.registering) return;
-  state.authUser = user; state.me = null;
+  state.authUser = user; state.me = null; state.mfa = null;
+  if (!user) forgetSessionKeys();
   if (user) {
     try { state.me = await store.getMe(); } catch (err) { state.me = null; }
-    if (state.me && state.me.status === "active") {
+    try { state.mfa = await store.mfaState(); } catch (err) { state.mfa = null; }
+    if (state.me && state.me.status === "active" && (!store.mfaRequired || (state.mfa && state.mfa.session))) {
       store.touchLogin();
       if (state.me.role === "admin") {
         state.units = await store.listUnits().catch(() => []);

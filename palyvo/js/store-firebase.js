@@ -10,11 +10,11 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
   sendPasswordResetEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, setPersistence,
-  browserLocalPersistence,
+  browserLocalPersistence, sendEmailVerification, multiFactor, TotpMultiFactorGenerator, getMultiFactorResolver,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, limit,
-  addDoc,
+  addDoc, deleteField, runTransaction,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const nowIso = () => new Date().toLocaleString("sv-SE").replace("T", " ");
@@ -25,6 +25,7 @@ export function createStore(config) {
   setPersistence(auth, browserLocalPersistence).catch(() => {});
   const db = getFirestore(app);
 
+  let mfaResolver = null, totpSecret = null;
   const errUa = (e) => {
     const c = (e && e.code) || "";
     const map = {
@@ -34,7 +35,14 @@ export function createStore(config) {
       "auth/weak-password": "Пароль занадто простий (мінімум 8 символів, літери й цифри).",
       "auth/too-many-requests": "Забагато спроб. Зачекайте кілька хвилин.",
       "auth/network-request-failed": "Немає з'єднання з інтернетом.",
-      "permission-denied": "Немає доступу (перевірте, чи підтверджено ваш обліковий запис).",
+      "permission-denied": "Немає доступу (перевірте, чи підтверджено ваш обліковий запис і чи виконано вхід із кодом із телефона).",
+      "auth/invalid-verification-code": "Невірний код. Введіть 6 цифр, які зараз показує застосунок на телефоні.",
+      "auth/totp-challenge-timeout": "Час на введення коду минув. Увійдіть ще раз.",
+      "auth/requires-recent-login": "Для цієї дії потрібно ще раз ввести пароль.",
+      "auth/unverified-email": "Спочатку підтвердіть e-mail за посиланням у листі.",
+      "auth/operation-not-allowed": "Двофакторний вхід ще не увімкнено в налаштуваннях Firebase (див. інструкцію адміністратора).",
+      "auth/admin-restricted-operation": "Двофакторний вхід ще не увімкнено в налаштуваннях Firebase (див. інструкцію адміністратора).",
+      "auth/missing-multi-factor-session": "Сесія налаштування застаріла. Почніть налаштування ще раз.",
     };
     return map[c] || (e && e.message) || String(e);
   };
@@ -45,7 +53,44 @@ export function createStore(config) {
     // ---------------------------------------------------------------- вхід
     onAuth(cb) { return onAuthStateChanged(auth, (u) => cb(u ? { uid: u.uid, email: u.email } : null)); },
     currentUser() { const u = auth.currentUser; return u ? { uid: u.uid, email: u.email } : null; },
-    signIn: (email, pw) => signInWithEmailAndPassword(auth, email.trim(), pw),
+    async signIn(email, pw) {
+      try { await signInWithEmailAndPassword(auth, email.trim(), pw); }
+      catch (e) {
+        if (e && e.code === "auth/multi-factor-auth-required") {
+          mfaResolver = getMultiFactorResolver(auth, e);
+          const err = new Error("mfa-required"); err.code = "mfa-required"; throw err;
+        }
+        throw e;
+      }
+    },
+    // другий крок входу: 6-значний код із застосунку-автентифікатора
+    async finishMfaSignIn(code) {
+      if (!mfaResolver) { const e = new Error("Сесія входу застаріла. Введіть e-mail і пароль ще раз."); e.code = "x"; throw e; }
+      const hint = mfaResolver.hints.find((h) => h.factorId === TotpMultiFactorGenerator.FACTOR_ID) || mfaResolver.hints[0];
+      await mfaResolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(hint.uid, String(code).replace(/\D/g, "")));
+      mfaResolver = null;
+    },
+    mfaRequired: true,
+    async mfaState() {
+      const u = auth.currentUser; if (!u) return null;
+      const t = await u.getIdTokenResult();
+      return { enrolled: multiFactor(u).enrolledFactors.length > 0, session: !!(t.claims.firebase && t.claims.firebase.sign_in_second_factor),
+        emailVerified: !!u.emailVerified };
+    },
+    sendVerify: () => sendEmailVerification(auth.currentUser, { url: location.origin + location.pathname }),
+    async reloadUser() { const u = auth.currentUser; await u.reload(); await u.getIdToken(true); return auth.currentUser.emailVerified; },
+    reauth: (pw) => reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, pw)),
+    async startTotp() {
+      const u = auth.currentUser;
+      totpSecret = await TotpMultiFactorGenerator.generateSecret(await multiFactor(u).getSession());
+      return { uri: totpSecret.generateQrCodeUrl(u.email, "Palyvo MVO"), key: totpSecret.secretKey };
+    },
+    async finishTotp(code) {
+      const u = auth.currentUser;
+      await multiFactor(u).enroll(TotpMultiFactorGenerator.assertionForEnrollment(totpSecret, String(code).replace(/\D/g, "")), "Телефон");
+      totpSecret = null;
+      await u.getIdToken(true).catch(() => {});
+    },
     signUp: (email, pw) => createUserWithEmailAndPassword(auth, email.trim(), pw),
     signOut: () => signOut(auth),
     resetPassword: (email) => sendPasswordResetEmail(auth, email.trim()),
@@ -56,11 +101,13 @@ export function createStore(config) {
     },
     // ---------------------------------------------------------------- налаштування
     async setupDone() { return (await getDoc(doc(db, "meta", "setup"))).exists(); },
-    async bootstrapAdmin(profile, unitName, unitSettings) {
+    async bootstrapAdmin(profile, unitName, unitSettings, adminKeys) {
       const uid = auth.currentUser.uid;
       const unitRef = doc(collection(db, "units"));
       const b = writeBatch(db);
-      b.set(unitRef, { name: unitName, settings: unitSettings, vehicles: [], created_at: nowIso() });
+      b.set(unitRef, { name: unitName, settings: unitSettings, n_vehicles: 0, created_at: nowIso() });
+      b.set(doc(db, "meta", "admin_pub"), { ...adminKeys.pub, at: nowIso() });
+      b.set(doc(db, "meta", "admin_priv"), { ...adminKeys.priv, at: nowIso() });
       b.set(doc(db, "users", uid), { ...profile, email: auth.currentUser.email, role: "admin", status: "active",
         unit_id: unitRef.id, created_at: nowIso(), last_login: nowIso() });
       b.set(doc(db, "meta", "setup"), { done: true, at: nowIso(), by: uid });
@@ -81,7 +128,23 @@ export function createStore(config) {
     async listUnits() { return (await getDocs(collection(db, "units"))).docs.map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => a.name.localeCompare(b.name, "uk")); },
     async getUnit(id) { const s = await getDoc(doc(db, "units", id)); return s.exists() ? { id, ...s.data() } : null; },
-    async createUnit(name, settings) { const r = doc(collection(db, "units")); await setDoc(r, { name, settings, vehicles: [], created_at: nowIso() }); return r.id; },
+    async createUnit(name, settings) { const r = doc(collection(db, "units")); await setDoc(r, { name, settings, n_vehicles: 0, created_at: nowIso() }); return r.id; },
+    // ---------------------------------------------------------------- шифрування
+    async getAdminPub() { const s = await getDoc(doc(db, "meta", "admin_pub")); if (!s.exists()) throw new Error("Ключ адміністратора ще не створено."); return s.data(); },
+    async getAdminPriv() { const s = await getDoc(doc(db, "meta", "admin_priv")); if (!s.exists()) throw new Error("Ключ адміністратора ще не створено."); return s.data(); },
+    setAdminPriv: (priv) => setDoc(doc(db, "meta", "admin_priv"), { ...priv, at: nowIso() }),
+    // перше створення ключа підрозділу — у транзакції, щоб двоє колег одночасно не створили різні ключі
+    async initUnitCrypto(id, cryptoObj, encBlob, n) {
+      const ref = doc(db, "units", id);
+      return runTransaction(db, async (t) => {
+        const s = await t.get(ref);
+        if (!s.exists()) throw new Error("Підрозділ не знайдено.");
+        if (s.data().crypto) { const e = new Error("Ключ цього підрозділу вже створено."); e.code = "already-init"; throw e; }
+        t.update(ref, { crypto: cryptoObj, enc: encBlob, n_vehicles: n, settings: deleteField(), vehicles: deleteField() });
+      });
+    },
+    saveUnitData: (id, encBlob, n) => updateDoc(doc(db, "units", id), { enc: encBlob, n_vehicles: n, settings: deleteField(), vehicles: deleteField() }),
+    setUnitPass: (id, passObj) => updateDoc(doc(db, "units", id), { "crypto.pass": passObj }),
     updateUnit: (id, fields) => updateDoc(doc(db, "units", id), fields),
     async deleteUnit(id) {
       const ms = await getDocs(collection(db, "units", id, "months"));
@@ -90,7 +153,7 @@ export function createStore(config) {
     },
     // ---------------------------------------------------------------- місяці
     async getMonth(unitId, ym) { const s = await getDoc(doc(db, "units", unitId, "months", ym)); return s.exists() ? s.data() : null; },
-    saveMonth: (unitId, ym, data) => setDoc(doc(db, "units", unitId, "months", ym), { ...data, updated_at: nowIso(),
+    saveMonth: (unitId, ym, encBlob) => setDoc(doc(db, "units", unitId, "months", ym), { enc: encBlob, updated_at: nowIso(),
       updated_by: auth.currentUser.uid }),
     async listMonths(unitId) { return (await getDocs(collection(db, "units", unitId, "months"))).docs.map((d) => ({ ym: d.id, ...d.data() }))
       .sort((a, b) => a.ym.localeCompare(b.ym)); },
