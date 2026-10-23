@@ -4,7 +4,12 @@
   --sky: #38bdf8; --ok: #22c55e; --warn: #f59e0b; --err: #ef4444;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", Inter, system-ui, sans-serif; font-size: 15px; }
+html { background: var(--bg); color-scheme: dark; }
+/* фон на всю сторінку — окремим <img>, щоб не зникав у режимах затемнення браузера */
+.page-bg { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: .42; z-index: -2; pointer-events: none; user-select: none; }
+.page-veil { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(2,6,23,.25) 0%, rgba(2,6,23,.6) 70%, rgba(2,6,23,.8) 100%); }
+html, body { margin: 0; color: var(--text); font-family: "Segoe UI", Inter, system-ui, sans-serif; font-size: 15px; }
 a { color: var(--sky); text-decoration: none; } a:hover { text-decoration: underline; }
 .wrap { max-width: 1560px; margin: 0 auto; padding: 0 24px 40px; }
 .display { font-family: 'UGI Display', 'Segoe UI', sans-serif; font-weight: 800; }
