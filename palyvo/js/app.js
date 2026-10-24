@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261024d";
-import * as U from "./ui.js?v=20261024d";
-import { litresWords } from "./words.js?v=20261024d";
-import { buildRegister, buildAct } from "./docs.js?v=20261024d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024d";
-import * as X from "./crypto.js?v=20261024d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261024d";
+import * as C from "./core.js?v=20261024e";
+import * as U from "./ui.js?v=20261024e";
+import { litresWords } from "./words.js?v=20261024e";
+import { buildRegister, buildAct } from "./docs.js?v=20261024e";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024e";
+import * as X from "./crypto.js?v=20261024e";
+import { qrSvg } from "../vendor/qrcode.js?v=20261024e";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -87,7 +87,6 @@ function shell(content, { nav = true } = {}) {
     ${nav && me && me.status === "active" ? `<nav class="tiles">
       ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
       ${isAdmin() ? tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
-    <div class="motto">Контроль <i>/</i> Прозорість <i>/</i> Ефективність</div>
   </div></header>
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
   state.flash = null;
@@ -1106,8 +1105,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261024d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261024e")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024e")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
