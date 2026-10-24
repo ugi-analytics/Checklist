@@ -1,6 +1,6 @@
 # Публікація порталу «Списання пального для МВО» (папка palyvo/) на Firebase Hosting: https://palyvo-mvo.web.app
 # Запускається автоматично після кожної зміни в palyvo/. Потрібен секрет репозиторію FIREBASE_SERVICE_ACCOUNT_PALYVO_MVO
-# (ключ сервісного облікового запису з роллю Firebase Hosting Admin). Поки секрету немає — крок публікації пропускається.
+# (ключ сервісного облікового запису з ролями Firebase Hosting Admin і Service Usage Consumer). Поки секрету немає — крок публікації пропускається.
 name: Портал пального → Firebase Hosting
 on:
   push:
