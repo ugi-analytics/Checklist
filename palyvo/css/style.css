@@ -264,3 +264,14 @@ table.list th, table.list td { border-bottom-color: rgba(96,165,250,.14); }
 .stickybar { background: rgba(2,6,23,.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(96,165,250,.25); }
 .frc { border-color: rgba(147,197,253,.3); box-shadow: 0 12px 34px rgba(2,6,23,.55), 0 0 0 1px rgba(59,130,246,.12), inset 0 1px 0 rgba(255,255,255,.18); }
 .who-unit { color: #7dd3fc; font-weight: 600; font-size: .78rem; margin: 2px 0 3px; }
+.who-stats { position: relative; margin: 3px 0 4px; font-size: .78rem; color: #cbd5e1; cursor: default; }
+.who-stats .on { color: #4ade80; font-weight: 700; }
+.who-stats .pop { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 260px; max-height: 320px; overflow: auto; text-align: left;
+  background: rgb(12,20,38); border: 1px solid rgba(96,165,250,.35); border-radius: 12px; padding: 10px 12px; box-shadow: 0 14px 40px rgba(2,6,23,.6); }
+.who-stats:hover .pop { display: block; }
+.who-stats .ph { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
+.who-stats ul { list-style: none; margin: 0; padding: 0; }
+.who-stats li { padding: 4px 0; border-top: 1px solid rgba(96,165,250,.12); display: flex; flex-direction: column; }
+.who-stats li:first-child { border-top: 0; }
+.who-stats li b { color: #fff; font-weight: 600; } .who-stats li span { color: #7dd3fc; font-size: .72rem; }
+.who-stats li b::before { content: "● "; color: #22c55e; }

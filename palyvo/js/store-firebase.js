@@ -14,7 +14,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, limit,
-  addDoc, deleteField, runTransaction,
+  addDoc, deleteField, runTransaction, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const nowIso = () => new Date().toLocaleString("sv-SE").replace("T", " ");
@@ -121,6 +121,9 @@ export function createStore(config) {
       await setDoc(doc(db, "users", u.uid), { ...profile, email: u.email, role: "user", status: "pending", created_at: nowIso() });
     },
     touchLogin: () => updateDoc(doc(db, "users", auth.currentUser.uid), { last_login: nowIso() }).catch(() => {}),
+    // «я на сайті» — час сервера, щоб годинники різних комп'ютерів не заважали
+    heartbeat: () => (auth.currentUser ? updateDoc(doc(db, "users", auth.currentUser.uid), { last_seen: serverTimestamp() }).catch(() => {}) : Promise.resolve()),
+    seenMs: (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : 0),
     async listUsers() { return (await getDocs(collection(db, "users"))).docs.map((d) => ({ uid: d.id, ...d.data() })); },
     updateUser: (uid, fields) => updateDoc(doc(db, "users", uid), fields),
     deleteUser: (uid) => deleteDoc(doc(db, "users", uid)),

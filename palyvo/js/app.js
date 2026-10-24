@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261024b";
-import * as U from "./ui.js?v=20261024b";
-import { litresWords } from "./words.js?v=20261024b";
-import { buildRegister, buildAct } from "./docs.js?v=20261024b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024b";
-import * as X from "./crypto.js?v=20261024b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261024b";
+import * as C from "./core.js?v=20261024c";
+import * as U from "./ui.js?v=20261024c";
+import { litresWords } from "./words.js?v=20261024c";
+import { buildRegister, buildAct } from "./docs.js?v=20261024c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024c";
+import * as X from "./crypto.js?v=20261024c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261024c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -69,6 +69,7 @@ function shell(content, { nav = true } = {}) {
   const tab = (h, icon, label, extra = "") => `<a href="#/${h}" class="tile ${p === h || p.startsWith(h + "/") || (h === "entry" && !p) ? "on" : ""}">
     <span class="ti">${icon}</span><span class="tl">${label}${extra}</span><span class="chev">›</span></a>`;
   const pending = isAdmin() && state.pendingCount ? `<span class="badge">${state.pendingCount}</span>` : "";
+  const stats = isAdmin() && state.userStats ? `<div class="who-stats">${statsHtml()}</div>` : "";
   content = String(content).replace(/<h2 class="display">((?:\p{Extended_Pictographic}|[✓✍])\uFE0F?)\s*/gu, '<h2 class="display ttl"><span class="ico">$1</span>');
   $app.innerHTML = `
   <header class="hero"><div class="wrap">
@@ -77,7 +78,7 @@ function shell(content, { nav = true } = {}) {
         <span class="online ${navigator.onLine ? "" : "off"}"><i></i><b>${navigator.onLine ? "ON-LINE" : "OFF-LINE"}</b></span></div>
         <small>Управління головної інспекції ГУНП в Полтавській області</small></div>
       <div class="sp"></div>
-      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : ""}${whoUnit}
+      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : ""}${whoUnit}${stats}
         ${me && me.status === "active" ? `<a href="#/password">змінити пароль</a> · ` : ""}<a href="#" class="js-logout">вийти</a></div>` : ""}
     </div>
     <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
@@ -849,7 +850,7 @@ async function pageAdmin(sub, q) {
   if (!isAdmin()) return go("#/entry");
   const tab = sub || "requests";
   const [users, units] = await Promise.all([store.listUsers(), store.listUnits()]);
-  state.units = units; state.pendingCount = users.filter((u) => u.status === "pending").length;
+  state.units = units; setUserStats(users);
   const unitName = (id) => units.find((u) => u.id === id)?.name || "—";
   const usersIn = (id) => users.filter((u) => u.unit_id === id).length;
   const tabs = `<nav class="tabs" style="margin-top:16px">
@@ -1010,6 +1011,37 @@ async function pageAdmin(sub, q) {
   });
 }
 
+// ============================================================ присутність на сайті й лічильник користувачів
+const BEAT_MS = 5 * 60 * 1000, ONLINE_MS = 7 * 60 * 1000;
+let beatTimer = null, statsTimer = null, lastBeat = 0;
+function beat() { if (document.visibilityState !== "visible") return; lastBeat = Date.now(); store.heartbeat(); }
+function onVisible() { if (document.visibilityState === "visible" && Date.now() - lastBeat > BEAT_MS) { beat(); if (isAdmin()) refreshStats(); } }
+function startPresence() {
+  stopPresence(); beat();
+  beatTimer = setInterval(beat, BEAT_MS);
+  document.addEventListener("visibilitychange", onVisible);
+  if (state.me && state.me.role === "admin") statsTimer = setInterval(() => { if (document.visibilityState === "visible") refreshStats(); }, BEAT_MS);
+}
+function stopPresence() { clearInterval(beatTimer); clearInterval(statsTimer); beatTimer = statsTimer = null; document.removeEventListener("visibilitychange", onVisible); }
+function setUserStats(users) {
+  const now = Date.now();
+  const active = users.filter((u) => u.status === "active");
+  const online = active.filter((u) => now - store.seenMs(u.last_seen) < ONLINE_MS || u.uid === state.authUser?.uid);
+  state.pendingCount = users.filter((u) => u.status === "pending").length;
+  state.userStats = { active: active.length, pending: state.pendingCount, online: online.map((u) => ({ name: u.full_name || u.email, unit: u.unit_id })) };
+}
+async function refreshStats() {
+  try { setUserStats(await store.listUsers()); } catch { return; }
+  const el = document.querySelector(".who-stats"); if (el) el.innerHTML = statsHtml();
+}
+function statsHtml() {
+  const s = state.userStats; if (!s) return "";
+  const uname = (id) => state.units.find((u) => u.id === id)?.name || "";
+  const list = s.online.map((o) => `<li><b>${esc(o.name)}</b>${uname(o.unit) ? `<span>${esc(uname(o.unit))}</span>` : ""}</li>`).join("");
+  return `<span title="Активних користувачів">👥 ${s.active}</span>${s.pending ? ` · <a href="#/admin/requests">заявок: ${s.pending}</a>` : ""}
+    · <span class="on">🟢 ${s.online.length} онлайн</span><div class="pop"><div class="ph">Зараз на сайті</div><ul>${list}</ul></div>`;
+}
+
 // ============================================================ маршрутизатор
 async function render() {
   const { path, q } = route();
@@ -1046,16 +1078,16 @@ async function render() {
 async function onAuthChanged(user) {
   if (state.registering) return;
   state.authUser = user; state.me = null; state.mfa = null;
-  if (!user) forgetSessionKeys();
+  if (!user) { forgetSessionKeys(); stopPresence(); }
   if (user) {
     try { state.me = await store.getMe(); } catch (err) { state.me = null; }
     try { state.mfa = await store.mfaState(); } catch (err) { state.mfa = null; }
     if (state.me && state.me.status === "active" && (!store.mfaRequired || (state.mfa && state.mfa.session))) {
-      store.touchLogin();
+      store.touchLogin(); startPresence();
       if (state.me.role === "admin") {
         state.adminKeyReady = await store.hasAdminKey().catch((e) => (e && e.code === "permission-denied" ? "rules" : true));
         state.units = await store.listUnits().catch(() => []);
-        state.pendingCount = (await store.listUsers().catch(() => [])).filter((u) => u.status === "pending").length;
+        setUserStats(await store.listUsers().catch(() => []));
         const ctx = sessionStorage.getItem("unitCtx");
         state.unitId = ctx && state.units.some((u) => u.id === ctx) ? ctx : state.me.unit_id;
       } else {
@@ -1074,8 +1106,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261024b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261024c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

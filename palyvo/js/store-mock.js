@@ -53,6 +53,8 @@ export function createStore() {
     },
     async getMe() { return S.session && S.users[S.session] ? { uid: S.session, ...S.users[S.session] } : null; },
     async createMyProfile(p) { S.users[S.session] = { ...p, email: S.auth[S.session].email, role: "user", status: "pending", created_at: nowIso() }; save(); },
+    async heartbeat() { if (S.users[S.session]) { S.users[S.session].last_seen = Date.now(); save(); } },
+    seenMs: (v) => Number(v) || 0,
     async touchLogin() { if (S.users[S.session]) { S.users[S.session].last_login = nowIso(); save(); } },
     async listUsers() { return Object.entries(S.users).map(([uid, u]) => ({ uid, ...u })); },
     async updateUser(uid, f) { Object.assign(S.users[uid], f); save(); },
