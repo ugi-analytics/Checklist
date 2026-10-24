@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261024a";
-import * as U from "./ui.js?v=20261024a";
-import { litresWords } from "./words.js?v=20261024a";
-import { buildRegister, buildAct } from "./docs.js?v=20261024a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024a";
-import * as X from "./crypto.js?v=20261024a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261024a";
+import * as C from "./core.js?v=20261024b";
+import * as U from "./ui.js?v=20261024b";
+import { litresWords } from "./words.js?v=20261024b";
+import { buildRegister, buildAct } from "./docs.js?v=20261024b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024b";
+import * as X from "./crypto.js?v=20261024b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261024b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -62,7 +62,8 @@ function currentYm(q) {
 function shell(content, { nav = true } = {}) {
   const me = state.me; const p = route().path;
   const unit = state.units.find((u) => u.id === state.unitId);
-  const unitChip = "";  // назву підрозділу в шапці не показуємо (за проханням); адміністратор перемикає підрозділ списком нижче
+  const unitChip = "";  // назва підрозділу — у віконці користувача праворуч угорі
+  const whoUnit = unit && me && me.status === "active" ? `<div class="who-unit">${esc(unit.name)}</div>` : "<br>";
   const switcher = isAdmin() && state.units.length > 1 ? `<select class="js-unit-switch" title="Працювати з підрозділом">
       ${state.units.map((u) => `<option value="${u.id}" ${u.id === state.unitId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>` : "";
   const tab = (h, icon, label, extra = "") => `<a href="#/${h}" class="tile ${p === h || p.startsWith(h + "/") || (h === "entry" && !p) ? "on" : ""}">
@@ -76,7 +77,7 @@ function shell(content, { nav = true } = {}) {
         <span class="online ${navigator.onLine ? "" : "off"}"><i></i><b>${navigator.onLine ? "ON-LINE" : "OFF-LINE"}</b></span></div>
         <small>Управління головної інспекції ГУНП в Полтавській області</small></div>
       <div class="sp"></div>
-      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : ""}<br>
+      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : ""}${whoUnit}
         ${me && me.status === "active" ? `<a href="#/password">змінити пароль</a> · ` : ""}<a href="#" class="js-logout">вийти</a></div>` : ""}
     </div>
     <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
@@ -1073,8 +1074,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261024a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261024b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -263,3 +263,4 @@ table.list th, table.list td { border-bottom-color: rgba(96,165,250,.14); }
 .fr-tbl th, .fr-tbl td { border-color: rgba(96,165,250,.22); } .fr-tbl th { background: rgba(15,23,42,.85); }
 .stickybar { background: rgba(2,6,23,.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid rgba(96,165,250,.25); }
 .frc { border-color: rgba(147,197,253,.3); box-shadow: 0 12px 34px rgba(2,6,23,.55), 0 0 0 1px rgba(59,130,246,.12), inset 0 1px 0 rgba(255,255,255,.18); }
+.who-unit { color: #7dd3fc; font-weight: 600; font-size: .78rem; margin: 2px 0 3px; }
