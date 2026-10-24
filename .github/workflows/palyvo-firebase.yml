@@ -1,0 +1,29 @@
+# Публікація порталу «Списання пального для МВО» (папка palyvo/) на Firebase Hosting: https://palyvo-mvo.web.app
+# Запускається автоматично після кожної зміни в palyvo/. Потрібен секрет репозиторію FIREBASE_SERVICE_ACCOUNT_PALYVO_MVO
+# (ключ сервісного облікового запису з роллю Firebase Hosting Admin). Поки секрету немає — крок публікації пропускається.
+name: Портал пального → Firebase Hosting
+on:
+  push:
+    branches: [main]
+    paths: ["palyvo/**", ".github/workflows/palyvo-firebase.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PALYVO_MVO }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Секрет ще не додано — публікацію пропущено
+        if: env.SA == ''
+        run: echo "Додайте секрет FIREBASE_SERVICE_ACCOUNT_PALYVO_MVO у Settings → Secrets and variables → Actions"
+      - name: Публікація на Firebase Hosting
+        if: env.SA != ''
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PALYVO_MVO }}
+          channelId: live
+          projectId: palyvo-mvo
+          entryPoint: palyvo
