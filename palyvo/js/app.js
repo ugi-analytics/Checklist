@@ -1,11 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261026e";
-import * as U from "./ui.js?v=20261026e";
-import { litresWords } from "./words.js?v=20261026e";
-import { buildRegister, buildAct } from "./docs.js?v=20261026e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026e";
-import * as X from "./crypto.js?v=20261026e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261026e";
+import * as C from "./core.js?v=20261026f";
+import * as U from "./ui.js?v=20261026f";
+import { litresWords } from "./words.js?v=20261026f";
+import { buildRegister, buildAct } from "./docs.js?v=20261026f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026f";
+import * as X from "./crypto.js?v=20261026f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261026f";
+import { buildXlsx } from "./xlsx.js?v=20261026f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261026f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -32,6 +34,12 @@ async function download(doc, filename) {
   const blob = await window.docx.Packer.toBlob(doc);
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+const firstOf = (k) => { const [y, m] = C.parseYm(k); return new Date(y, m - 1, 1); };
+function downloadBytes(bytes, filename, mime) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([bytes], { type: mime })); a.download = filename; document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
 }
 function pwProblem(pw) {
@@ -911,16 +919,21 @@ async function pageAdmin(sub, q) {
     const rowsSum = await Promise.all(units.map(async (u) => {
       if (!u.crypto) return { u, n: 0, done: 0, err: 0, t: null };
       const unit = await decUnit(u, await getUnitKey(u));
-      const m = await readMonth(unit, ym);
-      if (!m) return { u, n: unit.vehicles.filter((v) => v.active).length, done: 0, err: 0, t: null };
+      const st = await monthState(unit, ym);
+      // для вивантаження в Excel (модуль хабу «Пробіг і пальне»): збережений місяць або перенесений з попереднього показник на початок
+      const exp = { org: unit.settings.org, unit: u.name, vehicles: st.vehicles, entries: st.entries };
+      const m = st.saved;
+      if (!m) return { u, n: unit.vehicles.filter((v) => v.active).length, done: 0, err: 0, t: null, exp };
       const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} });
       const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id]));
       const sts = rows.map((r, i) => C.statusOf(r, (m.entries || {})[vehicles[i].id] || {}));
-      return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows), updated: m.updated_at };
+      return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows), updated: m.updated_at, exp };
     }));
     state.lastSummary = { ym, rowsSum };
     const sum = (k) => rowsSum.reduce((a, r) => a + (r.t ? r.t[k] : 0), 0);
-    body = `<div class="panel"><div class="row" style="margin-bottom:12px">${monthPicker(ym, "#/admin/summary")}<button class="btn sm js-sumdoc">📥 Зведення у Word</button></div>
+    body = `<div class="panel"><div class="row" style="margin-bottom:12px">${monthPicker(ym, "#/admin/summary")}<button class="btn sm js-sumdoc">📥 Зведення у Word</button>
+        <button class="btn sm sky js-fleetxl" data-kind="end" title="Показники на початок і на кінець місяця — для модуля «Пробіг і пальне автопарку» в хабі">📊 Excel для модуля пробігу · на ${dmy(firstOf(nextYm(ym)))}</button>
+        <button class="btn sm js-fleetxl" data-kind="start" title="Лише показники на початок місяця — коли файлу за попередній місяць ще немає">Зріз на початок · ${dmy(firstOf(ym))}</button></div>
       <h2>Зведення по області за ${C.monthTitle(ym)}</h2>
       <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів ·
         видано <b>${C.fmtC(sum("issuedC"))} л</b> · витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок у баках <b>${C.fmtC(sum("endC"))} л</b></p>
@@ -1001,6 +1014,16 @@ async function pageAdmin(sub, q) {
     if (!confirm("Видалити підрозділ разом з автопарком і всіма місяцями? Це незворотно.")) return;
     const id = b.closest("[data-id]").dataset.id;
     act(async () => { await store.deleteUnit(id); store.log("unit_delete", unitName(id)); if (state.unitId === id) state.unitId = state.me.unit_id; }, "Підрозділ видалено.");
+  }));
+  $app.querySelectorAll(".js-fleetxl").forEach((b) => b.addEventListener("click", () => {
+    const { ym, rowsSum } = state.lastSummary;
+    const items = rowsSum.filter((r) => r.exp).map((r) => r.exp);
+    const skipped = rowsSum.filter((r) => !r.exp).map((r) => r.u.name);
+    const { rows, date, stats } = buildFleetRows(items, ym, b.dataset.kind);
+    downloadBytes(buildXlsx(rows, { sheet: "Автопарк", headerRows: 2, widths: FLEET_WIDTHS }), `Пробіг_МВО_на_${dmy(date)}.xlsx`,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    store.log("fleet_xlsx", `${b.dataset.kind} ${ym}: ${stats.cars} авто`);
+    if (skipped.length) { flash("info", `У файл не потрапили підрозділи без ключа шифрування: ${skipped.join(", ")}.`); render(); }
   }));
   $app.querySelector(".js-sumdoc")?.addEventListener("click", async () => {
     const D = window.docx; const { ym, rowsSum } = state.lastSummary;
@@ -1109,8 +1132,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261026e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261026f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
