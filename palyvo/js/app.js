@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261026c";
-import * as U from "./ui.js?v=20261026c";
-import { litresWords } from "./words.js?v=20261026c";
-import { buildRegister, buildAct } from "./docs.js?v=20261026c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026c";
-import * as X from "./crypto.js?v=20261026c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261026c";
+import * as C from "./core.js?v=20261026d";
+import * as U from "./ui.js?v=20261026d";
+import { litresWords } from "./words.js?v=20261026d";
+import { buildRegister, buildAct } from "./docs.js?v=20261026d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026d";
+import * as X from "./crypto.js?v=20261026d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261026d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1106,8 +1106,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261026c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261026d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
