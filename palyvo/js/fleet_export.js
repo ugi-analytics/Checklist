@@ -2,7 +2,7 @@
 // «Пробіг і пальне автопарку» (fleet_mileage/core.py): 12 колонок, шапка у 2 рядки,
 // реквізити авто — лише в першому рядку авто, далі рядки з історією показників «Пробіг» / «Пробіг станом на».
 // Дата зрізу береться модулем з назви файлу: «…на_01.11.2026.xlsx».
-import { parseYm, ymKey } from "./core.js?v=20261026g";
+import { parseYm, ymKey } from "./core.js?v=20261026h";
 
 export const FLEET_HEADERS = ["№ п/п", "Код регіона Д.Н.З.", "Державний номерний знак", "Марка", "Модель", "Рік випуску",
   "Вид палива", "Норми витрати Л/100 км за містом", "Орган", "Служба/Підрозділ", "Пробіг", "Пробіг станом на"];
@@ -26,6 +26,8 @@ export function fuelLabel(f) {
   return s;
 }
 
+// Норма, за якою портал рахує витрату (і готує документи для бухгалтерії): базова + зимова надбавка, %
+const effRate = (v) => { const r = num(v.rate); if (r === null) return null; const w = num(v.winter_pct) || 0; return Math.round(r * (1 + w / 100) * 1000) / 1000; };
 const firstDay = (ym) => { const [y, m] = parseYm(ym); return new Date(y, m - 1, 1); };
 export const nextYm = (ym) => { const [y, m] = parseYm(ym); return m === 12 ? ymKey(y + 1, 1) : ymKey(y, m + 1); };
 const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -51,7 +53,7 @@ export function buildFleetRows(items, ym, kind = "end") {
       if (s !== null) readings.push([s, d0]);
       if (kind === "end" && f !== null) readings.push([f, d1]);
       n += 1; readings.length ? withReadings++ : noReadings++;
-      const meta = [n, v.region || "", plate || "БН", brand, model, num(v.year), fuelLabel(v.fuel), num(v.rate), it.org || "", it.unit || ""];
+      const meta = [n, v.region || "", plate || "БН", brand, model, num(v.year), fuelLabel(v.fuel), effRate(v), it.org || "", it.unit || ""];
       if (!readings.length) { rows.push([...meta, null, null]); continue; }
       // Орган і служба — у кожному рядку показника (як у реєстрі): модуль хабу бере їх з останнього показника
       readings.forEach(([km, d], i) => rows.push(i === 0 ? [...meta, km, d] : [null, null, null, null, null, null, null, null, it.org || "", it.unit || "", km, d]));
