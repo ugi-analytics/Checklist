@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261026f";
-import * as U from "./ui.js?v=20261026f";
-import { litresWords } from "./words.js?v=20261026f";
-import { buildRegister, buildAct } from "./docs.js?v=20261026f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026f";
-import * as X from "./crypto.js?v=20261026f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261026f";
-import { buildXlsx } from "./xlsx.js?v=20261026f";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261026f";
+import * as C from "./core.js?v=20261026g";
+import * as U from "./ui.js?v=20261026g";
+import { litresWords } from "./words.js?v=20261026g";
+import { buildRegister, buildAct } from "./docs.js?v=20261026g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026g";
+import * as X from "./crypto.js?v=20261026g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261026g";
+import { buildXlsx } from "./xlsx.js?v=20261026g";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261026g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1020,7 +1020,7 @@ async function pageAdmin(sub, q) {
     const items = rowsSum.filter((r) => r.exp).map((r) => r.exp);
     const skipped = rowsSum.filter((r) => !r.exp).map((r) => r.u.name);
     const { rows, date, stats } = buildFleetRows(items, ym, b.dataset.kind);
-    downloadBytes(buildXlsx(rows, { sheet: "Автопарк", headerRows: 2, widths: FLEET_WIDTHS }), `Пробіг_МВО_на_${dmy(date)}.xlsx`,
+    downloadBytes(buildXlsx(rows, { sheet: "Портал_МВО", headerRows: 2, widths: FLEET_WIDTHS }), `Пробіг_МВО_на_${dmy(date)}.xlsx`,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     store.log("fleet_xlsx", `${b.dataset.kind} ${ym}: ${stats.cars} авто`);
     if (skipped.length) { flash("info", `У файл не потрапили підрозділи без ключа шифрування: ${skipped.join(", ")}.`); render(); }
@@ -1132,8 +1132,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261026f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261026g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
