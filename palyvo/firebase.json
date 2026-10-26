@@ -51,16 +51,6 @@
           }
         ]
       }
-    ],
-    "rewrites": [
-      {
-        "source": "/__/auth/action",
-        "destination": "/action.html"
-      },
-      {
-        "source": "/__/auth/action/**",
-        "destination": "/action.html"
-      }
     ]
   }
 }
