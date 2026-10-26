@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261024e";
-import * as U from "./ui.js?v=20261024e";
-import { litresWords } from "./words.js?v=20261024e";
-import { buildRegister, buildAct } from "./docs.js?v=20261024e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261024e";
-import * as X from "./crypto.js?v=20261024e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261024e";
+import * as C from "./core.js?v=20261026a";
+import * as U from "./ui.js?v=20261026a";
+import { litresWords } from "./words.js?v=20261026a";
+import { buildRegister, buildAct } from "./docs.js?v=20261026a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026a";
+import * as X from "./crypto.js?v=20261026a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261026a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -189,6 +189,7 @@ function pagePending() {
   shell(authCard(`<h2 class="display">⏳ Заявку надіслано</h2>
     <p>Адміністратор перевірить її та прив'яже ваш обліковий запис до підрозділу <b>${esc(state.me.requested_unit)}</b>.
       Після підтвердження оновіть сторінку — відкриється робоча частина порталу.</p>
+    <div class="note">Під час першого входу після підтвердження портал попросить прив'язати телефон (застосунок Google Authenticator або Microsoft Authenticator) — це робиться один раз.</div>
     ${state.mfa && !state.mfa.emailVerified ? `<div class="flash info">✉️ Ми надіслали лист на <b>${esc(state.authUser.email)}</b> — перейдіть за посиланням у ньому,
       щоб підтвердити e-mail (перевірте й «Спам»). Без цього не вдасться налаштувати вхід із кодом із телефона.
       <br><button class="btn sm js-resend" style="margin-top:8px">Надіслати лист ще раз</button></div>` : ""}
@@ -329,6 +330,7 @@ function pageMfaSetup(stage = {}) {
     shell(authCard(`<h2 class="display">🔐 Захищений вхід · крок 2 з 2</h2>
       <p>Встановіть на службовий або особистий смартфон безкоштовний застосунок <b>Google Authenticator</b> або <b>Microsoft Authenticator</b>
         (Google Play / App Store). Він щохвилини показує новий 6-значний код, який портал питатиме після пароля.</p>
+      <div class="note">Це робиться <b>один раз</b> — під час першого входу. Надалі після пароля портал питатиме лише 6-значний код із застосунку.</div>
       <p class="muted">Інтернет на телефоні для кодів не потрібен.</p>
       <button class="btn primary js-start">Застосунок встановлено — показати QR-код</button>${out}`, 560), { nav: false });
     const start = async () => {
@@ -1105,8 +1107,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261024e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261024e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261026a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
