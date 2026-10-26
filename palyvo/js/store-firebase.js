@@ -66,9 +66,15 @@ export function createStore(config) {
     // другий крок входу: 6-значний код із застосунку-автентифікатора
     async finishMfaSignIn(code) {
       if (!mfaResolver) { const e = new Error("Сесія входу застаріла. Введіть e-mail і пароль ще раз."); e.code = "x"; throw e; }
-      const hint = mfaResolver.hints.find((h) => h.factorId === TotpMultiFactorGenerator.FACTOR_ID) || mfaResolver.hints[0];
-      await mfaResolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(hint.uid, String(code).replace(/\D/g, "")));
-      mfaResolver = null;
+      // якщо телефон прив'язували кілька разів — пробуємо код з кожним записом (новіші першими)
+      const hints = mfaResolver.hints.filter((h) => h.factorId === TotpMultiFactorGenerator.FACTOR_ID)
+        .sort((x, y) => (Date.parse(y.enrollmentTime) || 0) - (Date.parse(x.enrollmentTime) || 0));
+      const c = String(code).replace(/\D/g, ""); let last = null;
+      for (const h of (hints.length ? hints : mfaResolver.hints)) {
+        try { await mfaResolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(h.uid, c)); mfaResolver = null; return; }
+        catch (e) { last = e; if (e && e.code !== "auth/invalid-verification-code") throw e; }
+      }
+      throw last;
     },
     mfaRequired: true,
     async mfaState() {
