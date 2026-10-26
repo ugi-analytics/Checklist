@@ -11,7 +11,7 @@ const q = new URLSearchParams(location.search);
 const mode = q.get("mode"), code = q.get("oobCode");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const ttl = (ico, t) => `<h2 class="display ttl"><span class="ico">${ico}</span>${t}</h2>`;
-const toPortal = `<p style="margin-top:16px"><a class="btn sky" href="./">Перейти до порталу →</a></p>`;
+const toPortal = `<p style="margin-top:16px"><a class="btn sky" href="https://palyvo-mvo.web.app/">Перейти до порталу →</a></p>`;
 const errUa = (e) => ({
   "auth/invalid-action-code": "Посилання вже використане або недійсне. Якщо потрібно — запросіть новий лист на порталі.",
   "auth/expired-action-code": "Термін дії посилання минув. Запросіть новий лист на порталі.",
