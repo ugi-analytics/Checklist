@@ -73,6 +73,8 @@ export function createStore(config) {
     mfaRequired: true,
     async mfaState() {
       const u = auth.currentUser; if (!u) return null;
+      // свіжі дані з сервера: на іншому комп'ютері збережений вхід міг лишитися ще з часу ДО прив'язки телефона
+      try { await u.reload(); } catch { /* офлайн — беремо збережене */ }
       const t = await u.getIdTokenResult();
       return { enrolled: multiFactor(u).enrolledFactors.length > 0, session: !!(t.claims.firebase && t.claims.firebase.sign_in_second_factor),
         emailVerified: !!u.emailVerified };

@@ -1,11 +1,11 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261026a";
-import * as U from "./ui.js?v=20261026a";
-import { litresWords } from "./words.js?v=20261026a";
-import { buildRegister, buildAct } from "./docs.js?v=20261026a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026a";
-import * as X from "./crypto.js?v=20261026a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261026a";
+import * as C from "./core.js?v=20261026b";
+import * as U from "./ui.js?v=20261026b";
+import { litresWords } from "./words.js?v=20261026b";
+import { buildRegister, buildAct } from "./docs.js?v=20261026b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026b";
+import * as X from "./crypto.js?v=20261026b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261026b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -310,10 +310,9 @@ function pageMfaSetup(stage = {}) {
     return bindOut();
   }
   if (m.enrolled && !m.session) {
-    shell(authCard(`<h2 class="display">🔐 Увійдіть із кодом</h2>
-      <p>Вхід із кодом із телефона для цього облікового запису вже налаштовано. Увійдіть ще раз — після пароля портал попросить 6-значний код.</p>
-      <button class="btn primary js-relogin">Увійти ще раз</button>`, 520), { nav: false });
-    $app.querySelector(".js-relogin").addEventListener("click", async () => { forgetSessionKeys(); await store.signOut(); });
+    // телефон уже прив'язано, а цей браузер пам'ятає старий вхід без коду — виходимо й просимо увійти з кодом
+    flash("info", "Вхід із кодом для цього облікового запису вже налаштовано. Введіть пароль — далі портал попросить 6-значний код із телефона.");
+    forgetSessionKeys(); store.signOut();
     return;
   }
   if (stage.needPw) {
@@ -1107,8 +1106,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261026a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261026b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
