@@ -175,6 +175,15 @@ export function mainSource(v, list) {
   return list.find((s) => s.id === v.source) || list.find((s) => sourceFits(s, v)) || list[0];
 }
 
+/** Форма джерела зі слів опису: «т», «тал.», «талони» → талони; «АЗС» → АЗС; «с/к», «см/к» → с/к. */
+export function textForms(low) {
+  low = String(low || "").toLowerCase();
+  if (/талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low)) return ["талони", "АЗС ГУНП талони"];
+  if (/азс/.test(low)) return ["АЗС ГУНП талони", "АЗС налив"];
+  if (/(?:^|[\s\d])см?\/к/.test(low)) return ["с/к"];
+  return null;
+}
+
 export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const e = entry || {};
   const list = vehicleSources(vehicle, e, sources);
@@ -191,7 +200,14 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
         const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/); if (!m) continue;   // число, але не «А-95»/«А95»
         const low = part.toLowerCase();
         const mv = mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0]));
-        if (!mv) { textWarn.push(`У описі залишку «${part.trim()}» не знайдено МВО з джерел — ця частина віднесена на основне джерело.`); continue; }
+        if (!mv) {
+          // без прізвища: впізнаємо форму — «т», «тал.», «талони» → талони; «АЗС» → АЗС; «с/к», «см/к» → с/к
+          const form = textForms(low);
+          const byForm = form && sources.filter((x) => form.includes(x.form))
+            .sort((a, b) => (sourceFits(b, vehicle) - sourceFits(a, vehicle)) || (form.indexOf(a.form) - form.indexOf(b.form)) || (list.includes(b) - list.includes(a)))[0];
+          if (byForm) { splitIn.push({ mvo: byForm.mvo, c: toC(m[1].replace(",", ".")), hint: low, text: true, src: byForm }); continue; }
+        }
+        if (!mv) { textWarn.push(`У описі залишку «${part.trim()}» не знайдено МВО чи форму (талони, с/к, АЗС) з джерел — ця частина віднесена на основне джерело.`); continue; }
         splitIn.push({ mvo: mv, c: toC(m[1].replace(",", ".")), hint: low, text: true });
       }
     }
@@ -200,11 +216,11 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const pickSrc = (sp) => {
     const cand = [...list, ...sources.filter((x) => !list.includes(x))].filter((x) => x.mvo === sp.mvo);
     const score = (x) => (sourceFits(x, vehicle) ? 4 : 0) + (list.includes(x) ? 1 : 0) + (x.id === vehicle.source ? 1 : 0) +
-      (sp.hint && x.supplier && sp.hint.includes(x.supplier.toLowerCase()) ? 3 : 0) + (sp.hint && x.form && sp.hint.includes(x.form.toLowerCase()) ? 2 : 0) +
+      (sp.hint && x.supplier && sp.hint.includes(x.supplier.toLowerCase()) ? 3 : 0) + (sp.hint && (textForms(sp.hint) || []).includes(x.form) ? 3 : 0) +
       (sp.hint && x.fuel && normFuel(sp.hint).includes(normFuel(x.fuel)) ? 2 : 0);
     return cand.sort((a, b) => score(b) - score(a))[0];
   };
-  for (const sp of splitIn) { sp.src = sp.c ? pickSrc(sp) : null; if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
+  for (const sp of splitIn) { sp.src = sp.src || (sp.c ? pickSrc(sp) : null); if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
   const free = !sources.legacy && vehicle.source === NO_MAIN;
   const anchor = mainSource(free ? { ...vehicle, source: "" } : vehicle, list);   // куди йде нерозбитий залишок
   const main = free ? null : anchor;
