@@ -310,3 +310,12 @@ textarea.vtxt { width:100%; resize:vertical; min-height:2.6em; font:inherit; fon
   background:rgba(2,6,23,.55); color:#fff; border:1px dashed rgba(255,255,255,.25); box-sizing:border-box; }
 textarea.vtxt.filled { border:1px solid rgba(250,204,21,.7); }
 .mvo.endt { margin-top:8px; }
+/* диспетчер */
+.grid-calc { display:grid; grid-template-columns:repeat(3,minmax(160px,1fr)); gap:10px; }
+@media (max-width:700px){ .grid-calc { grid-template-columns:1fr 1fr; } }
+.disp-res { margin:12px 0; }
+.disp-kv { display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:8px; }
+.disp-kv > div { background:rgba(2,6,23,.45); border:1px solid rgba(255,255,255,.14); border-radius:10px; padding:8px 10px; display:flex; flex-direction:column; gap:2px; }
+.disp-kv span { font-size:.75rem; color:#cbd5e1; } .disp-kv b { font-size:1.1rem; color:#fff; }
+.disp-kv > div.hl { border-color:rgba(250,204,21,.7); } .disp-kv > div.hl b { color:#facc15; }
+.js-pick { cursor:pointer; } .js-pick:hover td { background:rgba(56,189,248,.12); } .js-pick.on td { background:rgba(250,204,21,.15); }

@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261027r";
+import * as C from "./core.js?v=20261027s";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 

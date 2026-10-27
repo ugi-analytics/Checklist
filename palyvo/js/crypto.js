@@ -71,6 +71,37 @@ export async function unwrapByAdmin(obj, adminPriv, extractable = false) {
   } catch (e) { if (e && e.name === "OperationError") throw new WrongKey("Ключ адміністратора не підходить до цього підрозділу."); throw e; }
 }
 
+// ------------------------------------------------------------- ключ диспетчера (спільний для диспетчерів)
+// Диспетчер бачить лише довідник авто всіх підрозділів (без показників за місяці). Підрозділ публікує довідник окремим блоком,
+// зашифрованим випадковим ключем CK; CK загорнуто відкритим ключем диспетчера. Закритий — у базі, загорнутий фразою диспетчера.
+export async function newDispKeys(pass) {
+  const kp = await subtle().generateKey({ ...RSA, modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]) }, true, ["wrapKey", "unwrapKey"]);
+  const spki = b64(await subtle().exportKey("spki", kp.publicKey));
+  const salt = rnd(16), iv = rnd(12);
+  const w = await subtle().wrapKey("pkcs8", kp.privateKey, await kek(pass, salt, ITER), GCM(iv, "disp-private"));
+  const kid = b64(await subtle().digest("SHA-256", enc.encode(spki))).slice(0, 16);
+  return { pub: { spki, kid, alg: "RSA-OAEP-3072-SHA256" }, priv: { kid, salt: b64(salt), iter: ITER, iv: b64(iv), w: b64(w) } };
+}
+export async function unlockDisp(priv, pass) {
+  try {
+    return await subtle().unwrapKey("pkcs8", unb64(priv.w), await kek(pass, unb64(priv.salt), priv.iter || ITER), GCM(unb64(priv.iv), "disp-private"),
+      RSA, false, ["unwrapKey"]);
+  } catch (e) { if (e && e.name === "OperationError") throw new WrongKey("Невірний ключ диспетчера."); throw e; }
+}
+/** Довідник авто підрозділу для диспетчера: {enc, k, kid}. */
+export async function sealForDisp(obj, pub, aad) {
+  const ck = await newDataKey();
+  const encBlob = await encJson(ck, obj, aad);
+  const k = await wrapForAdmin(ck, pub);
+  return { enc: encBlob, k, kid: pub.kid };
+}
+export async function openForDisp(doc, priv, aad) {
+  const ck = await subtle().unwrapKey("raw", unb64(doc.k.w), priv, RSA, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  return decJson(ck, doc.enc, aad);
+}
+export async function sha256(text) { return b64(await subtle().digest("SHA-256", enc.encode(text))); }
+export const aadFleet = (unitId) => `fleet:${unitId}`;
+
 // ------------------------------------------------------------- дані
 export async function encJson(dk, obj, aad) {
   const iv = rnd(12);

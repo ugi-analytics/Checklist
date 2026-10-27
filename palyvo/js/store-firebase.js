@@ -152,6 +152,19 @@ export function createStore(config) {
     },
     async getAdminPriv() { const s = await getDoc(doc(db, "meta", "admin_priv")); if (!s.exists()) throw new Error("Ключ адміністратора ще не створено."); return s.data(); },
     setAdminPriv: (priv) => setDoc(doc(db, "meta", "admin_priv"), { ...priv, at: nowIso() }),
+    // ---------------------------------------------------------------- диспетчер: ключ і довідники авто
+    async getDispPub() { const s = await getDoc(doc(db, "meta", "disp_pub")); return s.exists() ? s.data() : null; },
+    async getDispPriv() { const s = await getDoc(doc(db, "meta", "disp_priv")); return s.exists() ? s.data() : null; },
+    async createDispKeys(keys) {
+      const b = writeBatch(db);
+      b.set(doc(db, "meta", "disp_pub"), { ...keys.pub, at: nowIso() });
+      b.set(doc(db, "meta", "disp_priv"), { ...keys.priv, at: nowIso() });
+      await b.commit();
+    },
+    async resetDispKeys() { await deleteDoc(doc(db, "meta", "disp_priv")); await deleteDoc(doc(db, "meta", "disp_pub")); },
+    async getFleetCat(unitId) { const s = await getDoc(doc(db, "fleet", unitId)); return s.exists() ? s.data() : null; },
+    async listFleetCats() { return (await getDocs(collection(db, "fleet"))).docs.map((d) => ({ unit_id: d.id, ...d.data() })); },
+    saveFleetCat: (unitId, data) => setDoc(doc(db, "fleet", unitId), { ...data, updated_at: nowIso() }),
     // перше створення ключа підрозділу — у транзакції, щоб двоє колег одночасно не створили різні ключі
     async initUnitCrypto(id, cryptoObj, encBlob, n) {
       const ref = doc(db, "units", id);
@@ -168,6 +181,7 @@ export function createStore(config) {
     async deleteUnit(id) {
       const ms = await getDocs(collection(db, "units", id, "months"));
       for (const d of ms.docs) await deleteDoc(d.ref);
+      await deleteDoc(doc(db, "fleet", id)).catch(() => {});
       await deleteDoc(doc(db, "units", id));
     },
     // ---------------------------------------------------------------- місяці

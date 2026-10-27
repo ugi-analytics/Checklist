@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027r";
-import * as U from "./ui.js?v=20261027r";
-import { litresWords } from "./words.js?v=20261027r";
-import { buildRegister, buildAct } from "./docs.js?v=20261027r";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027r";
-import * as X from "./crypto.js?v=20261027r";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027r";
-import { buildXlsx } from "./xlsx.js?v=20261027r";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027r";
+import * as C from "./core.js?v=20261027s";
+import * as U from "./ui.js?v=20261027s";
+import { litresWords } from "./words.js?v=20261027s";
+import { buildRegister, buildAct } from "./docs.js?v=20261027s";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027s";
+import * as X from "./crypto.js?v=20261027s";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027s";
+import { buildXlsx } from "./xlsx.js?v=20261027s";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027s";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -18,7 +18,7 @@ let store = null;
 const state = { authUser: null, me: null, unitId: null, units: [], flash: null, setupDone: null,
   mfa: null, adminPriv: null, keys: {}, adminKeyReady: null };
 // ключі в пам'яті вкладки скидаються при виході
-function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; }
+function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; state.dispPriv = null; state.dispPub = undefined; state.dispCat = null; }
 const keyCacheId = (unitId) => `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser?.uid}:${unitId}`;
 
 // ============================================================ утиліти
@@ -48,6 +48,8 @@ function pwProblem(pw) {
   return null;
 }
 const isAdmin = () => state.me && state.me.role === "admin" && state.me.status === "active";
+const isDisp = () => state.me && state.me.role === "dispatcher" && state.me.status === "active";
+const ROLE_UA = { user: "користувач", admin: "адміністратор", dispatcher: "диспетчер" };
 const years = () => { const y = new Date().getFullYear(); const a = []; for (let i = 2024; i <= y + 1; i++) a.push(i); return a; };
 function monthPicker(ym, base) {
   const [y, m] = C.parseYm(ym);
@@ -86,13 +88,14 @@ function shell(content, { nav = true } = {}) {
         <span class="online ${navigator.onLine ? "" : "off"}"><i></i><b>${navigator.onLine ? "ON-LINE" : "OFF-LINE"}</b></span></div>
         <small>Управління головної інспекції ГУНП в Полтавській області</small></div>
       <div class="sp"></div>
-      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : ""}${whoUnit}${stats}
+      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : isDisp() ? " · диспетчер" : ""}${isDisp() ? "<br>" : whoUnit}${stats}
         ${me && me.status === "active" ? `<a href="#/password">змінити пароль</a> · ` : ""}<a href="#" class="js-logout">вийти</a></div>` : ""}
     </div>
     <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
       <div class="chips">${unitChip}${switcher}
       ${DEMO ? `<span class="chip" style="border-color:#f87171;color:#fecaca">ДЕМО-РЕЖИМ · дані не зберігаються</span>` : ""}</div></div>
-    ${nav && me && me.status === "active" ? `<nav class="tiles">
+    ${nav && isDisp() ? `<nav class="tiles">${tab("disp", "🧮", "Диспетчер · перевірка розрахунку")}</nav>` : ""}
+    ${nav && me && me.status === "active" && !isDisp() ? `<nav class="tiles">
       ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
       ${isAdmin() ? tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
   </div></header>
@@ -468,7 +471,25 @@ async function loadUnit(id = state.unitId) {
   if (!u.crypto) throw new NeedKey("init", u);
   const dk = await getUnitKey(u);
   if (!dk) throw new NeedKey("unlock", u);
-  return decUnit(u, dk);
+  const unit = await decUnit(u, dk);
+  publishCatalog(unit);
+  return unit;
+}
+// довідник авто для диспетчера: лише назва, норма, надбавка, пальне (без показників за місяці);
+// публікується, коли змінився довідник або ключ диспетчера
+async function publishCatalog(unit) {
+  try {
+    if (isDisp()) return;
+    if (state.dispPub === undefined) state.dispPub = await store.getDispPub();
+    const pub = state.dispPub; if (!pub) return;
+    const cat = { unit: unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
+      .map((v) => ({ id: v.id, name: v.name, rate: v.rate, winter_pct: v.winter_pct, month_norm_km: v.month_norm_km, fuel: v.fuel })) };
+    const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
+    const cur = await store.getFleetCat(unit.id);
+    if (cur && cur.h === h) return;
+    const sealed = await X.sealForDisp(cat, pub, X.aadFleet(unit.id));
+    await store.saveFleetCat(unit.id, { ...sealed, h, unit_name: unit.name, n: cat.vehicles.length });
+  } catch (err) { console.warn("Довідник для диспетчера не оновлено:", err && err.message); }
 }
 async function readMonth(unit, ym) {
   const m = await store.getMonth(unit.id, ym);
@@ -484,6 +505,7 @@ async function listMonthsDec(unit) {
 }
 async function writeUnit(unit, settings, vehicles) {
   await store.saveUnitData(unit.id, await X.encJson(unit.dk, { settings, vehicles }, X.aadUnit(unit.id)), vehicles.filter((v) => v.active !== false).length);
+  await publishCatalog({ ...unit, settings, vehicles: vehicles.map(C.normalizeVehicle) });
 }
 async function rememberKey(unitId, dk, remember) {
   const locked = await X.lockDown(dk);
@@ -745,6 +767,115 @@ async function pageEntry(q) {
     store.log("doc_register", ym, unit.id);
   });
   window.onbeforeunload = () => (dirtyCards.size ? "Є незбережені зміни" : undefined);
+}
+
+// ============================================================ диспетчер
+// Бачить лише довідник авто всіх підрозділів і рахує витрату на своєму екрані: нічого не зберігається і не змінюється.
+async function pageDisp(q) {
+  const pub = await store.getDispPub();
+  const cacheId = pub ? `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser.uid}:disp:${pub.kid}` : "";
+  if (!pub) {
+    shell(`<div class="auth" style="max-width:640px"><div class="panel"><h2 class="display">🔑 Створіть ключ диспетчера</h2>
+      <div class="note"><p>Довідники авто підрозділів зашифровані. Ключ диспетчера — це фраза, якою відкриваються <b>лише довідники авто</b> (назва, норма, надбавка, пальне).
+        Показників підрозділів за місяці диспетчер не бачить.</p><p>Ключ знаєте лише ви (та інші диспетчери, яким ви його передасте). Адміністратор його не бачить; якщо ключ забуто — він скидає його, і ви створюєте новий.</p></div>
+      <form class="js-dnew" autocomplete="off"><label class="f">Ключ диспетчера (від 10 символів, краще фраза)<input name="k1" type="password" required></label>
+        <label class="f">Повторіть<input name="k2" type="password" required></label>${rememberBox}<button class="btn primary">Створити ключ</button></form></div></div>`);
+    $app.querySelector(".js-dnew").addEventListener("submit", async (e) => {
+      e.preventDefault(); const f = e.target;
+      const prob = X.passProblem(f.k1.value, "Ключ диспетчера"); if (prob) { flash("err", prob); return render(); }
+      if (f.k1.value !== f.k2.value) { flash("err", "Ключі не збігаються."); return render(); }
+      busy(true);
+      try {
+        const keys = await X.newDispKeys(f.k1.value);
+        await store.createDispKeys(keys);
+        const priv = await X.unlockDisp(keys.priv, f.k1.value); state.dispPriv = priv;
+        if (f.remember.checked) await X.keyCache.put(`${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser.uid}:disp:${keys.pub.kid}`, priv);
+        store.log("disp_key_create", ""); flash("ok", "Ключ диспетчера створено. Довідники авто з'являться, коли підрозділи відкриють портал (або адміністратор відкриє «Зведення по області»).");
+      } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+      render();
+    });
+    return;
+  }
+  if (!state.dispPriv) state.dispPriv = await X.keyCache.get(cacheId);
+  if (!state.dispPriv) {
+    shell(`<div class="auth" style="max-width:560px"><div class="panel"><h2 class="display">🔑 Ключ диспетчера</h2>
+      <p class="muted">Довідники авто зашифровані. Введіть ключ диспетчера.</p>
+      <form class="js-dopen" autocomplete="off"><label class="f">Ключ диспетчера<input name="k" type="password" required autofocus></label>${rememberBox}
+        <button class="btn primary">Відкрити</button></form>
+      <p class="muted" style="margin-top:12px">Ніхто не пам'ятає ключ? Адміністратор може його скинути — тоді створите новий.</p></div></div>`);
+    $app.querySelector(".js-dopen").addEventListener("submit", async (e) => {
+      e.preventDefault(); const f = e.target; busy(true);
+      try {
+        const priv = await X.unlockDisp(await store.getDispPriv(), f.k.value); state.dispPriv = priv;
+        if (f.remember.checked) await X.keyCache.put(cacheId, priv);
+      } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+      render();
+    });
+    return;
+  }
+  // довідники всіх підрозділів
+  if (!state.dispCat || q.get("reload")) {
+    const docs = await store.listFleetCats();
+    const cats = [];
+    let stale = 0;
+    for (const d of docs) {
+      if (d.kid !== pub.kid) { stale++; continue; }
+      try { const c = await X.openForDisp(d, state.dispPriv, X.aadFleet(d.unit_id)); cats.push({ unit_id: d.unit_id, unit: c.unit || d.unit_name, org: c.org, vehicles: c.vehicles || [], updated: d.updated_at }); }
+      catch { stale++; }
+    }
+    cats.sort((a, b) => a.unit.localeCompare(b.unit, "uk"));
+    state.dispCat = { cats, stale };
+  }
+  const { cats, stale } = state.dispCat;
+  const all = cats.flatMap((c) => c.vehicles.map((v) => ({ ...v, unit: c.unit, unit_id: c.unit_id })));
+  const sel = q.get("v") ? all.find((v) => `${v.unit_id}:${v.id}` === q.get("v")) : null;
+  const rowHtml = (v) => `<tr class="js-pick ${sel && sel === v ? "on" : ""}" data-k="${esc(v.unit_id + ":" + v.id)}" data-s="${esc((v.name + " " + v.unit + " " + (v.fuel || "")).toLowerCase())}">
+    <td><b>${esc(v.name)}</b></td><td class="muted">${esc(v.unit)}</td><td>${esc(v.fuel || "")}</td><td class="num">${esc(String(v.rate ?? ""))}</td><td class="num">${v.winter_pct ? esc(String(v.winter_pct)) + "%" : "—"}</td></tr>`;
+  const calc = sel ? `<div class="panel disp-calc"><h2>🧮 ${esc(sel.name)} <span class="muted" style="font-size:.9rem">· ${esc(sel.unit)}</span></h2>
+    <p class="muted">Розрахунок лише на цьому екрані — нікуди не зберігається і не змінює даних підрозділу.</p>
+    <form class="js-dcalc grid-calc" autocomplete="off">
+      <label class="f">Пробіг на початок, км<input name="odo_start" type="number" min="0" step="1"></label>
+      <label class="f">Пробіг на кінець, км<input name="odo_end" type="number" min="0" step="1"></label>
+      <label class="f">Норма, л/100 км<input name="rate" type="number" min="0" step="0.01" value="${esc(String(sel.rate ?? ""))}"></label>
+      <label class="f">Зимова надбавка, %<input name="winter_pct" type="number" min="0" max="100" step="1" value="${esc(String(sel.winter_pct ?? 0))}"></label>
+      <label class="f">Залишок на початок, л<input name="fuel_start" type="number" min="0" step="0.01"></label>
+      <label class="f">Видано, л<input name="issued" type="number" min="0" step="0.01"></label>
+    </form>
+    <div class="js-dres disp-res"></div>
+    <button class="btn sm js-dclear">Очистити</button></div>` : "";
+  shell(`<div class="panel" style="margin-top:14px"><h2 class="display">🧮 Перевірка розрахунку</h2>
+      <div class="row" style="justify-content:space-between"><input class="js-dq" placeholder="🔍 номер, марка або підрозділ" style="min-width:300px;flex:1;max-width:520px">
+        <span class="muted">Авто: <b>${all.length}</b> · підрозділів: <b>${cats.length}</b>${stale ? ` · ще не оновлено: ${stale}` : ""} <a href="#/disp?reload=1" class="btn sm">⟳ Оновити</a></span></div>
+      ${all.length ? "" : `<div class="flash info" style="margin-top:10px">Довідників авто ще немає. Вони з'являються, коли хтось із підрозділу відкриває портал (або адміністратор відкриває «Зведення по області»).</div>`}
+    </div>
+    ${calc}
+    <div class="panel"><div class="tblwrap" style="max-height:${sel ? 360 : 640}px;overflow:auto"><table class="list js-dlist"><thead><tr><th>Авто</th><th>Підрозділ</th><th>Пальне</th><th class="num">Норма</th><th class="num">Надбавка</th></tr></thead>
+      <tbody>${all.map(rowHtml).join("")}</tbody></table></div></div>`);
+  const qi = $app.querySelector(".js-dq");
+  const filter = () => { const t = qi.value.trim().toLowerCase(); $app.querySelectorAll(".js-pick").forEach((tr) => { tr.style.display = !t || tr.dataset.s.includes(t) ? "" : "none"; }); };
+  qi.value = sessionStorage.getItem("dispQ") || ""; filter();
+  qi.addEventListener("input", () => { sessionStorage.setItem("dispQ", qi.value); filter(); });
+  $app.querySelectorAll(".js-pick").forEach((tr) => tr.addEventListener("click", () => go(`#/disp?v=${encodeURIComponent(tr.dataset.k)}`)));
+  if (sel) {
+    const f = $app.querySelector(".js-dcalc"), res = $app.querySelector(".js-dres");
+    const run = () => {
+      const val = (n) => f[n].value;
+      const v = { ...sel, rate: val("rate"), winter_pct: val("winter_pct"), source: "smk" };
+      const r = C.calcRow(v, { odo_start: val("odo_start"), odo_end: val("odo_end"), fuel_start: val("fuel_start"), smk: val("issued") }, C.unitSources({}));
+      const coef = 1 + (Number(val("winter_pct")) || 0) / 100;
+      res.innerHTML = r.empty && !r.km ? `<p class="muted">Введіть пробіг на початок і кінець.</p>` : `<div class="disp-kv">
+        <div><span>Пробіг</span><b>${C.fmtKm(r.km)} км</b></div>
+        <div><span>Норма з надбавкою</span><b>${C.fmtC(Math.round(C.toC(val("rate")) * coef))} л/100 км</b></div>
+        <div><span>За нормою (точно)</span><b>${C.fmtC(r.normExactC)} л</b></div>
+        <div class="hl"><span>Витрата (округлено до цілих)</span><b>${C.fmtC(r.consC)} л</b></div>
+        <div><span>Залишок на початок + видано</span><b>${C.fmtC(r.startC)} + ${C.fmtC(r.issuedC)} л</b></div>
+        <div class="hl"><span>Залишок на кінець</span><b>${C.fmtC(r.endC)} л</b></div></div>${U.msgsHtml(r)}
+        <p class="muted" style="margin-top:6px">${C.fmtKm(r.km)} км × ${esc(val("rate") || "0")} л/100 км${coef !== 1 ? ` × ${coef.toFixed(2).replace(".", ",")}` : ""} = ${C.fmtC(r.normExactC)} л → ${C.fmtC(r.normC)} л</p>`;
+    };
+    f.addEventListener("input", run); run();
+    $app.querySelector(".js-dclear").addEventListener("click", () => { ["odo_start", "odo_end", "fuel_start", "issued"].forEach((n) => { f[n].value = ""; }); f.rate.value = sel.rate ?? ""; f.winter_pct.value = sel.winter_pct ?? 0; run(); });
+    f.odo_start.focus();
+  }
 }
 
 // ============================================================ звіт і акти
@@ -1039,7 +1170,7 @@ async function pageAdmin(sub, q) {
           <div class="row" style="margin-top:10px">
             <label class="f">Прив'язати до підрозділу<select class="js-unitsel"><option value="new" ${match ? "" : "selected"}>➕ Створити новий підрозділ</option>${unitOptions(match?.id)}</select></label>
             <label class="f js-newname" ${match ? 'style="display:none"' : ""}>Назва нового підрозділу<input value="${esc(u.requested_unit)}"></label>
-            <label class="f">Роль<select class="js-role"><option value="user">Користувач підрозділу</option><option value="admin">Адміністратор</option></select></label>
+            <label class="f">Роль<select class="js-role"><option value="user">Користувач підрозділу</option><option value="dispatcher">Диспетчер (перевірка розрахунків, уся область)</option><option value="admin">Адміністратор</option></select></label>
             <button class="btn primary js-approve">✓ Підтвердити</button></div>
           <div style="margin-top:8px"><button class="btn sm danger js-reject">✕ Відхилити</button> <button class="btn sm danger js-udel">🗑 Видалити заявку</button></div></div>`;
       }).join("")}</div>`;
@@ -1049,14 +1180,18 @@ async function pageAdmin(sub, q) {
       ${list.map((u) => `<tr data-uid="${u.uid}"><td><b>${esc(u.full_name)}</b><br><span class="muted">${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}</span></td>
         <td>${esc(u.email)}</td>
         <td><div class="row" style="gap:6px"><select class="js-unitsel">${unitOptions(u.unit_id)}</select>
-          <select class="js-role"><option value="user" ${u.role === "user" ? "selected" : ""}>користувач</option><option value="admin" ${u.role === "admin" ? "selected" : ""}>адміністратор</option></select>
+          <select class="js-role">${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}" ${u.role === k ? "selected" : ""}>${l}</option>`).join("")}</select>
           <button class="btn sm js-usave">Зберегти</button></div></td>
         <td>${u.status === "active" ? `<span class="pill ok">активний</span>` : u.status === "blocked" ? `<span class="pill err">заблокований</span>` : `<span class="pill mut">${esc(u.status)}</span>`}</td>
         <td class="muted">${esc(u.last_login || "—")}</td>
         <td><button class="btn sm js-ureset">✉️ Лист для скидання пароля</button>
           ${u.uid !== state.authUser.uid ? `${u.status === "active" ? `<button class="btn sm danger js-ublock">Заблокувати</button>` : `<button class="btn sm js-uunblock">Розблокувати</button>`}
           <button class="btn sm danger js-udel">🗑 Видалити</button>` : ""}</td></tr>`).join("")}</tbody></table>
-      <p class="muted">Видалення прибирає профіль і доступ до даних. Якщо людина знову увійде зі своїм e-mail, портал запропонує подати нову заявку.</p></div>`;
+      <p class="muted">Видалення прибирає профіль і доступ до даних. Якщо людина знову увійде зі своїм e-mail, портал запропонує подати нову заявку.</p>
+      <h3 style="margin-top:18px">🧮 Диспетчер</h3>
+      <p class="muted">Диспетчер бачить лише довідник авто всіх підрозділів (назва, норма, надбавка, пальне) і рахує витрату на своєму екрані — показників підрозділів він не бачить і нічого в них не змінює.
+        Ключ диспетчера створює перший диспетчер; якщо його забули — скиньте, і диспетчер створить новий (довідники підрозділів оновляться, коли їх відкриють).</p>
+      ${(await store.getDispPub().catch(() => null)) ? `<button class="btn sm danger js-dispreset">Скинути ключ диспетчера</button>` : `<span class="muted">Ключ диспетчера ще не створено.</span>`}</div>`;
   } else if (tab === "units") {
     body = `<div class="panel"><h2>Підрозділи</h2><div class="row" style="margin-bottom:14px">
       <label class="f">Новий підрозділ<input class="js-newunit" placeholder="напр. Кременчуцьке РУП ГУНП" style="min-width:320px"></label><button class="btn sky js-ucreate">➕ Створити</button></div>
@@ -1077,6 +1212,7 @@ async function pageAdmin(sub, q) {
     const rowsSum = await Promise.all(units.map(async (u) => {
       if (!u.crypto) return { u, n: 0, done: 0, err: 0, t: null };
       const unit = await decUnit(u, await getUnitKey(u));
+      publishCatalog(unit);
       const st = await monthState(unit, ym);
       // для вивантаження в Excel (модуль хабу «Пробіг і пальне»): збережений місяць або перенесений з попереднього показник на початок
       const exp = { org: unit.settings.org, unit: u.name, vehicles: st.vehicles, entries: st.entries };
@@ -1116,12 +1252,18 @@ async function pageAdmin(sub, q) {
   $app.querySelectorAll(".js-approve").forEach((b) => b.addEventListener("click", () => act(async () => {
     const box = b.closest("[data-uid]"); const uid = box.dataset.uid; const u = users.find((x) => x.uid === uid);
     let unitId = box.querySelector(".js-unitsel").value;
+    const role = box.querySelector(".js-role").value;
+    if (role === "dispatcher") {
+      // диспетчер не належить підрозділу і не бачить його даних
+      await store.updateUser(uid, { status: "active", unit_id: "", role });
+      store.log("approve", `${u.full_name} → диспетчер`); return;
+    }
     if (unitId === "new") {
       const name = box.querySelector(".js-newname input").value.trim(); if (!name) throw new Error("Вкажіть назву нового підрозділу.");
       const ex = units.find((x) => x.name.toLowerCase() === name.toLowerCase());
       unitId = ex ? ex.id : await store.createUnit(name, { ...C.DEFAULT_SETTINGS, dept: name, unit: name, act_owner: name, compiler: C.shortName(u.full_name) });
     }
-    await store.updateUser(uid, { status: "active", unit_id: unitId, role: box.querySelector(".js-role").value });
+    await store.updateUser(uid, { status: "active", unit_id: unitId, role });
     store.log("approve", `${u.full_name} → ${unitName(unitId) === "—" ? "новий підрозділ" : unitName(unitId)}`, unitId);
   }, "Заявку підтверджено.")));
   $app.querySelectorAll(".js-reject").forEach((b) => b.addEventListener("click", () => {
@@ -1136,8 +1278,12 @@ async function pageAdmin(sub, q) {
   $app.querySelectorAll(".js-usave").forEach((b) => b.addEventListener("click", () => {
     const tr = b.closest("[data-uid]"); const uid = tr.dataset.uid; const role = tr.querySelector(".js-role").value;
     if (uid === state.authUser.uid && role !== "admin") { flash("err", "Не можна зняти роль адміністратора із себе."); return render(); }
-    act(() => store.updateUser(uid, { unit_id: tr.querySelector(".js-unitsel").value, role }), "Користувача оновлено.");
+    act(() => store.updateUser(uid, { unit_id: role === "dispatcher" ? "" : tr.querySelector(".js-unitsel").value, role }), "Користувача оновлено.");
   }));
+  $app.querySelector(".js-dispreset")?.addEventListener("click", () => {
+    if (!confirm("Скинути ключ диспетчера? Диспетчер створить новий, а довідники авто оновляться, коли підрозділи відкриють портал (або ви відкриєте «Зведення по області»).")) return;
+    act(async () => { await store.resetDispKeys(); state.dispPub = undefined; store.log("disp_key_reset", ""); }, "Ключ диспетчера скинуто.");
+  });
   $app.querySelectorAll(".js-ublock").forEach((b) => b.addEventListener("click", () => { if (confirm("Заблокувати користувача?")) act(() => store.updateUser(b.closest("[data-uid]").dataset.uid, { status: "blocked" }), "Заблоковано."); }));
   $app.querySelectorAll(".js-uunblock").forEach((b) => b.addEventListener("click", () => act(() => store.updateUser(b.closest("[data-uid]").dataset.uid, { status: "active" }), "Розблоковано.")));
   $app.querySelectorAll(".js-ureset").forEach((b) => b.addEventListener("click", () => {
@@ -1247,6 +1393,7 @@ async function render() {
   try {
     const [p1, p2] = path.split("/");
     if (p1 === "password") return pagePassword();
+    if (isDisp()) return await pageDisp(q);
     if (p1 === "report") return await pageReport(q);
     if (p1 === "fleet") return await pageFleet(q);
     if (p1 === "archive") return await pageArchive(q);
@@ -1274,6 +1421,8 @@ async function onAuthChanged(user) {
         setUserStats(await store.listUsers().catch(() => []));
         const ctx = sessionStorage.getItem("unitCtx");
         state.unitId = ctx && state.units.some((u) => u.id === ctx) ? ctx : state.me.unit_id;
+      } else if (state.me.role === "dispatcher") {
+        state.unitId = null; state.units = [];
       } else {
         state.unitId = state.me.unit_id;
         const u = await store.getUnit(state.me.unit_id).catch(() => null);
@@ -1283,15 +1432,15 @@ async function onAuthChanged(user) {
   }
   const pth = route().path;
   if (!user && !["login", "register", "forgot"].includes(pth)) { location.hash = "#/login"; return; }
-  if (user && ["login", "register", "forgot", ""].includes(pth)) { location.hash = "#/entry"; return; }
+  if (user && ["login", "register", "forgot", ""].includes(pth)) { location.hash = state.me && state.me.role === "dispatcher" ? "#/disp" : "#/entry"; return; }
   render();
 }
 
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027r")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027r")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027s")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027s")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

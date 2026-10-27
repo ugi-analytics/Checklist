@@ -63,12 +63,19 @@ export function createStore() {
     async getUnit(id) { return S.units[id] ? { id, ...clone(S.units[id]) } : null; },
     async createUnit(name, settings) { const id = "un" + rid(); S.units[id] = { name, settings, n_vehicles: 0, created_at: nowIso() }; save(); return id; },
     async updateUnit(id, f) { Object.assign(S.units[id], clone(f)); save(); },
-    async deleteUnit(id) { delete S.units[id]; for (const k of Object.keys(S.months)) if (k.startsWith(id + "/")) delete S.months[k]; save(); },
+    async deleteUnit(id) { delete S.units[id]; if (S.fleet) delete S.fleet[id]; for (const k of Object.keys(S.months)) if (k.startsWith(id + "/")) delete S.months[k]; save(); },
     async getAdminPub() { if (!S.meta.admin_pub) err("x", "Адміністратор порталу ще не завершив налаштування шифрування (ключ адміністратора не створено). Зверніться до нього."); return clone(S.meta.admin_pub); },
     async hasAdminKey() { return !!S.meta.admin_pub; },
     async createAdminKeys(k) { if (S.meta.admin_pub) err("permission-denied", "Ключ адміністратора вже існує."); S.meta.admin_pub = clone(k.pub); S.meta.admin_priv = clone(k.priv); save(); },
     async getAdminPriv() { if (!S.meta.admin_priv) err("x", "Ключ адміністратора ще не створено."); return clone(S.meta.admin_priv); },
     async setAdminPriv(p) { S.meta.admin_priv = clone(p); save(); },
+    async getDispPub() { return S.meta.disp_pub ? clone(S.meta.disp_pub) : null; },
+    async getDispPriv() { return S.meta.disp_priv ? clone(S.meta.disp_priv) : null; },
+    async createDispKeys(k) { if (S.meta.disp_pub) err("permission-denied", "Ключ диспетчера вже існує."); S.meta.disp_pub = clone(k.pub); S.meta.disp_priv = clone(k.priv); save(); },
+    async resetDispKeys() { delete S.meta.disp_pub; delete S.meta.disp_priv; save(); },
+    async getFleetCat(id) { return S.fleet && S.fleet[id] ? clone(S.fleet[id]) : null; },
+    async listFleetCats() { return Object.entries(S.fleet || {}).map(([unit_id, v]) => ({ unit_id, ...clone(v) })); },
+    async saveFleetCat(id, d) { S.fleet = S.fleet || {}; S.fleet[id] = clone({ ...d, updated_at: nowIso() }); save(); },
     async initUnitCrypto(id, c, e, n) {
       const u = S.units[id]; if (!u) err("x", "Підрозділ не знайдено.");
       if (u.crypto) err("already-init", "Ключ цього підрозділу вже створено.");
