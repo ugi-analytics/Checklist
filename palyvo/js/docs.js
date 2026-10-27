@@ -1,7 +1,7 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261027b";
-import { litresWords } from "./words.js?v=20261027b";
+import * as C from "./core.js?v=20261027c";
+import { litresWords } from "./words.js?v=20261027c";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -210,7 +210,9 @@ export function buildAct(D, s, ym, act, now = new Date()) {
     sign(s.act_chair || ""),
     P("Члени комісії:", { indentLeft: cm(0.6), before: 6, keepNext: true }),
     ...(s.act_members || []).filter((mb) => String(mb.short || "").trim()).map((mb) => sign(String(mb.short).trim())),
-    P(`${BLANK_DATE}${yearNow}      МВО:  ___________________      ${act.mvo || s.compiler || ""}`, { indentLeft: cm(0.6), before: 30 }),
+    ...(act.mvos && act.mvos.length ? act.mvos : [act.mvo || s.compiler || ""]).map((nm, i) =>
+      P(`${i === 0 ? BLANK_DATE + yearNow : " ".repeat(BLANK_DATE.length + 4)}      МВО:  ___________________      ${nm}`,
+        { indentLeft: cm(0.6), before: i === 0 ? 30 : 10 })),
   ];
   return baseDoc(D, { page: { size: { width: cm(21.0), height: cm(29.7) },
     margin: { top: cm(1), bottom: cm(1), left: cm(2), right: cm(1.5) } } }, children, 12);

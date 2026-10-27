@@ -365,16 +365,13 @@ function legacyActSplit(r) {
   out.tsmk = a; out.azs = r.consC - a;
   return out;
 }
-/** Перелік актів місяця: група × МВО (окремий акт на кожну МВО, якщо їх кілька). */
+/** Перелік актів місяця: один акт на групу (підписує вся комісія); рядки акта — за пальним, постачальником і МВО. */
 export function actList(rows, settings = {}) {
-  const out = [];
-  for (const g of Object.keys(ACT_GROUPS)) {
+  return Object.keys(ACT_GROUPS).map((g) => {
     const lines = actGroups(rows, g, settings);
-    const mvos = [...new Set(lines.map((l) => l.mvo))];
-    if (mvos.length <= 1) out.push({ group: g, mvo: null, lines, title: ACT_GROUPS[g].title });
-    else for (const mv of mvos) out.push({ group: g, mvo: mv, lines: lines.filter((l) => l.mvo === mv), title: `${ACT_GROUPS[g].title} · МВО ${mv}` });
-  }
-  return out;
+    const mvos = [...new Set(lines.map((l) => String(l.mvo || "").trim()).filter(Boolean))];
+    return { group: g, mvo: null, mvos, lines, title: ACT_GROUPS[g].title };
+  });
 }
 
 export function shortName(full) {

@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027b";
-import * as U from "./ui.js?v=20261027b";
-import { litresWords } from "./words.js?v=20261027b";
-import { buildRegister, buildAct } from "./docs.js?v=20261027b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027b";
-import * as X from "./crypto.js?v=20261027b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027b";
-import { buildXlsx } from "./xlsx.js?v=20261027b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027b";
+import * as C from "./core.js?v=20261027c";
+import * as U from "./ui.js?v=20261027c";
+import { litresWords } from "./words.js?v=20261027c";
+import { buildRegister, buildAct } from "./docs.js?v=20261027c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027c";
+import * as X from "./crypto.js?v=20261027c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027c";
+import { buildXlsx } from "./xlsx.js?v=20261027c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -741,7 +741,7 @@ async function pageReport(q) {
         <p class="muted">«${litresWords(tot)}»</p><button class="btn sky js-act" data-i="${i}">📥 Завантажити акт (Word)</button>`
         : `<p class="muted">Немає пального до списання.</p>`}</div>`;
   }).join("");
-  const multi = actList.some((a) => a.mvo);
+  const multi = actList.some((a) => (a.mvos || []).length > 1);
   shell(`<div style="margin-top:14px">${monthPicker(ym, "#/report")}</div>
     <div class="panel"><h2>${esc(S.title)} за ${C.monthTitle(ym)}</h2>
       ${nErr ? `<div class="flash err">У даних є помилки (${nErr}) — перевірте картки на вкладці «Введення даних».</div>` : ""}
@@ -751,7 +751,7 @@ async function pageReport(q) {
           Підпис особи, яка склала реєстр: ${esc(S.compiler || "— (вкажіть у «Автопарк і реквізити»)")}</p>
         <button class="btn primary js-reg">📥 Завантажити реєстр «Додаток 6» (Word)</button>` : `<p class="muted">Немає даних за цей місяць.</p>`}</div>
     <div class="panel"><h2>🧾 Акти списання пального</h2>
-      <p class="muted">Окремі акти: «Талони + см/к» (талони, смарт-картки) та «АЗС» (АЗС ГУНП талони, АЗС налив)${multi ? " — і окремо на кожну МВО" : ""}.
+      <p class="muted">Окремі акти: «Талони + см/к» (талони, смарт-картки) та «АЗС» (АЗС ГУНП талони, АЗС налив)${multi ? ". Якщо МВО кілька — в акті окремі рядки на кожну МВО і підписи всіх МВО; підписує вся комісія" : ""}.
         ${rows.sources.legacy ? "Витрата авто розноситься між ними пропорційно до виданого за місяць; якщо нічого не видано — за основним джерелом списання."
           : "Кількість у акті — це витрачене з відповідних джерел (графи «Витрачено»)."}
         Номер, дати, ціна й сума лишаються порожніми.</p><div class="acts">${acts}</div></div>`);
@@ -1236,8 +1236,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
