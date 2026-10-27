@@ -539,13 +539,17 @@ function legacyActSplit(r) {
   out.tsmk = a; out.azs = r.consC - a;
   return out;
 }
-/** Перелік актів місяця: один акт на групу (підписує вся комісія); рядки акта — за пальним, постачальником і МВО. */
+/** Перелік актів місяця: група (талони+с/к / АЗС) × МВО — на кожну МВО окремий акт (підписує вся комісія і ця МВО). */
 export function actList(rows, settings = {}) {
-  return Object.keys(ACT_GROUPS).map((g) => {
+  const out = [];
+  for (const g of Object.keys(ACT_GROUPS)) {
     const lines = actGroups(rows, g, settings);
-    const mvos = [...new Set(lines.map((l) => String(l.mvo || "").trim()).filter(Boolean))];
-    return { group: g, mvo: null, mvos, lines, title: ACT_GROUPS[g].title };
-  });
+    const mvos = [...new Set(lines.map((l) => String(l.mvo || "").trim()))];
+    if (mvos.length <= 1) { out.push({ group: g, mvo: mvos[0] || null, mvos: mvos.filter(Boolean), lines, title: ACT_GROUPS[g].title }); continue; }
+    for (const mv of mvos) out.push({ group: g, mvo: mv, mvos: [mv].filter(Boolean), lines: lines.filter((l) => String(l.mvo || "").trim() === mv),
+      title: `${ACT_GROUPS[g].title} · МВО ${mv || "—"}`, perMvo: true });
+  }
+  return out;
 }
 
 export function shortName(full) {
