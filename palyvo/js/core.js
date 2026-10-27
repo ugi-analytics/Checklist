@@ -16,7 +16,9 @@ export const LEGACY_SOURCES = [
   { id: "smk", form: "с/к", fuel: "", supplier: "", mvo: "", label: "см/к" },
   { id: "azs_smk", form: "АЗС налив", fuel: "", supplier: "", mvo: "", label: "АЗС налив" },
 ];
-export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG"];
+export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS"];
+/** Авто без основного джерела (заправляється з різних): витрата ділиться між джерелами пропорційно до наявного. */
+export const NO_MAIN = "-";
 
 export const ACT_GROUPS = {
   tsmk: { title: "Талони + см/к", file: "Талони_см-к" },
@@ -182,7 +184,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     const add = sources.find((s) => s.mvo === mv && sourceFits(s, vehicle)) || sources.find((s) => s.mvo === mv);
     if (add) list.push(add);
   }
-  const main = mainSource(vehicle, list);
+  const free = !sources.legacy && vehicle.source === NO_MAIN;
+  const anchor = mainSource(free ? { ...vehicle, source: "" } : vehicle, list);   // куди йде нерозбитий залишок
+  const main = free ? null : anchor;
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
     capped: false, errors: [], warnings: [], empty: true, legacy: !!sources.legacy && !e.split };
@@ -208,7 +212,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     }
     if (split.length && sum !== T)
       r.errors.push(`Розбивка залишку на початок за МВО (${fmtC(sum)} л) не дорівнює загальному залишку (${fmtC(T)} л).`);
-    if (main && T > sum) r.startBy[main.id] += T - sum;
+    if (anchor && T > sum) r.startBy[anchor.id] += T - sum;
     r.startSplit = split.some(([, x]) => toC(x) > 0);
   }
   for (const s of list) r.startC += r.startBy[s.id];
@@ -256,14 +260,33 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       // спершу списується видане за місяць, потім — залишок на початок
       for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(r.issued[s.id], 0)); r.consBy[s.id] += take; left -= take; }
     }
+    if (free) {
+      // без основного джерела: пропорційно до наявного, спершу серед джерел того ж виду пального
+      const fit = order.filter((s) => sourceFits(s, vehicle));
+      left = propTake(r, fit, left, availBy);
+    }
     for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(availBy(s.id) - r.consBy[s.id], 0)); r.consBy[s.id] += take; left -= take; }
-    if (left > 0 && main) r.consBy[main.id] += left;   // не має статися (витрата обмежена наявним)
+    if (left > 0 && anchor) r.consBy[anchor.id] += left;   // не має статися (витрата обмежена наявним)
   }
   if (!(sources.legacy && !e.split)) for (const s of list) { r.endBy[s.id] = availBy(s.id) - r.consBy[s.id]; r.endC += r.endBy[s.id]; }
   // --- видано пальне іншого виду
   for (const s of list) if (r.issued[s.id] > 0 && !sourceFits(s, vehicle))
     r.warnings.push(`Видано за «${sourceTitle(s)}» (${s.fuel}), а авто на ${vehicle.fuel || "?"} — перевірте джерело.`);
   return r;
+}
+
+/** Розподіл left між джерелами arr пропорційно до ще не списаного наявного; повертає нерозподілений залишок. */
+function propTake(r, arr, left, availBy) {
+  const av = arr.map((s) => Math.max(availBy(s.id) - r.consBy[s.id], 0));
+  const A = av.reduce((a, b) => a + b, 0);
+  if (A <= 0 || left <= 0) return left;
+  const want = Math.min(left, A);
+  const t = av.map((a) => Math.min(a, divHalfUp(want * a, A)));
+  let diff = want - t.reduce((a, b) => a + b, 0);
+  const idx = av.map((_, i) => i).sort((i, j) => av[j] - av[i]);
+  for (const i of idx) { if (!diff) break; const d = diff > 0 ? Math.min(diff, av[i] - t[i]) : -Math.min(-diff, t[i]); t[i] += d; diff -= d; }
+  arr.forEach((s, i) => { r.consBy[s.id] += t[i]; });
+  return left - want;
 }
 
 /** «Вид пального на залишку»: «125 А-95 с/к UKRNAFTA Мосійченко + 167 …». */

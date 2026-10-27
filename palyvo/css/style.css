@@ -299,3 +299,10 @@ table.list th, table.list td { border-bottom-color: rgba(96,165,250,.14); }
 .srct.extra { display:none; border-style:dashed; opacity:.9; }
 .frc.showall .srct.extra { display:block; }
 .mvo label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fde68a; }
+.mvopick { position:relative; display:flex; gap:4px; align-items:center; }
+.mvopick input { flex:1; min-width:120px; }
+.mvopick .js-mvo { padding:6px 9px; }
+.mvomenu { display:none; position:absolute; z-index:30; top:100%; right:0; margin-top:4px; min-width:220px; max-height:260px; overflow:auto;
+  background:#0b1730; border:1px solid rgba(255,255,255,.22); border-radius:10px; padding:6px 8px; box-shadow:0 12px 30px rgba(0,0,0,.45); }
+.mvomenu.on { display:block; }
+.mvomenu label { display:flex; gap:8px; align-items:center; padding:5px 2px; margin:0; color:#e2e8f0; font-size:.88rem; cursor:pointer; white-space:nowrap; }

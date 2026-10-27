@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261027h";
+import * as C from "./core.js?v=20261027i";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -63,6 +63,11 @@ export function noteHtml(v, r, e) {
   if (!r.empty && used.length > 1) {
     const parts = used.map((x) => `${C.fmtC(r.consBy[x.id])} — ${esc(C.sourceTitle(x))}`).join("; ");
     return `${r.capped ? `За нормою ${C.fmtC(r.normC)} л, списано наявне` : e.manual ? "Витрачено вручну" : "Витрачено за нормою"} <b>${C.fmtC(r.consC)} л</b>${e.split ? " (розподіл вручну)" : ""}: ${parts}`;
+  }
+  if (!src) {
+    const how = "без основного джерела — між джерелами пропорційно до наявного";
+    if (r.empty) return `Витрата рахується за нормою · ${how}`;
+    return `${e.manual ? "Витрачено вручну" : r.capped ? "Списано наявне" : "Витрачено за нормою"} <b>${C.fmtC(r.consC)} л</b> · ${how}`;
   }
   if (r.empty) return `Витрата рахується за нормою · списання на ${src}`;
   if (e.manual) return `Витрачено вручну <b>${C.fmtC(r.consC)} л</b> · за нормою ${C.fmtC(r.normC)} л · на ${src}`;

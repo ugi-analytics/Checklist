@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027h";
-import * as U from "./ui.js?v=20261027h";
-import { litresWords } from "./words.js?v=20261027h";
-import { buildRegister, buildAct } from "./docs.js?v=20261027h";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027h";
-import * as X from "./crypto.js?v=20261027h";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027h";
-import { buildXlsx } from "./xlsx.js?v=20261027h";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027h";
+import * as C from "./core.js?v=20261027i";
+import * as U from "./ui.js?v=20261027i";
+import { litresWords } from "./words.js?v=20261027i";
+import { buildRegister, buildAct } from "./docs.js?v=20261027i";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027i";
+import * as X from "./crypto.js?v=20261027i";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027i";
+import { buildXlsx } from "./xlsx.js?v=20261027i";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027i";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -912,12 +912,38 @@ async function pageFleet() {
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
       <td><select data-f="supplier">${sup.map((x) => `<option ${x === (v.supplier || "UKRNAFTA") ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>
       <td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>
-      <td><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав"></td>
+      <td><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
       <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
       <td><button class="btn sm danger js-del" title="Видалити з довідника">🗑</button></td>`;
     tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Видалити авто з довідника?")) tr.remove(); });
+    bindMvoPick(tr);
     vbody.appendChild(tr);
   };
+  // вибір кількох МВО для авто: прізвища з інших авто, джерел і «хто склав»
+  const mvoParts = (t) => String(t || "").split(/[,;]/).map((x) => x.trim()).filter(Boolean);
+  const knownMvos = () => {
+    const out = new Set();
+    vbody.querySelectorAll("[data-f=mvo_text]").forEach((i) => mvoParts(i.value).forEach((x) => out.add(x)));
+    const comp = $app.querySelector("[data-k=compiler]"); mvoParts(comp && comp.value).forEach((x) => out.add(x));
+    [...sbody.querySelectorAll("[data-f=mvo]")].forEach((i) => { const x = i.value.trim(); if (x && ![...out].some((y) => y.startsWith(x))) out.add(x); });
+    return [...out].sort((a, b) => a.localeCompare(b, "uk"));
+  };
+  function bindMvoPick(tr) {
+    const inpM = tr.querySelector("[data-f=mvo_text]"), menu = tr.querySelector(".mvomenu");
+    tr.querySelector(".js-mvo").addEventListener("click", () => {
+      if (menu.classList.toggle("on")) {
+        const cur = mvoParts(inpM.value);
+        menu.innerHTML = knownMvos().map((x) => `<label><input type="checkbox" value="${esc(x)}" ${cur.includes(x) ? "checked" : ""}> ${esc(x)}</label>`).join("") ||
+          `<span class="muted">Впишіть прізвище в поле</span>`;
+        menu.querySelectorAll("input").forEach((c) => c.addEventListener("change", () => {
+          const now = mvoParts(inpM.value).filter((x) => x !== c.value);
+          if (c.checked) now.push(c.value);
+          inpM.value = now.join(", ");
+        }));
+      }
+    });
+    document.addEventListener("click", (ev) => { if (!tr.contains(ev.target)) menu.classList.remove("on"); });
+  }
   const addMem = (m) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td><input data-f="full" value="${esc(m.full)}" placeholder="начальника … капітана поліції Прізвища І.Б."></td>
@@ -947,8 +973,10 @@ async function pageFleet() {
   function refreshSrcSelects() {
     const list = currentSources().filter((x) => x.active);
     vbody.querySelectorAll("select[data-f=source]").forEach((sel) => {
-      const cur = sel.value || sel.dataset.cur;
-      sel.innerHTML = list.map((x) => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(C.sourceTitle(x))}</option>`).join("");
+      if (!sel.dataset.b) { sel.dataset.b = 1; sel.addEventListener("change", () => { sel.dataset.cur = sel.value; }); }
+      const cur = sel.dataset.cur;          // вибір користувача (а не те, що браузер вибрав за замовчуванням)
+      sel.innerHTML = list.map((x) => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(C.sourceTitle(x))}</option>`).join("") +
+        (custom() && list.length ? `<option value="${C.NO_MAIN}" ${cur === C.NO_MAIN ? "selected" : ""}>— різні (без основного) —</option>` : "");
     });
   }
   (s.sources && s.sources.length ? C.unitSources(s) : C.LEGACY_SOURCES.map((l) => ({ ...l }))).forEach(addSrc);
@@ -1266,8 +1294,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027h")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027h")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027i")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027i")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
