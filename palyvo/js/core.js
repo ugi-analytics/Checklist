@@ -203,6 +203,8 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
         if (!mv) {
           // без прізвища: впізнаємо форму — «т», «тал.», «талони» → талони; «АЗС» → АЗС; «с/к», «см/к» → с/к
           const form = textForms(low);
+          // давні талони без МВО — окрема частина залишку: не прив'язується до джерела, переноситься як написано
+          if (form && form[0] === "талони") { splitIn.push({ keep: true, c: toC(m[1].replace(",", ".")), text: true, label: part.trim() }); continue; }
           const byForm = form && sources.filter((x) => form.includes(x.form))
             .sort((a, b) => (sourceFits(b, vehicle) - sourceFits(a, vehicle)) || (form.indexOf(a.form) - form.indexOf(b.form)) || (list.includes(b) - list.includes(a)))[0];
           if (byForm) { splitIn.push({ mvo: byForm.mvo, c: toC(m[1].replace(",", ".")), hint: low, text: true, src: byForm }); continue; }
@@ -226,7 +228,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const main = free ? null : anchor;
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
-    capped: false, errors: [], warnings: [], empty: true, legacy: !!sources.legacy && !e.split };
+    capped: false, errors: [], warnings: [], empty: true, keep: [], legacy: !!sources.legacy && !e.split };
   // --- залишок на початок: загальний (fuel_start) + за потреби розбивка за МВО (start_mvo);
   //     старі записи з розбивкою за джерелами (start: {джерело: л}) читаються як є
   const hasStartMap = useStartMap;
@@ -242,14 +244,15 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     let sum = 0;
     for (const sp of splitIn) {
       sum += sp.c; if (!sp.c) continue;
+      if (sp.keep) { r.keep.push({ label: sp.label, c: sp.c, left: sp.c }); continue; }
       if (!sp.src) { r.errors.push(`Залишок за МВО ${sp.mvo}: немає джерела цієї МВО.`); continue; }
       r.startBy[sp.src.id] += sp.c;
     }
     const isText = splitIn.some((x) => x.text);
     if (splitIn.length && sum > T) {
       // більше, ніж загальний залишок, — розбивку не застосовуємо
-      for (const sp of splitIn) if (sp.src) r.startBy[sp.src.id] -= sp.c;
-      sum = 0;
+      for (const sp of splitIn) if (sp.src && !sp.keep) r.startBy[sp.src.id] -= sp.c;
+      sum = 0; r.keep = [];
       r.errors.push(`${isText ? "Сума в описі залишку на початок" : "Розбивка залишку на початок за МВО"} (${fmtC(splitIn.reduce((a, x) => a + x.c, 0))} л) більша за загальний залишок (${fmtC(T)} л).`);
     } else if (splitIn.length && sum !== T) {
       (isText ? r.warnings : r.errors).push(`${isText ? "Сума в описі залишку на початок" : "Розбивка залишку на початок за МВО"} (${fmtC(sum)} л) не дорівнює загальному залишку (${fmtC(T)} л)` +
@@ -260,6 +263,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     r.startSplit = splitIn.some((x) => x.c > 0) && sum > 0;
   }
   for (const s of list) r.startC += r.startBy[s.id];
+  for (const k of r.keep) r.startC += k.c;
   r.empty = [e.odo_start, e.odo_end, e.consumed_manual].every((x) => isBlank(x) || Number(x) === 0) && r.startC === 0 && r.issuedC === 0;
   // --- пробіг і витрата за нормою
   const s0 = e.odo_start, s1 = e.odo_end;
@@ -314,9 +318,14 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       left = propTake(r, fit, left, availBy);
     }
     for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(availBy(s.id) - r.consBy[s.id], 0)); r.consBy[s.id] += take; left -= take; }
+    // джерел не вистачило — списуємо з давніх талонів (їх кількість у описі зменшується)
+    for (const k of r.keep) { if (left <= 0) break; const take = Math.min(left, k.left); k.left -= take; left -= take; r.keepConsC = (r.keepConsC || 0) + take; }
     if (left > 0 && anchor) r.consBy[anchor.id] += left;   // не має статися (витрата обмежена наявним)
   }
-  if (!(sources.legacy && !e.split)) for (const s of list) { r.endBy[s.id] = availBy(s.id) - r.consBy[s.id]; r.endC += r.endBy[s.id]; }
+  if (!(sources.legacy && !e.split)) {
+    for (const s of list) { r.endBy[s.id] = availBy(s.id) - r.consBy[s.id]; r.endC += r.endBy[s.id]; }
+    for (const k of r.keep) r.endC += k.left;
+  }
   // --- видано пальне іншого виду
   for (const s of list) if (r.issued[s.id] > 0 && !sourceFits(s, vehicle))
     r.warnings.push(`Видано за «${sourceTitle(s)}» (${s.fuel}), а авто на ${vehicle.fuel || "?"} — перевірте джерело.`);
@@ -355,6 +364,11 @@ export function balanceText(r, which = "end", settings = {}) {
     return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
   }
   const parts = r.sources.filter((s) => by[s.id] > 0).map((s) => `${fmtC(by[s.id])} ${sourceLabelFor(s, r.vehicle, settings)}`);
+  // давні талони — як написано вручну (кількість — що лишилось)
+  for (const k of r.keep || []) {
+    const q = which === "start" ? k.c : k.left; if (q <= 0) continue;
+    parts.push(q === k.c ? k.label : k.label.replace(/(^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/, (_, p1) => p1 + fmtC(q)));
+  }
   if (parts.length) return parts.join(" + ");
   const m = r.sources.find((s) => s.id === r.mainId);
   return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
@@ -429,7 +443,7 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
       // загальний залишок + розбивка за МВО, якщо на кінець пальне було в кількох МВО
       const bm = byMvo(r, "end"), mv = Object.keys(bm).filter((k) => bm[k] > 0);
       // довільний опис залишку на кінець переходить у опис залишку на початок
-      const endText = String(pe.end_text || "").trim() || (mv.length > 1 ? balanceText(r, "end") : "");
+      const endText = String(pe.end_text || "").trim() || (mv.length > 1 || r.keep.some((k) => k.left > 0) ? balanceText(r, "end") : "");
       out[v.id] = { odo_start: odo, fuel_start: r.endC ? r.endC / 100 : null, start: {}, iss: {},
         ...(endText ? { start_text: endText } : {}) };
     }
