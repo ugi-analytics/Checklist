@@ -53,6 +53,8 @@ export function unitSources(settings = {}) {
   const out = (custom ? settings.sources : LEGACY_SOURCES).map(normalizeSource);
   // стандартний режим (джерела не налаштовано): уся витрата — на основне джерело, залишок — одним числом, як раніше
   out.legacy = !custom;
+  // порядок списання: спочатку видане за місяць, потім залишок на початок (налаштування підрозділу)
+  out.issuedFirst = custom && !!settings.cons_issued_first;
   return out;
 }
 /** «А-95», «А95», «A-95» → «А95»; «ДП», «дизель» → «ДП»; «газ», «LPG» → «ГАЗ». */
@@ -244,7 +246,11 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     let left = r.consC;
     const rest = list.filter((s) => !main || s.id !== main.id);
     const order = [...(main ? [main] : []), ...rest.filter((s) => sourceFits(s, vehicle)), ...rest.filter((s) => !sourceFits(s, vehicle))];
-    for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(availBy(s.id), 0)); r.consBy[s.id] = take; left -= take; }
+    if (sources.issuedFirst) {
+      // спершу списується видане за місяць, потім — залишок на початок
+      for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(r.issued[s.id], 0)); r.consBy[s.id] += take; left -= take; }
+    }
+    for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(availBy(s.id) - r.consBy[s.id], 0)); r.consBy[s.id] += take; left -= take; }
     if (left > 0 && main) r.consBy[main.id] += left;   // не має статися (витрата обмежена наявним)
   }
   if (!(sources.legacy && !e.split)) for (const s of list) { r.endBy[s.id] = availBy(s.id) - r.consBy[s.id]; r.endC += r.endBy[s.id]; }

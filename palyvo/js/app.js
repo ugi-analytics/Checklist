@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027e";
-import * as U from "./ui.js?v=20261027e";
-import { litresWords } from "./words.js?v=20261027e";
-import { buildRegister, buildAct } from "./docs.js?v=20261027e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027e";
-import * as X from "./crypto.js?v=20261027e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027e";
-import { buildXlsx } from "./xlsx.js?v=20261027e";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027e";
+import * as C from "./core.js?v=20261027f";
+import * as U from "./ui.js?v=20261027f";
+import { litresWords } from "./words.js?v=20261027f";
+import { buildRegister, buildAct } from "./docs.js?v=20261027f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027f";
+import * as X from "./crypto.js?v=20261027f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027f";
+import { buildXlsx } from "./xlsx.js?v=20261027f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -854,7 +854,8 @@ async function pageFleet() {
         <label class="f">Колонки джерел<select data-k="reg_columns"><option value="all" ${s.reg_columns === "used" ? "" : "selected"}>усі налаштовані джерела</option>
           <option value="used" ${s.reg_columns === "used" ? "selected" : ""}>лише ті, по яких у місяці був рух</option></select></label>
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="js-blago" ${s.show_blago === false ? "" : "checked"}> колонка «благо» у «Витрачено»</label>
-        <label style="display:flex;gap:8px;align-items:center" title="Перед заповненням місяця вказати, скільки із загального залишку на початок у кожної МВО"><input type="checkbox" class="js-smvo" ${s.start_by_mvo ? "checked" : ""}> залишок на початок із розбивкою за МВО</label></div></div>
+        <label style="display:flex;gap:8px;align-items:center" title="Перед заповненням місяця вказати, скільки із загального залишку на початок у кожної МВО"><input type="checkbox" class="js-smvo" ${s.start_by_mvo ? "checked" : ""}> залишок на початок із розбивкою за МВО</label>
+        <label style="display:flex;gap:8px;align-items:center" title="Інакше — спочатку з основного джерела авто (залишок + видане), потім з інших"><input type="checkbox" class="js-isfirst" ${s.cons_issued_first ? "checked" : ""}> списувати спочатку видане за місяць, потім залишок</label></div></div>
     <div class="panel"><h2>📄 Реквізити бланків</h2><div class="form-grid">
       ${f("org", "Установа (шапка ліворуч)")}${f("dept", "Підрозділ (другий рядок шапки)")}${f("unit", "Графа 2 «Підрозділ» у реєстрі")}
       ${f("title", "Назва реєстру (без «за … року»)", "w2")}${f("appendix", "Номер додатка")}${f("compiler", "Особа, яка склала реєстр (ПІБ для підпису)")}</div></div>
@@ -961,6 +962,7 @@ async function pageFleet() {
     $app.querySelectorAll("[data-k]").forEach((i) => { settings[i.dataset.k] = i.value.trim(); });
     settings.show_blago = $app.querySelector(".js-blago").checked;
     settings.start_by_mvo = $app.querySelector(".js-smvo").checked;
+    settings.cons_issued_first = $app.querySelector(".js-isfirst").checked;
     if (custom()) {
       const list = [...sbody.querySelectorAll("tr")].map(readSrc);
       if (!list.length) { flash("err", "Додайте хоча б одне джерело пального або оберіть стандартні."); return render(); }
@@ -1260,8 +1262,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
