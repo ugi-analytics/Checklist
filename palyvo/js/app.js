@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027o";
-import * as U from "./ui.js?v=20261027o";
-import { litresWords } from "./words.js?v=20261027o";
-import { buildRegister, buildAct } from "./docs.js?v=20261027o";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027o";
-import * as X from "./crypto.js?v=20261027o";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027o";
-import { buildXlsx } from "./xlsx.js?v=20261027o";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027o";
+import * as C from "./core.js?v=20261027p";
+import * as U from "./ui.js?v=20261027p";
+import { litresWords } from "./words.js?v=20261027p";
+import { buildRegister, buildAct } from "./docs.js?v=20261027p";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027p";
+import * as X from "./crypto.js?v=20261027p";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027p";
+import { buildXlsx } from "./xlsx.js?v=20261027p";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027p";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1290,8 +1290,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027o")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027o")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027p")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027p")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

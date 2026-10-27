@@ -196,21 +196,30 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     if (nums.length) nums.forEach(([mv, x]) => splitIn.push({ mvo: mv, c: toC(x), hint: "" }));
     else if (!sources.legacy && String(e.start_text || "").trim()) {
       const mvos = [...new Set(sources.map((x) => String(x.mvo || "").trim()).filter(Boolean))];
-      for (const part of String(e.start_text).split("+")) {
-        const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/); if (!m) continue;   // число, але не «А-95»/«А95»
+      // МВО пишуть у кінці групи: «185 т А-95 + 270 с/к зал. Мосійченко» — обидві частини Мосійченка;
+      // частина без прізвища бере МВО найближчої наступної частини з прізвищем (якщо такої немає — попередньої)
+      const parts = String(e.start_text).split("+").map((part) => {
+        const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/);   // число, але не «А-95»/«А95»
         const low = part.toLowerCase();
-        const mv = mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0]));
-        if (!mv) {
-          // без прізвища: впізнаємо форму — «т», «тал.», «талони» → талони; «АЗС» → АЗС; «с/к», «см/к» → с/к
-          const form = textForms(low);
-          // давні талони без МВО — окрема частина залишку: не прив'язується до джерела, переноситься як написано
-          if (form && form[0] === "талони") { splitIn.push({ keep: true, c: toC(m[1].replace(",", ".")), text: true, label: part.trim() }); continue; }
+        return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mv: mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "", own: false };
+      });
+      parts.forEach((p) => { p.own = !!p.mv; });
+      for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mv) nxt = parts[k].mv; else parts[k].mv = nxt; }
+      for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mv) prv = parts[k].mv; else parts[k].mv = prv; }
+      for (const p of parts) {
+        if (p.c === null) continue;
+        const form = textForms(p.low);
+        // давні талони — окрема частина залишку: не прив'язується до джерела, переноситься як написано
+        if (form && form[0] === "талони" && !(p.own && sources.some((x) => x.mvo === p.mv && form.includes(x.form) && sourceFits(x, vehicle)))) {
+          splitIn.push({ keep: true, c: p.c, text: true, label: p.part, mvo: p.mv, own: p.own }); continue;
+        }
+        if (!p.mv) {
           const byForm = form && sources.filter((x) => form.includes(x.form))
             .sort((a, b) => (sourceFits(b, vehicle) - sourceFits(a, vehicle)) || (form.indexOf(a.form) - form.indexOf(b.form)) || (list.includes(b) - list.includes(a)))[0];
-          if (byForm) { splitIn.push({ mvo: byForm.mvo, c: toC(m[1].replace(",", ".")), hint: low, text: true, src: byForm }); continue; }
+          if (byForm) { splitIn.push({ mvo: byForm.mvo, c: p.c, hint: p.low, text: true, src: byForm }); continue; }
+          textWarn.push(`У описі залишку «${p.part}» не знайдено МВО чи форму (талони, с/к, АЗС) з джерел — ця частина віднесена на основне джерело.`); continue;
         }
-        if (!mv) { textWarn.push(`У описі залишку «${part.trim()}» не знайдено МВО чи форму (талони, с/к, АЗС) з джерел — ця частина віднесена на основне джерело.`); continue; }
-        splitIn.push({ mvo: mv, c: toC(m[1].replace(",", ".")), hint: low, text: true });
+        splitIn.push({ mvo: p.mv, c: p.c, hint: p.low, text: true });
       }
     }
   }
@@ -244,7 +253,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     let sum = 0;
     for (const sp of splitIn) {
       sum += sp.c; if (!sp.c) continue;
-      if (sp.keep) { r.keep.push({ label: sp.label, c: sp.c, left: sp.c }); continue; }
+      if (sp.keep) { r.keep.push({ label: sp.label, c: sp.c, left: sp.c, mvo: sp.mvo || "", own: sp.own }); continue; }
       if (!sp.src) { r.errors.push(`Залишок за МВО ${sp.mvo}: немає джерела цієї МВО.`); continue; }
       r.startBy[sp.src.id] += sp.c;
     }
@@ -363,12 +372,16 @@ export function balanceText(r, which = "end", settings = {}) {
     const m = r.sources.find((s) => s.id === r.mainId);
     return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
   }
-  const parts = r.sources.filter((s) => by[s.id] > 0).map((s) => `${fmtC(by[s.id])} ${sourceLabelFor(s, r.vehicle, settings)}`);
-  // давні талони — як написано вручну (кількість — що лишилось)
+  const items = r.sources.filter((s) => by[s.id] > 0).map((s) => ({ mvo: sourceFor(s, r.vehicle, settings).mvo, t: `${fmtC(by[s.id])} ${sourceLabelFor(s, r.vehicle, settings)}` }));
+  // давні талони — як написано вручну (кількість — що лишилось), поруч із пальним свого МВО
   for (const k of r.keep || []) {
     const q = which === "start" ? k.c : k.left; if (q <= 0) continue;
-    parts.push(q === k.c ? k.label : k.label.replace(/(^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/, (_, p1) => p1 + fmtC(q)));
+    let t = q === k.c ? k.label : k.label.replace(/(^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/, (_, p1) => p1 + fmtC(q));
+    if (k.mvo && !k.own) t += " " + k.mvo;
+    let at = -1; items.forEach((x, n) => { if (k.mvo && x.mvo === k.mvo) at = n; });
+    items.splice(at >= 0 ? at + 1 : items.length, 0, { mvo: k.mvo, t });
   }
+  const parts = items.map((x) => x.t);
   if (parts.length) return parts.join(" + ");
   const m = r.sources.find((s) => s.id === r.mainId);
   return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
