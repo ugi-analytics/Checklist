@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027c";
-import * as U from "./ui.js?v=20261027c";
-import { litresWords } from "./words.js?v=20261027c";
-import { buildRegister, buildAct } from "./docs.js?v=20261027c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027c";
-import * as X from "./crypto.js?v=20261027c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027c";
-import { buildXlsx } from "./xlsx.js?v=20261027c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027c";
+import * as C from "./core.js?v=20261027d";
+import * as U from "./ui.js?v=20261027d";
+import { litresWords } from "./words.js?v=20261027d";
+import { buildRegister, buildAct } from "./docs.js?v=20261027d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027d";
+import * as X from "./crypto.js?v=20261027d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027d";
+import { buildXlsx } from "./xlsx.js?v=20261027d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -601,20 +601,31 @@ async function pageEntry(q) {
     }
     return `<div class="srcs">${r.sources.map((x) => `<div class="srct${x.id === r.mainId ? " main" : ""}" data-sid="${x.id}">
         <div class="st" title="${esc(C.sourceTitle(x))}">${esc(C.sourceTitle(x))}${x.id === r.mainId ? ` <span class="mb">основне</span>` : ""}</div>
-        <div class="sr"><div><label>Залишок</label>${inp("start." + x.id, lv(r.startBy[x.id]), "0")}</div>
-          <div><label>Видано</label>${inp("iss." + x.id, lv(r.issued[x.id]), "—")}</div></div>
+        <div class="sr"><div><label>Видано</label>${inp("iss." + x.id, lv(r.issued[x.id]), "—")}</div>
+          <div class="sp"><label>Початок</label><b class="js-s">${C.fmtC(r.startBy[x.id])}</b></div></div>
         <div class="sc"><span>Витрачено <b class="js-c">${C.fmtC(r.consBy[x.id])}</b>${inp("cons." + x.id, e.split && e.cons ? e.cons[x.id] : lv(r.consBy[x.id]), "0", "0.01", "js-ci")}</span>
           <span>Кінець <b class="js-e">${C.fmtC(r.endBy[x.id])}</b></span></div></div>`).join("")}</div>`;
+  };
+  const byMvoSet = !simple && !!unit.settings.start_by_mvo;
+  // розбивка залишку на початок за МВО (напр. БКС): поля на кожну МВО з джерел авто
+  const mvoStart = (r, e) => {
+    const mv = C.vehicleMvos(r.sources);
+    if (!(byMvoSet || e.start_mvo) || mv.length < 2) return "";
+    const pre = e.start_mvo || (e.start && Object.keys(e.start).length ? C.byMvo(r, "start") : {});
+    const val = (m) => (e.start_mvo ? e.start_mvo[m] ?? "" : pre[m] ? C.cToNum(pre[m]) : "");
+    return `<div class="fr-h" style="margin-top:8px">Залишок на початок за МВО, л</div><div class="f2">${mv.map((m) =>
+      `<div><label>${esc(m)}</label>${inp("start_mvo." + m, val(m), "0")}</div>`).join("")}</div>`;
   };
   const cards = st.vehicles.map((v) => {
     const e = entries[v.id] || {};
     const r = C.calcRow(v, e, SRC); const s = C.statusOf(r, e);
     return `<div class="frc ${s}${e.split ? " split" : ""}" data-vid="${v.id}"><span class="saving">збережено ✓</span><div class="grid${simple ? "" : " ext"}">
       <div class="js-id">${U.idHtml(v, s, mainTitle(r))}</div>
-      <div><div class="fr-h">${simple ? "Пробіг і залишок на початок" : "Пробіг"}</div><div class="${simple ? "f3" : "f2"}">
+      <div><div class="fr-h">Пробіг і залишок на початок</div><div class="f3">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        ${simple ? `<div><label>Залишок, л</label>${inp("start." + r.mainId, lv(r.startC), "л")}</div>` : ""}</div>
+        <div><label>Залишок, л</label>${simple ? inp("start." + r.mainId, lv(r.startC), "л") : inp("fuel_start", lv(r.startC), "л")}</div></div>
+        ${simple ? "" : mvoStart(r, e)}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
@@ -640,7 +651,7 @@ async function pageEntry(q) {
   const cardEls = [...$app.querySelectorAll(".frc")];
   const vmap = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
   const readCard = (card) => {
-    const e = { start: {}, iss: {}, cons: {} };
+    const e = { start: {}, iss: {}, cons: {}, start_mvo: {} };
     card.querySelectorAll("input[name]").forEach((i) => {
       const val = i.type === "checkbox" ? i.checked : i.value;
       const dot = i.name.indexOf(".");
@@ -667,6 +678,7 @@ async function pageEntry(q) {
       const id = t.dataset.sid;
       t.querySelector(".js-c").textContent = C.fmtC(r.consBy[id] || 0);
       t.querySelector(".js-e").textContent = C.fmtC(r.endBy[id] || 0);
+      t.querySelector(".js-s").textContent = C.fmtC(r.startBy[id] || 0);
       t.classList.toggle("neg", (r.endBy[id] || 0) < 0);
     });
   };
@@ -709,6 +721,8 @@ async function pageEntry(q) {
       const e = co[card.dataset.vid]; if (!e) continue;
       card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
       card.querySelectorAll("input[name^='start.']").forEach((i) => { const id = i.name.slice(6); i.value = e.start && e.start[id] ? e.start[id] : ""; });
+      const fs = card.querySelector("[name=fuel_start]"); if (fs) fs.value = e.fuel_start ?? "";
+      card.querySelectorAll("input[name^='start_mvo.']").forEach((i) => { const m = i.name.slice(10); i.value = e.start_mvo && e.start_mvo[m] ? e.start_mvo[m] : ""; });
       if (simple) { const i = card.querySelector("input[name^='start.']"); if (i) i.value = Object.values(e.start || {}).reduce((a, b) => a + b, 0) || ""; }
       card.querySelectorAll("input").forEach((i) => { if (i.type !== "checkbox") i.classList.toggle("filled", i.value !== ""); });
       entries[card.dataset.vid] = readCard(card); refreshCard(card); dirtyCards.add(card);
@@ -831,7 +845,8 @@ async function pageFleet() {
       <div class="row" style="gap:18px">
         <label class="f">Колонки джерел<select data-k="reg_columns"><option value="all" ${s.reg_columns === "used" ? "" : "selected"}>усі налаштовані джерела</option>
           <option value="used" ${s.reg_columns === "used" ? "selected" : ""}>лише ті, по яких у місяці був рух</option></select></label>
-        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="js-blago" ${s.show_blago === false ? "" : "checked"}> колонка «благо» у «Витрачено»</label></div></div>
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="js-blago" ${s.show_blago === false ? "" : "checked"}> колонка «благо» у «Витрачено»</label>
+        <label style="display:flex;gap:8px;align-items:center" title="Перед заповненням місяця вказати, скільки із загального залишку на початок у кожної МВО"><input type="checkbox" class="js-smvo" ${s.start_by_mvo ? "checked" : ""}> залишок на початок із розбивкою за МВО</label></div></div>
     <div class="panel"><h2>📄 Реквізити бланків</h2><div class="form-grid">
       ${f("org", "Установа (шапка ліворуч)")}${f("dept", "Підрозділ (другий рядок шапки)")}${f("unit", "Графа 2 «Підрозділ» у реєстрі")}
       ${f("title", "Назва реєстру (без «за … року»)", "w2")}${f("appendix", "Номер додатка")}${f("compiler", "Особа, яка склала реєстр (ПІБ для підпису)")}</div></div>
@@ -937,6 +952,7 @@ async function pageFleet() {
     const settings = { ...s };
     $app.querySelectorAll("[data-k]").forEach((i) => { settings[i.dataset.k] = i.value.trim(); });
     settings.show_blago = $app.querySelector(".js-blago").checked;
+    settings.start_by_mvo = $app.querySelector(".js-smvo").checked;
     if (custom()) {
       const list = [...sbody.querySelectorAll("tr")].map(readSrc);
       if (!list.length) { flash("err", "Додайте хоча б одне джерело пального або оберіть стандартні."); return render(); }
@@ -1236,8 +1252,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

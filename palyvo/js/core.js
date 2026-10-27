@@ -158,6 +158,14 @@ export function vehicleSources(v, e, sources) {
     (!ee.iss && LEGACY_IDS.includes(id) && !isBlank(ee[id]) && Number(ee[id]) !== 0);
   return sources.filter((s) => s.id === v.source || has(s.id) || (s.active && sourceFits(s, v)));
 }
+/** МВО, між якими можна розбити залишок авто (з джерел авто). */
+export function vehicleMvos(list) { return [...new Set(list.map((s) => String(s.mvo || "").trim()).filter(Boolean))]; }
+/** Залишок за МВО (сума за джерелами), напр. для перенесення в наступний місяць. */
+export function byMvo(r, which = "end") {
+  const by = which === "start" ? r.startBy : r.endBy, out = {};
+  for (const s of r.sources) { const c = by[s.id] || 0; if (c && s.mvo) out[s.mvo] = (out[s.mvo] || 0) + c; }
+  return out;
+}
 /** Основне джерело авто (куди йде витрата в першу чергу). */
 export function mainSource(v, list) {
   return list.find((s) => s.id === v.source) || list.find((s) => sourceFits(s, v)) || list[0];
@@ -170,14 +178,32 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
     capped: false, errors: [], warnings: [], empty: true, legacy: !!sources.legacy && !e.split };
-  // --- старий формат запису → новий
-  const startMap = e.start || (isBlank(e.fuel_start) ? {} : { [main ? main.id : "smk"]: e.fuel_start });
+  // --- залишок на початок: загальний (fuel_start) + за потреби розбивка за МВО (start_mvo);
+  //     старі записи з розбивкою за джерелами (start: {джерело: л}) читаються як є
+  const hasStartMap = e.start && Object.values(e.start).some((x) => !isBlank(x)) && isBlank(e.fuel_start);
   const issMap = e.iss || Object.fromEntries(LEGACY_IDS.map((k) => [k, e[k]]));
   for (const s of list) {
-    r.startBy[s.id] = toC(startMap[s.id]); r.startC += r.startBy[s.id];
+    r.startBy[s.id] = hasStartMap ? toC(e.start[s.id]) : 0;
     r.issued[s.id] = toC(issMap[s.id]); r.issuedC += r.issued[s.id];
     r.consBy[s.id] = 0;
   }
+  r.startSplit = hasStartMap && Object.values(e.start).filter((x) => toC(x) > 0).length > 1;
+  if (!hasStartMap) {
+    const T = toC(e.fuel_start);
+    const split = Object.entries(e.start_mvo || {}).filter(([, x]) => !isBlank(x));
+    let sum = 0;
+    for (const [mv, x] of split) {
+      const c = toC(x); sum += c; if (!c) continue;
+      const tgt = (main && main.mvo === mv ? main : null) || list.find((s) => s.mvo === mv && sourceFits(s, vehicle)) || list.find((s) => s.mvo === mv);
+      if (!tgt) { r.errors.push(`Залишок за МВО ${mv}: у авто немає джерела цієї МВО.`); continue; }
+      r.startBy[tgt.id] += c;
+    }
+    if (split.length && sum !== T)
+      r.errors.push(`Розбивка залишку на початок за МВО (${fmtC(sum)} л) не дорівнює загальному залишку (${fmtC(T)} л).`);
+    if (main && T > sum) r.startBy[main.id] += T - sum;
+    r.startSplit = split.some(([, x]) => toC(x) > 0);
+  }
+  for (const s of list) r.startC += r.startBy[s.id];
   r.empty = [e.odo_start, e.odo_end, e.consumed_manual].every((x) => isBlank(x) || Number(x) === 0) && r.startC === 0 && r.issuedC === 0;
   // --- пробіг і витрата за нормою
   const s0 = e.odo_start, s1 = e.odo_end;
@@ -231,6 +257,10 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
 /** «Вид пального на залишку»: «125 А-95 с/к UKRNAFTA Мосійченко + 167 …». */
 export function balanceText(r, which = "end", settings = {}) {
   const by = which === "start" ? r.startBy : r.endBy;
+  if (which === "start" && !r.startSplit) {           // загальний залишок — лише вид пального
+    const m = r.sources.find((s) => s.id === r.mainId);
+    return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
+  }
   const parts = r.sources.filter((s) => by[s.id] > 0).map((s) => `${fmtC(by[s.id])} ${sourceLabelFor(s, r.vehicle, settings)}`);
   if (parts.length) return parts.join(" + ");
   const m = r.sources.find((s) => s.id === r.mainId);
@@ -297,9 +327,17 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
     const pe = prevMonth.entries[v.id];
     if (!pe) continue;
     const r = calcRow(v, pe, prevSources);
-    const start = {};
-    for (const [id, c] of Object.entries(r.endBy)) if (c !== 0) start[id] = c / 100;
-    out[v.id] = { odo_start: isBlank(pe.odo_end) ? null : pe.odo_end, start, iss: {} };
+    const odo = isBlank(pe.odo_end) ? null : pe.odo_end;
+    if (sources.legacy) {
+      const start = {};
+      for (const [id, c] of Object.entries(r.endBy)) if (c !== 0) start[id] = c / 100;
+      out[v.id] = { odo_start: odo, start, iss: {} };
+    } else {
+      // загальний залишок + розбивка за МВО, якщо на кінець пальне було в кількох МВО
+      const bm = byMvo(r, "end"), mv = Object.keys(bm).filter((k) => bm[k] > 0);
+      out[v.id] = { odo_start: odo, fuel_start: r.endC ? r.endC / 100 : null, start: {}, iss: {},
+        ...(mv.length > 1 ? { start_mvo: Object.fromEntries(mv.map((k) => [k, bm[k] / 100])) } : {}) };
+    }
   }
   return out;
 }
@@ -314,11 +352,13 @@ export function cleanEntry(raw = {}) {
   const out = { manual: !!raw.manual, split: !!raw.split };
   for (const f of ["odo_start", "odo_end"]) { const x = num2(raw[f]); out[f] = x === null ? null : Math.round(x); }
   out.consumed_manual = num2(raw.consumed_manual);
-  for (const m of ["start", "iss", "cons"]) {
+  if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
+  for (const m of ["start", "iss", "cons", "start_mvo"]) {
     out[m] = {};
     for (const [k, v] of Object.entries(raw[m] || {})) { const x = num2(v); if (x !== null) out[m][k] = x; }
   }
   if (!out.split) delete out.cons;
+  if (!Object.keys(out.start_mvo).length) delete out.start_mvo;
   return out;
 }
 

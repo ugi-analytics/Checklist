@@ -294,3 +294,5 @@ table.list th, table.list td { border-bottom-color: rgba(96,165,250,.14); }
 .frc.split .srct .js-ci { display:inline-block; }
 .frc.split .srct .js-c { display:none; }
 @media (max-width: 1150px) { .frc .grid.ext { grid-template-columns: 1fr 1fr; } .frc .grid.ext > :nth-child(3) { grid-column: 1 / -1; } }
+.srct .sr .sp { display:flex; flex-direction:column; justify-content:flex-end; padding-bottom:6px; }
+.srct .sr .sp b { color:#fff; font-size:.92rem; }
