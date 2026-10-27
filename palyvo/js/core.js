@@ -16,6 +16,8 @@ export const LEGACY_SOURCES = [
   { id: "smk", form: "с/к", fuel: "", supplier: "", mvo: "", label: "см/к" },
   { id: "azs_smk", form: "АЗС налив", fuel: "", supplier: "", mvo: "", label: "АЗС налив" },
 ];
+/** Коротка форма для опису залишку. */
+export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС" };
 export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS"];
 /** Авто без основного джерела (заправляється з різних): витрата ділиться між джерелами пропорційно до наявного. */
 export const NO_MAIN = "-";
@@ -372,7 +374,16 @@ export function balanceText(r, which = "end", settings = {}) {
     const m = r.sources.find((s) => s.id === r.mainId);
     return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
   }
-  const items = r.sources.filter((s) => by[s.id] > 0).map((s) => ({ mvo: sourceFor(s, r.vehicle, settings).mvo, t: `${fmtC(by[s.id])} ${sourceLabelFor(s, r.vehicle, settings)}` }));
+  // залишок: кількість, вид пального, форма (с/к, т, АЗС) і МВО — без постачальника; однакові — разом
+  const items = [];
+  for (const s of r.sources) {
+    if (!(by[s.id] > 0)) continue;
+    const f = sourceFor(s, r.vehicle, settings);
+    const lab = [f.fuel, FORM_SHORT[f.form] || f.form, f.mvo].filter(Boolean).join(" ");
+    const same = items.find((x) => x.lab === lab);
+    if (same) same.c += by[s.id]; else items.push({ mvo: f.mvo, lab, c: by[s.id] });
+  }
+  items.forEach((x) => { x.t = `${fmtC(x.c)} ${x.lab}`; });
   // давні талони — як написано вручну (кількість — що лишилось), поруч із пальним свого МВО
   for (const k of r.keep || []) {
     const q = which === "start" ? k.c : k.left; if (q <= 0) continue;
