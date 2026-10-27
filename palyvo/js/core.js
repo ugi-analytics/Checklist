@@ -292,6 +292,8 @@ function propTake(r, arr, left, availBy) {
 /** «Вид пального на залишку»: «125 А-95 с/к UKRNAFTA Мосійченко + 167 …». */
 export function balanceText(r, which = "end", settings = {}) {
   const by = which === "start" ? r.startBy : r.endBy;
+  const own = String(((r.entry || {})[which === "start" ? "start_text" : "end_text"]) || "").trim();
+  if (own) return own;                                // довільний опис, введений вручну
   if (which === "start" && !r.startSplit) {           // загальний залишок — лише вид пального
     const m = r.sources.find((s) => s.id === r.mainId);
     return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
@@ -370,8 +372,10 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
     } else {
       // загальний залишок + розбивка за МВО, якщо на кінець пальне було в кількох МВО
       const bm = byMvo(r, "end"), mv = Object.keys(bm).filter((k) => bm[k] > 0);
+      // довільний опис залишку на кінець переходить у опис залишку на початок
+      const endText = String(pe.end_text || "").trim() || (mv.length > 1 ? balanceText(r, "end") : "");
       out[v.id] = { odo_start: odo, fuel_start: r.endC ? r.endC / 100 : null, start: {}, iss: {},
-        ...(mv.length > 1 ? { start_mvo: Object.fromEntries(mv.map((k) => [k, bm[k] / 100])) } : {}) };
+        ...(endText ? { start_text: endText } : {}) };
     }
   }
   return out;
@@ -388,6 +392,7 @@ export function cleanEntry(raw = {}) {
   for (const f of ["odo_start", "odo_end"]) { const x = num2(raw[f]); out[f] = x === null ? null : Math.round(x); }
   out.consumed_manual = num2(raw.consumed_manual);
   if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
+  for (const t of ["start_text", "end_text"]) { const x = String(raw[t] || "").trim().slice(0, 300); if (x) out[t] = x; }
   for (const m of ["start", "iss", "cons", "start_mvo"]) {
     out[m] = {};
     for (const [k, v] of Object.entries(raw[m] || {})) { const x = num2(v); if (x !== null) out[m][k] = x; }

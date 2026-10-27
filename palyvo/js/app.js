@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027i";
-import * as U from "./ui.js?v=20261027i";
-import { litresWords } from "./words.js?v=20261027i";
-import { buildRegister, buildAct } from "./docs.js?v=20261027i";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027i";
-import * as X from "./crypto.js?v=20261027i";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027i";
-import { buildXlsx } from "./xlsx.js?v=20261027i";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027i";
+import * as C from "./core.js?v=20261027k";
+import * as U from "./ui.js?v=20261027k";
+import { litresWords } from "./words.js?v=20261027k";
+import { buildRegister, buildAct } from "./docs.js?v=20261027k";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027k";
+import * as X from "./crypto.js?v=20261027k";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027k";
+import { buildXlsx } from "./xlsx.js?v=20261027k";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027k";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -607,18 +607,16 @@ async function pageEntry(q) {
           <div class="sp"><label>Початок</label><b class="js-s">${C.fmtC(r.startBy[x.id] || 0)}</b></div></div>
         <div class="sc"><span>Витрачено <b class="js-c">${C.fmtC(r.consBy[x.id] || 0)}</b>${inp("cons." + x.id, e.split && e.cons ? e.cons[x.id] : lv(r.consBy[x.id]), "0", "0.01", "js-ci")}</span>
           <span>Кінець <b class="js-e">${C.fmtC(r.endBy[x.id] || 0)}</b></span></div></div>`).join("")}</div>
-      ${extra.length ? `<button type="button" class="btn sm js-more" style="margin-top:6px">＋ інші джерела (${extra.length}) — з іншим видом пального</button>` : ""}`;
+      ${extra.length ? `<button type="button" class="btn sm js-more" style="margin-top:6px">＋ інші джерела (${extra.length}) — з іншим видом пального</button>` : ""}
+      ${endTxt(r, e)}`;
   };
-  const byMvoSet = !simple;   // розбивка за МВО — завжди, якщо в авто джерела кількох МВО
-  // розбивка залишку на початок за МВО (напр. БКС): поля на кожну МВО з джерел авто
-  const mvoStart = (r, e) => {
-    let mv = C.vehicleMvos(r.sources);
-    if (mv.length < 2) mv = [...new Set([...mv, ...C.vehicleMvos(SRC.filter((x) => x.active))])];
-    if (!(byMvoSet || e.start_mvo) || mv.length < 2) return "";
-    const pre = e.start_mvo || (e.start && Object.keys(e.start).length ? C.byMvo(r, "start") : {});
-    const val = (m) => (e.start_mvo ? e.start_mvo[m] ?? "" : pre[m] ? C.cToNum(pre[m]) : "");
-    return mv.map((m) => `<div class="mvo"><label title="Залишок на початок у МВО ${esc(m)}">у т.ч. ${esc(m)}</label>${inp("start_mvo." + m, val(m), "0")}</div>`).join("");
-  };
+  // довільний опис залишку (напр. БКС: «125 А-95 с/к UKRNAFTA Мосійченко + 197 … Левошко») — для авто, де кілька МВО
+  const multiMvo = (r) => !simple && new Set([...C.vehicleMvos(r.sources), ...C.vehicleMvos(SRC.filter((x) => x.active))]).size > 1;
+  const txt = (name, val, ph, rows = 2) => `<textarea name="${name}" rows="${rows}" placeholder="${esc(ph)}" class="vtxt">${esc(val || "")}</textarea>`;
+  const startTxt = (r, e) => (multiMvo(r) || e.start_text ? `<div class="mvo" style="margin-top:6px"><label title="Що стоїть у графі «вид» залишку на початок у «Додатку 6» — пишіть як потрібно">Вид залишку на початок / МВО (довільно)</label>
+      ${txt("start_text", e.start_text, "напр. 125 А-95 с/к UKRNAFTA Мосійченко + 197 А-95 BVS Левошко", 3)}</div>` : "");
+  const endTxt = (r, e) => (multiMvo(r) || e.end_text ? `<div class="mvo endt"><label title="Якщо порожньо — рахується автоматично за джерелами">Вид залишку на кінець / МВО (довільно; якщо порожньо — автоматично)</label>
+      ${txt("end_text", e.end_text, C.balanceText({ ...r, entry: { ...e, end_text: "" } }, "end", unit.settings))}</div>` : "");
   const cards = st.vehicles.map((v) => {
     const e = entries[v.id] || {};
     const r = C.calcRow(v, e, SRC); const s = C.statusOf(r, e);
@@ -627,13 +625,10 @@ async function pageEntry(q) {
       <div><div class="fr-h">Пробіг і залишок на початок</div>${simple ? `<div class="f3">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        <div><label>Залишок, л</label>${inp("start." + r.mainId, lv(r.startC), "л")}</div></div>` : (() => { const ms = mvoStart(r, e); return ms ? `<div class="f2">
-        <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
-        <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div></div>
-        <div class="f3" style="margin-top:6px"><div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div>${ms}</div>` : `<div class="f3">
+        <div><label>Залишок, л</label>${inp("start." + r.mainId, lv(r.startC), "л")}</div></div>` : `<div class="f3">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>`; })()}
+        <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>${startTxt(r, e)}`}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
@@ -660,7 +655,7 @@ async function pageEntry(q) {
   const vmap = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
   const readCard = (card) => {
     const e = { start: {}, iss: {}, cons: {}, start_mvo: {} };
-    card.querySelectorAll("input[name]").forEach((i) => {
+    card.querySelectorAll("input[name], textarea[name]").forEach((i) => {
       const val = i.type === "checkbox" ? i.checked : i.value;
       const dot = i.name.indexOf(".");
       if (dot > 0) e[i.name.slice(0, dot)][i.name.slice(dot + 1)] = val; else e[i.name] = val;
@@ -708,7 +703,7 @@ async function pageEntry(q) {
       ev.target.textContent = on ? "－ сховати інші джерела" : ev.target.dataset.t;
     });
     const mb = card.querySelector(".js-more"); if (mb) mb.dataset.t = mb.textContent;
-    card.querySelectorAll("input").forEach((inp) => {
+    card.querySelectorAll("input, textarea").forEach((inp) => {
       const mark = () => { if (inp.type !== "checkbox") inp.classList.toggle("filled", inp.value !== ""); };
       mark();
       const onChange = (ms) => {
@@ -735,9 +730,9 @@ async function pageEntry(q) {
       card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
       card.querySelectorAll("input[name^='start.']").forEach((i) => { const id = i.name.slice(6); i.value = e.start && e.start[id] ? e.start[id] : ""; });
       const fs = card.querySelector("[name=fuel_start]"); if (fs) fs.value = e.fuel_start ?? "";
-      card.querySelectorAll("input[name^='start_mvo.']").forEach((i) => { const m = i.name.slice(10); i.value = e.start_mvo && e.start_mvo[m] ? e.start_mvo[m] : ""; });
+      const stx = card.querySelector("[name=start_text]"); if (stx) stx.value = e.start_text || "";
       if (simple) { const i = card.querySelector("input[name^='start.']"); if (i) i.value = Object.values(e.start || {}).reduce((a, b) => a + b, 0) || ""; }
-      card.querySelectorAll("input").forEach((i) => { if (i.type !== "checkbox") i.classList.toggle("filled", i.value !== ""); });
+      card.querySelectorAll("input, textarea").forEach((i) => { if (i.type !== "checkbox") i.classList.toggle("filled", i.value !== ""); });
       entries[card.dataset.vid] = readCard(card); refreshCard(card); dirtyCards.add(card);
     }
     refreshKpi(); await saveNow();
@@ -1294,8 +1289,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027i")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027i")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027k")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027k")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
