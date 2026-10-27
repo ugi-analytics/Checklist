@@ -178,12 +178,33 @@ export function mainSource(v, list) {
 export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const e = entry || {};
   const list = vehicleSources(vehicle, e, sources);
-  // МВО з розбивки залишку, якої немає серед джерел авто, — додаємо її джерело (бажано того ж виду пального)
-  for (const [mv, x] of Object.entries(e.start_mvo || {})) {
-    if (isBlank(x) || !Number(x) || list.some((s) => s.mvo === mv)) continue;
-    const add = sources.find((s) => s.mvo === mv && sourceFits(s, vehicle)) || sources.find((s) => s.mvo === mv);
-    if (add) list.push(add);
+  // розбивка залишку на початок за МВО: числа (start_mvo) або довільний опис (start_text, «202 А-95 Мосійченко + 167 … Левошко»)
+  const useStartMap = e.start && Object.values(e.start).some((x) => !isBlank(x)) && isBlank(e.fuel_start);
+  const splitIn = [];          // [{mvo, c, hint}]
+  const textWarn = [];
+  if (!useStartMap) {
+    const nums = Object.entries(e.start_mvo || {}).filter(([, x]) => !isBlank(x));
+    if (nums.length) nums.forEach(([mv, x]) => splitIn.push({ mvo: mv, c: toC(x), hint: "" }));
+    else if (!sources.legacy && String(e.start_text || "").trim()) {
+      const mvos = [...new Set(sources.map((x) => String(x.mvo || "").trim()).filter(Boolean))];
+      for (const part of String(e.start_text).split("+")) {
+        const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/); if (!m) continue;   // число, але не «А-95»/«А95»
+        const low = part.toLowerCase();
+        const mv = mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0]));
+        if (!mv) { textWarn.push(`У описі залишку «${part.trim()}» не знайдено МВО з джерел — ця частина віднесена на основне джерело.`); continue; }
+        splitIn.push({ mvo: mv, c: toC(m[1].replace(",", ".")), hint: low, text: true });
+      }
+    }
   }
+  // джерело для частини залишку: та ж МВО; далі — вид пального, постачальник і форма зі слів опису
+  const pickSrc = (sp) => {
+    const cand = [...list, ...sources.filter((x) => !list.includes(x))].filter((x) => x.mvo === sp.mvo);
+    const score = (x) => (sourceFits(x, vehicle) ? 4 : 0) + (list.includes(x) ? 1 : 0) + (x.id === vehicle.source ? 1 : 0) +
+      (sp.hint && x.supplier && sp.hint.includes(x.supplier.toLowerCase()) ? 3 : 0) + (sp.hint && x.form && sp.hint.includes(x.form.toLowerCase()) ? 2 : 0) +
+      (sp.hint && x.fuel && normFuel(sp.hint).includes(normFuel(x.fuel)) ? 2 : 0);
+    return cand.sort((a, b) => score(b) - score(a))[0];
+  };
+  for (const sp of splitIn) { sp.src = sp.c ? pickSrc(sp) : null; if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
   const free = !sources.legacy && vehicle.source === NO_MAIN;
   const anchor = mainSource(free ? { ...vehicle, source: "" } : vehicle, list);   // куди йде нерозбитий залишок
   const main = free ? null : anchor;
@@ -192,7 +213,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     capped: false, errors: [], warnings: [], empty: true, legacy: !!sources.legacy && !e.split };
   // --- залишок на початок: загальний (fuel_start) + за потреби розбивка за МВО (start_mvo);
   //     старі записи з розбивкою за джерелами (start: {джерело: л}) читаються як є
-  const hasStartMap = e.start && Object.values(e.start).some((x) => !isBlank(x)) && isBlank(e.fuel_start);
+  const hasStartMap = useStartMap;
   const issMap = e.iss || Object.fromEntries(LEGACY_IDS.map((k) => [k, e[k]]));
   for (const s of list) {
     r.startBy[s.id] = hasStartMap ? toC(e.start[s.id]) : 0;
@@ -202,18 +223,25 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   r.startSplit = hasStartMap && Object.values(e.start).filter((x) => toC(x) > 0).length > 1;
   if (!hasStartMap) {
     const T = toC(e.fuel_start);
-    const split = Object.entries(e.start_mvo || {}).filter(([, x]) => !isBlank(x));
     let sum = 0;
-    for (const [mv, x] of split) {
-      const c = toC(x); sum += c; if (!c) continue;
-      const tgt = (main && main.mvo === mv ? main : null) || list.find((s) => s.mvo === mv && sourceFits(s, vehicle)) || list.find((s) => s.mvo === mv);
-      if (!tgt) { r.errors.push(`Залишок за МВО ${mv}: у авто немає джерела цієї МВО.`); continue; }
-      r.startBy[tgt.id] += c;
+    for (const sp of splitIn) {
+      sum += sp.c; if (!sp.c) continue;
+      if (!sp.src) { r.errors.push(`Залишок за МВО ${sp.mvo}: немає джерела цієї МВО.`); continue; }
+      r.startBy[sp.src.id] += sp.c;
     }
-    if (split.length && sum !== T)
-      r.errors.push(`Розбивка залишку на початок за МВО (${fmtC(sum)} л) не дорівнює загальному залишку (${fmtC(T)} л).`);
+    const isText = splitIn.some((x) => x.text);
+    if (splitIn.length && sum > T) {
+      // більше, ніж загальний залишок, — розбивку не застосовуємо
+      for (const sp of splitIn) if (sp.src) r.startBy[sp.src.id] -= sp.c;
+      sum = 0;
+      r.errors.push(`${isText ? "Сума в описі залишку на початок" : "Розбивка залишку на початок за МВО"} (${fmtC(splitIn.reduce((a, x) => a + x.c, 0))} л) більша за загальний залишок (${fmtC(T)} л).`);
+    } else if (splitIn.length && sum !== T) {
+      (isText ? r.warnings : r.errors).push(`${isText ? "Сума в описі залишку на початок" : "Розбивка залишку на початок за МВО"} (${fmtC(sum)} л) не дорівнює загальному залишку (${fmtC(T)} л)` +
+        (isText ? ` — різниця ${fmtC(T - sum)} л віднесена на основне джерело.` : "."));
+    }
+    r.warnings.push(...textWarn);
     if (anchor && T > sum) r.startBy[anchor.id] += T - sum;
-    r.startSplit = split.some(([, x]) => toC(x) > 0);
+    r.startSplit = splitIn.some((x) => x.c > 0) && sum > 0;
   }
   for (const s of list) r.startC += r.startBy[s.id];
   r.empty = [e.odo_start, e.odo_end, e.consumed_manual].every((x) => isBlank(x) || Number(x) === 0) && r.startC === 0 && r.issuedC === 0;

@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027l";
-import * as U from "./ui.js?v=20261027l";
-import { litresWords } from "./words.js?v=20261027l";
-import { buildRegister, buildAct } from "./docs.js?v=20261027l";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027l";
-import * as X from "./crypto.js?v=20261027l";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027l";
-import { buildXlsx } from "./xlsx.js?v=20261027l";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027l";
+import * as C from "./core.js?v=20261027m";
+import * as U from "./ui.js?v=20261027m";
+import { litresWords } from "./words.js?v=20261027m";
+import { buildRegister, buildAct } from "./docs.js?v=20261027m";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027m";
+import * as X from "./crypto.js?v=20261027m";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027m";
+import { buildXlsx } from "./xlsx.js?v=20261027m";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027m";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -677,6 +677,7 @@ async function pageEntry(q) {
     card.querySelector(".js-note").innerHTML = U.noteHtml(v, r, e);
     card.querySelector(".js-tank").innerHTML = U.tankHtml(r, s);
     card.querySelector(".js-msgs").innerHTML = U.msgsHtml(r);
+    const et = card.querySelector("[name=end_text]"); if (et) et.placeholder = C.balanceText({ ...r, entry: { ...e, end_text: "" } }, "end", unit.settings);
     card.querySelectorAll(".srct").forEach((t) => {
       const id = t.dataset.sid;
       t.querySelector(".js-c").textContent = C.fmtC(r.consBy[id] || 0);
@@ -1289,8 +1290,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027l")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027l")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027m")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027m")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
