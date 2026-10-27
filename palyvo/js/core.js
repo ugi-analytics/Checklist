@@ -229,6 +229,10 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const wC = toC(vehicle.winter_pct);              // надбавка % ×100
   r.normC = divHalfUp(r.km * rateC * (10000 + wC), 1000000);
   const avail = r.startC + r.issuedC;
+  // загальне правило: витрата за нормою округлюється до цілих літрів (половина — вгору);
+  // десяті/соті лишаються лише в залишку (або коли списується весь наявний залишок із сотими)
+  r.normExactC = r.normC;
+  r.normC = divHalfUp(r.normC, 100) * 100;
   const target = e.manual ? toC(e.consumed_manual) : r.normC;
   if (target > avail) {
     r.capped = true; r.consC = avail;
@@ -281,10 +285,18 @@ function propTake(r, arr, left, availBy) {
   const A = av.reduce((a, b) => a + b, 0);
   if (A <= 0 || left <= 0) return left;
   const want = Math.min(left, A);
-  const t = av.map((a) => Math.min(a, divHalfUp(want * a, A)));
+  // частки — цілими літрами, якщо витрата ціла (соті лише там, де інакше не вийде)
+  const unit = want % 100 === 0 ? 100 : 1;
+  const t = av.map((a) => Math.min(a, divHalfUp(want * a, A * unit) * unit));
   let diff = want - t.reduce((a, b) => a + b, 0);
   const idx = av.map((_, i) => i).sort((i, j) => av[j] - av[i]);
-  for (const i of idx) { if (!diff) break; const d = diff > 0 ? Math.min(diff, av[i] - t[i]) : -Math.min(-diff, t[i]); t[i] += d; diff -= d; }
+  for (const step of unit === 100 ? [100, 1] : [1]) for (const i of idx) {
+    if (!diff) break;
+    const room = diff > 0 ? av[i] - t[i] : t[i];
+    let d = Math.min(Math.abs(diff), room); if (step === 100) d = Math.floor(d / 100) * 100;
+    if (Math.abs(diff) < step) continue;
+    t[i] += diff > 0 ? d : -d; diff -= diff > 0 ? d : -d;
+  }
   arr.forEach((s, i) => { r.consBy[s.id] += t[i]; });
   return left - want;
 }
