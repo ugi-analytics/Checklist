@@ -176,6 +176,12 @@ export function mainSource(v, list) {
 export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const e = entry || {};
   const list = vehicleSources(vehicle, e, sources);
+  // МВО з розбивки залишку, якої немає серед джерел авто, — додаємо її джерело (бажано того ж виду пального)
+  for (const [mv, x] of Object.entries(e.start_mvo || {})) {
+    if (isBlank(x) || !Number(x) || list.some((s) => s.mvo === mv)) continue;
+    const add = sources.find((s) => s.mvo === mv && sourceFits(s, vehicle)) || sources.find((s) => s.mvo === mv);
+    if (add) list.push(add);
+  }
   const main = mainSource(vehicle, list);
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
