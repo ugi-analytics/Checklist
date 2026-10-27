@@ -298,3 +298,4 @@ table.list th, table.list td { border-bottom-color: rgba(96,165,250,.14); }
 .srct .sr .sp b { color:#fff; font-size:.92rem; }
 .srct.extra { display:none; border-style:dashed; opacity:.9; }
 .frc.showall .srct.extra { display:block; }
+.mvo label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#fde68a; }

@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027f";
-import * as U from "./ui.js?v=20261027f";
-import { litresWords } from "./words.js?v=20261027f";
-import { buildRegister, buildAct } from "./docs.js?v=20261027f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027f";
-import * as X from "./crypto.js?v=20261027f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027f";
-import { buildXlsx } from "./xlsx.js?v=20261027f";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027f";
+import * as C from "./core.js?v=20261027g";
+import * as U from "./ui.js?v=20261027g";
+import { litresWords } from "./words.js?v=20261027g";
+import { buildRegister, buildAct } from "./docs.js?v=20261027g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027g";
+import * as X from "./crypto.js?v=20261027g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027g";
+import { buildXlsx } from "./xlsx.js?v=20261027g";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -609,26 +609,30 @@ async function pageEntry(q) {
           <span>Кінець <b class="js-e">${C.fmtC(r.endBy[x.id] || 0)}</b></span></div></div>`).join("")}</div>
       ${extra.length ? `<button type="button" class="btn sm js-more" style="margin-top:6px">＋ інші джерела (${extra.length}) — з іншим видом пального</button>` : ""}`;
   };
-  const byMvoSet = !simple && !!unit.settings.start_by_mvo;
+  const byMvoSet = !simple && unit.settings.start_by_mvo !== false;
   // розбивка залишку на початок за МВО (напр. БКС): поля на кожну МВО з джерел авто
   const mvoStart = (r, e) => {
     const mv = C.vehicleMvos(r.sources);
     if (!(byMvoSet || e.start_mvo) || mv.length < 2) return "";
     const pre = e.start_mvo || (e.start && Object.keys(e.start).length ? C.byMvo(r, "start") : {});
     const val = (m) => (e.start_mvo ? e.start_mvo[m] ?? "" : pre[m] ? C.cToNum(pre[m]) : "");
-    return `<div class="fr-h" style="margin-top:8px">Залишок на початок за МВО, л</div><div class="f2">${mv.map((m) =>
-      `<div><label>${esc(m)}</label>${inp("start_mvo." + m, val(m), "0")}</div>`).join("")}</div>`;
+    return mv.map((m) => `<div class="mvo"><label title="Залишок на початок у МВО ${esc(m)}">у т.ч. ${esc(m)}</label>${inp("start_mvo." + m, val(m), "0")}</div>`).join("");
   };
   const cards = st.vehicles.map((v) => {
     const e = entries[v.id] || {};
     const r = C.calcRow(v, e, SRC); const s = C.statusOf(r, e);
     return `<div class="frc ${s}${e.split ? " split" : ""}" data-vid="${v.id}"><span class="saving">збережено ✓</span><div class="grid${simple ? "" : " ext"}">
       <div class="js-id">${U.idHtml(v, s, mainTitle(r))}</div>
-      <div><div class="fr-h">Пробіг і залишок на початок</div><div class="f3">
+      <div><div class="fr-h">Пробіг і залишок на початок</div>${simple ? `<div class="f3">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        <div><label>Залишок, л</label>${simple ? inp("start." + r.mainId, lv(r.startC), "л") : inp("fuel_start", lv(r.startC), "л")}</div></div>
-        ${simple ? "" : mvoStart(r, e)}
+        <div><label>Залишок, л</label>${inp("start." + r.mainId, lv(r.startC), "л")}</div></div>` : (() => { const ms = mvoStart(r, e); return ms ? `<div class="f2">
+        <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
+        <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div></div>
+        <div class="f3" style="margin-top:6px"><div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div>${ms}</div>` : `<div class="f3">
+        <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
+        <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
+        <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>`; })()}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
@@ -854,7 +858,7 @@ async function pageFleet() {
         <label class="f">Колонки джерел<select data-k="reg_columns"><option value="all" ${s.reg_columns === "used" ? "" : "selected"}>усі налаштовані джерела</option>
           <option value="used" ${s.reg_columns === "used" ? "selected" : ""}>лише ті, по яких у місяці був рух</option></select></label>
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="js-blago" ${s.show_blago === false ? "" : "checked"}> колонка «благо» у «Витрачено»</label>
-        <label style="display:flex;gap:8px;align-items:center" title="Перед заповненням місяця вказати, скільки із загального залишку на початок у кожної МВО"><input type="checkbox" class="js-smvo" ${s.start_by_mvo ? "checked" : ""}> залишок на початок із розбивкою за МВО</label>
+        <label style="display:flex;gap:8px;align-items:center" title="Перед заповненням місяця вказати, скільки із загального залишку на початок у кожної МВО"><input type="checkbox" class="js-smvo" ${s.start_by_mvo === false ? "" : "checked"}> залишок на початок із розбивкою за МВО</label>
         <label style="display:flex;gap:8px;align-items:center" title="Інакше — спочатку з основного джерела авто (залишок + видане), потім з інших"><input type="checkbox" class="js-isfirst" ${s.cons_issued_first ? "checked" : ""}> списувати спочатку видане за місяць, потім залишок</label></div></div>
     <div class="panel"><h2>📄 Реквізити бланків</h2><div class="form-grid">
       ${f("org", "Установа (шапка ліворуч)")}${f("dept", "Підрозділ (другий рядок шапки)")}${f("unit", "Графа 2 «Підрозділ» у реєстрі")}
@@ -1262,8 +1266,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
