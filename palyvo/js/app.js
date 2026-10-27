@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027s";
-import * as U from "./ui.js?v=20261027s";
-import { litresWords } from "./words.js?v=20261027s";
-import { buildRegister, buildAct } from "./docs.js?v=20261027s";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027s";
-import * as X from "./crypto.js?v=20261027s";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027s";
-import { buildXlsx } from "./xlsx.js?v=20261027s";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027s";
+import * as C from "./core.js?v=20261027t";
+import * as U from "./ui.js?v=20261027t";
+import { litresWords } from "./words.js?v=20261027t";
+import { buildRegister, buildAct } from "./docs.js?v=20261027t";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027t";
+import * as X from "./crypto.js?v=20261027t";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027t";
+import { buildXlsx } from "./xlsx.js?v=20261027t";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027t";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -97,7 +97,7 @@ function shell(content, { nav = true } = {}) {
     ${nav && isDisp() ? `<nav class="tiles">${tab("disp", "🧮", "Диспетчер · перевірка розрахунку")}</nav>` : ""}
     ${nav && me && me.status === "active" && !isDisp() ? `<nav class="tiles">
       ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
-      ${isAdmin() ? tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
+      ${isAdmin() ? tab("disp", "🧮", "Режим диспетчера") + tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
   </div></header>
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
   state.flash = null;
@@ -772,6 +772,24 @@ async function pageEntry(q) {
 // ============================================================ диспетчер
 // Бачить лише довідник авто всіх підрозділів і рахує витрату на своєму екрані: нічого не зберігається і не змінюється.
 async function pageDisp(q) {
+  // адміністратор дивиться режим диспетчера своїм ключем адміністратора (довідники — прямо з даних підрозділів)
+  if (isAdmin()) {
+    if (!state.adminPriv) {
+      shell(adminKeyForm("Режим диспетчера: щоб показати авто всіх підрозділів, введіть ключ адміністратора."));
+      bindAdminKeyForm(); return;
+    }
+    if (!state.dispCat || q.get("reload")) {
+      const units = await store.listUnits(); const cats = []; let stale = 0;
+      for (const u of units) {
+        if (!u.crypto) { stale++; continue; }
+        try { const unit = await decUnit(u, await getUnitKey(u)); publishCatalog(unit);
+          cats.push({ unit_id: u.id, unit: u.name, org: unit.settings.org, vehicles: unit.vehicles.filter((v) => v.active !== false) }); }
+        catch { stale++; }
+      }
+      state.dispCat = { cats, stale };
+    }
+    return dispView(q);
+  }
   const pub = await store.getDispPub();
   const cacheId = pub ? `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser.uid}:disp:${pub.kid}` : "";
   if (!pub) {
@@ -826,6 +844,9 @@ async function pageDisp(q) {
     cats.sort((a, b) => a.unit.localeCompare(b.unit, "uk"));
     state.dispCat = { cats, stale };
   }
+  return dispView(q);
+}
+function dispView(q) {
   const { cats, stale } = state.dispCat;
   const all = cats.flatMap((c) => c.vehicles.map((v) => ({ ...v, unit: c.unit, unit_id: c.unit_id })));
   const sel = q.get("v") ? all.find((v) => `${v.unit_id}:${v.id}` === q.get("v")) : null;
@@ -844,6 +865,7 @@ async function pageDisp(q) {
     <div class="js-dres disp-res"></div>
     <button class="btn sm js-dclear">Очистити</button></div>` : "";
   shell(`<div class="panel" style="margin-top:14px"><h2 class="display">🧮 Перевірка розрахунку</h2>
+      ${isAdmin() ? `<p class="muted">Ви бачите те саме, що диспетчер: лише довідник авто й розрахунок на екрані.</p>` : ""}
       <div class="row" style="justify-content:space-between"><input class="js-dq" placeholder="🔍 номер, марка або підрозділ" style="min-width:300px;flex:1;max-width:520px">
         <span class="muted">Авто: <b>${all.length}</b> · підрозділів: <b>${cats.length}</b>${stale ? ` · ще не оновлено: ${stale}` : ""} <a href="#/disp?reload=1" class="btn sm">⟳ Оновити</a></span></div>
       ${all.length ? "" : `<div class="flash info" style="margin-top:10px">Довідників авто ще немає. Вони з'являються, коли хтось із підрозділу відкриває портал (або адміністратор відкриває «Зведення по області»).</div>`}
@@ -1393,7 +1415,7 @@ async function render() {
   try {
     const [p1, p2] = path.split("/");
     if (p1 === "password") return pagePassword();
-    if (isDisp()) return await pageDisp(q);
+    if (isDisp() || (isAdmin() && p1 === "disp")) return await pageDisp(q);
     if (p1 === "report") return await pageReport(q);
     if (p1 === "fleet") return await pageFleet(q);
     if (p1 === "archive") return await pageArchive(q);
@@ -1439,8 +1461,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027s")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027s")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027t")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027t")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
