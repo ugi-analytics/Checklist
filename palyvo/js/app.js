@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261026h";
-import * as U from "./ui.js?v=20261026h";
-import { litresWords } from "./words.js?v=20261026h";
-import { buildRegister, buildAct } from "./docs.js?v=20261026h";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261026h";
-import * as X from "./crypto.js?v=20261026h";
-import { qrSvg } from "../vendor/qrcode.js?v=20261026h";
-import { buildXlsx } from "./xlsx.js?v=20261026h";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261026h";
+import * as C from "./core.js?v=20261027b";
+import * as U from "./ui.js?v=20261027b";
+import { litresWords } from "./words.js?v=20261027b";
+import { buildRegister, buildAct } from "./docs.js?v=20261027b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027b";
+import * as X from "./crypto.js?v=20261027b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261027b";
+import { buildXlsx } from "./xlsx.js?v=20261027b";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -493,18 +493,22 @@ async function rememberKey(unitId, dk, remember) {
 async function monthState(unit, ym) {
   const saved = await readMonth(unit, ym);
   let entries, carried = null;
+  const sources = C.monthSources(unit.settings, saved && saved.sources);
   if (saved) entries = saved.entries || {};
   else {
     const prev = await readMonth(unit, C.prevYm(ym));
-    entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} }) : {};
+    const prevSources = C.monthSources(unit.settings, prev && prev.sources);
+    entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} }, sources, prevSources) : {};
     if (prev) carried = C.prevYm(ym);
   }
-  const vehicles = C.monthVehicles(unit.vehicles, { entries, snapshot: (saved && saved.snapshot) || {} });
-  return { saved, entries, carried, vehicles };
+  const vehicles = C.monthVehicles(unit.vehicles, { entries, snapshot: (saved && saved.snapshot) || {} }, sources);
+  return { saved, entries, carried, vehicles, sources };
 }
 async function rowsFor(unit, ym) {
   const st = await monthState(unit, ym);
-  return st.vehicles.map((v) => C.calcRow(v, st.entries[v.id]));
+  const rows = st.vehicles.map((v) => C.calcRow(v, st.entries[v.id], st.sources));
+  rows.sources = st.sources;
+  return rows;
 }
 
 // ------------------------------------------------------------ ключ підрозділу: створення / введення
@@ -586,23 +590,37 @@ async function pageEntry(q) {
   const ym = currentYm(q);
   const st = await monthState(unit, ym);
   const entries = st.entries;
-  const issue = C.ISSUE_SOURCES;
-  const inp = (name, val, ph, step = "0.01") => `<input type="number" inputmode="decimal" min="0" step="${step}" name="${name}" placeholder="${ph}" value="${val ?? ""}">`;
+  const SRC = st.sources;
+  const simple = !!SRC.legacy;          // стандартні джерела: картка як раніше
+  const inp = (name, val, ph, step = "0.01", cls = "") => `<input type="number" inputmode="decimal" min="0" step="${step}" name="${name}" placeholder="${ph}" value="${val ?? ""}"${cls ? ` class="${cls}"` : ""}>`;
+  const lv = (c) => (c ? C.cToNum(c) : "");
+  const mainTitle = (r) => { const m = r.sources.find((x) => x.id === r.mainId); return m ? C.sourceTitle(m) : ""; };
+  const tiles = (v, r, e) => {
+    if (simple) {
+      return `<div class="f4">${r.sources.map((x) => `<div><label title="${esc(C.sourceTitle(x))}">${esc(C.sourceTitle(x))}</label>${inp("iss." + x.id, lv(r.issued[x.id]), "—")}</div>`).join("")}</div>`;
+    }
+    return `<div class="srcs">${r.sources.map((x) => `<div class="srct${x.id === r.mainId ? " main" : ""}" data-sid="${x.id}">
+        <div class="st" title="${esc(C.sourceTitle(x))}">${esc(C.sourceTitle(x))}${x.id === r.mainId ? ` <span class="mb">основне</span>` : ""}</div>
+        <div class="sr"><div><label>Залишок</label>${inp("start." + x.id, lv(r.startBy[x.id]), "0")}</div>
+          <div><label>Видано</label>${inp("iss." + x.id, lv(r.issued[x.id]), "—")}</div></div>
+        <div class="sc"><span>Витрачено <b class="js-c">${C.fmtC(r.consBy[x.id])}</b>${inp("cons." + x.id, e.split && e.cons ? e.cons[x.id] : lv(r.consBy[x.id]), "0", "0.01", "js-ci")}</span>
+          <span>Кінець <b class="js-e">${C.fmtC(r.endBy[x.id])}</b></span></div></div>`).join("")}</div>`;
+  };
   const cards = st.vehicles.map((v) => {
     const e = entries[v.id] || {};
-    const r = C.calcRow(v, e); const s = C.statusOf(r, e);
-    return `<div class="frc ${s}" data-vid="${v.id}"><span class="saving">збережено ✓</span><div class="grid">
-      <div class="js-id">${U.idHtml(v, s)}</div>
-      <div><div class="fr-h">Пробіг і залишок на початок</div><div class="f3">
+    const r = C.calcRow(v, e, SRC); const s = C.statusOf(r, e);
+    return `<div class="frc ${s}${e.split ? " split" : ""}" data-vid="${v.id}"><span class="saving">збережено ✓</span><div class="grid${simple ? "" : " ext"}">
+      <div class="js-id">${U.idHtml(v, s, mainTitle(r))}</div>
+      <div><div class="fr-h">${simple ? "Пробіг і залишок на початок" : "Пробіг"}</div><div class="${simple ? "f3" : "f2"}">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        <div><label>Залишок, л</label>${inp("fuel_start", e.fuel_start, "л")}</div></div>
+        ${simple ? `<div><label>Залишок, л</label>${inp("start." + r.mainId, lv(r.startC), "л")}</div>` : ""}</div>
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
-      <div><div class="fr-h">Видано палива, л</div><div class="f4">
-        ${issue.map(([k, l]) => `<div><label title="${l}">${l}</label>${inp(k, e[k], "—")}</div>`).join("")}</div>
+      <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
           <div class="manual"><label style="display:flex;gap:6px;align-items:center;margin:0;color:#cbd5e1"><input type="checkbox" name="manual" ${e.manual ? "checked" : ""}> ввести витрату вручну</label>
-            <input type="number" inputmode="decimal" min="0" step="0.01" name="consumed_manual" placeholder="витрачено, л" value="${e.consumed_manual ?? ""}" ${e.manual ? "" : 'style="display:none"'}></div></div></div>
+            <input type="number" inputmode="decimal" min="0" step="0.01" name="consumed_manual" placeholder="витрачено, л" value="${e.consumed_manual ?? ""}" ${e.manual ? "" : 'style="display:none"'}>
+            ${simple || r.sources.length < 2 ? "" : `<label style="display:flex;gap:6px;align-items:center;margin:0;color:#cbd5e1" title="Вказати, скільки витрачено з кожного джерела (МВО)"><input type="checkbox" name="split" ${e.split ? "checked" : ""}> розподілити витрату вручну</label>`}</div></div></div>
       <div class="js-tank">${U.tankHtml(r, s)}</div></div>
       <div class="js-msgs">${U.msgsHtml(r)}</div></div>`;
   }).join("");
@@ -621,21 +639,36 @@ async function pageEntry(q) {
 
   const cardEls = [...$app.querySelectorAll(".frc")];
   const vmap = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
-  const readCard = (card) => { const e = {}; card.querySelectorAll("input[name]").forEach((i) => { e[i.name] = i.type === "checkbox" ? i.checked : i.value; }); return C.cleanEntry(e); };
+  const readCard = (card) => {
+    const e = { start: {}, iss: {}, cons: {} };
+    card.querySelectorAll("input[name]").forEach((i) => {
+      const val = i.type === "checkbox" ? i.checked : i.value;
+      const dot = i.name.indexOf(".");
+      if (dot > 0) e[i.name.slice(0, dot)][i.name.slice(dot + 1)] = val; else e[i.name] = val;
+    });
+    return C.cleanEntry(e);
+  };
+  const calc = (v) => C.calcRow(v, entries[v.id], SRC);
   const refreshKpi = () => {
-    const rows = st.vehicles.map((v) => C.calcRow(v, entries[v.id]));
+    const rows = st.vehicles.map(calc);
     const sts = rows.map((r, i) => C.statusOf(r, entries[st.vehicles[i].id] || {}));
     $app.querySelector("#kpi").innerHTML = U.kpiHtml(rows, sts, C.MONTHS_UA[C.parseYm(ym)[1] - 1]);
   };
   const refreshCard = (card) => {
     const v = vmap[card.dataset.vid]; const e = entries[v.id] || {};
-    const r = C.calcRow(v, e); const s = C.statusOf(r, e);
-    card.className = "frc " + s;
-    card.querySelector(".js-id").innerHTML = U.idHtml(v, s);
+    const r = calc(v); const s = C.statusOf(r, e);
+    card.className = "frc " + s + (e.split ? " split" : "");
+    card.querySelector(".js-id").innerHTML = U.idHtml(v, s, mainTitle(r));
     card.querySelector(".js-km").innerHTML = r.empty ? "" : U.kmHtml(v, r);
     card.querySelector(".js-note").innerHTML = U.noteHtml(v, r, e);
     card.querySelector(".js-tank").innerHTML = U.tankHtml(r, s);
     card.querySelector(".js-msgs").innerHTML = U.msgsHtml(r);
+    card.querySelectorAll(".srct").forEach((t) => {
+      const id = t.dataset.sid;
+      t.querySelector(".js-c").textContent = C.fmtC(r.consBy[id] || 0);
+      t.querySelector(".js-e").textContent = C.fmtC(r.endBy[id] || 0);
+      t.classList.toggle("neg", (r.endBy[id] || 0) < 0);
+    });
   };
   let timer = null; let dirtyCards = new Set();
   const saveNow = async () => {
@@ -643,7 +676,7 @@ async function pageEntry(q) {
     const ss = $app.querySelector(".js-savestate");
     try {
       const snapshot = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
-      await writeMonth(unit, ym, { entries, snapshot });
+      await writeMonth(unit, ym, { entries, snapshot, sources: SRC.map((x) => ({ ...x })) });
       touched.forEach((c) => { const s = c.querySelector(".saving"); s.classList.add("on"); setTimeout(() => s.classList.remove("on"), 1200); });
       if (ss) ss.textContent = "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
     } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
@@ -656,6 +689,11 @@ async function pageEntry(q) {
       const onChange = (ms) => {
         mark();
         if (inp.name === "manual") card.querySelector("[name=consumed_manual]").style.display = inp.checked ? "" : "none";
+        if (inp.name === "split" && inp.checked) {
+          // ручний розподіл стартує з поточного автоматичного
+          const r = calc(vmap[card.dataset.vid]);
+          card.querySelectorAll(".js-ci").forEach((ci) => { const id = ci.name.slice(5); ci.value = r.consBy[id] ? C.cToNum(r.consBy[id]) : ""; });
+        }
         entries[card.dataset.vid] = readCard(card); refreshCard(card); refreshKpi(); schedule(card, ms);
       };
       inp.addEventListener("input", () => onChange(800));
@@ -666,10 +704,12 @@ async function pageEntry(q) {
   $app.querySelector(".js-prev")?.addEventListener("click", async () => {
     if (!confirm("Перезаписати «Пробіг на початок» і «Залишок на початок» значеннями на кінець попереднього місяця?")) return;
     const prev = await readMonth(unit, C.prevYm(ym));
-    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} });
+    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} }, SRC, C.monthSources(unit.settings, prev.sources));
     for (const card of cardEls) {
       const e = co[card.dataset.vid]; if (!e) continue;
-      card.querySelector("[name=odo_start]").value = e.odo_start ?? ""; card.querySelector("[name=fuel_start]").value = e.fuel_start ?? "";
+      card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
+      card.querySelectorAll("input[name^='start.']").forEach((i) => { const id = i.name.slice(6); i.value = e.start && e.start[id] ? e.start[id] : ""; });
+      if (simple) { const i = card.querySelector("input[name^='start.']"); if (i) i.value = Object.values(e.start || {}).reduce((a, b) => a + b, 0) || ""; }
       card.querySelectorAll("input").forEach((i) => { if (i.type !== "checkbox") i.classList.toggle("filled", i.value !== ""); });
       entries[card.dataset.vid] = readCard(card); refreshCard(card); dirtyCards.add(card);
     }
@@ -677,8 +717,8 @@ async function pageEntry(q) {
   });
   $app.querySelector(".js-reg").addEventListener("click", async () => {
     clearTimeout(timer); if (dirtyCards.size) await saveNow();
-    const rows = st.vehicles.map((v) => C.calcRow(v, entries[v.id]));
-    await download(buildRegister(window.docx, unit.settings, ym, rows), `Додаток_6_Реєстр_пального_${ym}.docx`);
+    const rows = st.vehicles.map(calc);
+    await download(buildRegister(window.docx, unit.settings, ym, rows, SRC), `Додаток_6_Реєстр_пального_${ym}.docx`);
     store.log("doc_register", ym, unit.id);
   });
   window.onbeforeunload = () => (dirtyCards.size ? "Є незбережені зміни" : undefined);
@@ -690,36 +730,42 @@ async function pageReport(q) {
   if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
   const ym = currentYm(q);
   const rows = await rowsFor(unit, ym);
+  const S = unit.settings;
   const nErr = rows.reduce((a, r) => a + r.errors.length, 0);
-  const acts = Object.entries(C.ACT_GROUPS).map(([g, meta]) => {
-    const lines = C.actGroups(rows, g); const tot = lines.reduce((a, l) => a + l.qtyC, 0);
-    return `<div class="act"><h3>Акт «${meta.title}»</h3><div class="big">${C.fmtC(tot)} л</div>
-      ${lines.length ? `<ul>${lines.map((l) => `<li>${esc(l.fuel)} ${esc(l.supplier)} — ${C.fmtC(l.qtyC)} л (МВО ${esc(l.mvo)})</li>`).join("")}</ul>
-        <p class="muted">«${litresWords(tot)}»</p><button class="btn sky js-act" data-g="${g}">📥 Завантажити акт (Word)</button>`
+  const lay = C.registerLayout(rows, rows.sources, S);
+  const actList = C.actList(rows, S);
+  const acts = actList.map((a, i) => {
+    const tot = a.lines.reduce((x, l) => x + l.qtyC, 0);
+    return `<div class="act"><h3>Акт «${esc(a.title)}»</h3><div class="big">${C.fmtC(tot)} л</div>
+      ${a.lines.length ? `<ul>${a.lines.map((l) => `<li>${esc(l.fuel)} ${esc(l.supplier)} — ${C.fmtC(l.qtyC)} л (МВО ${esc(l.mvo)})</li>`).join("")}</ul>
+        <p class="muted">«${litresWords(tot)}»</p><button class="btn sky js-act" data-i="${i}">📥 Завантажити акт (Word)</button>`
         : `<p class="muted">Немає пального до списання.</p>`}</div>`;
   }).join("");
+  const multi = actList.some((a) => a.mvo);
   shell(`<div style="margin-top:14px">${monthPicker(ym, "#/report")}</div>
-    <div class="panel"><h2>${esc(unit.settings.title)} за ${C.monthTitle(ym)}</h2>
+    <div class="panel"><h2>${esc(S.title)} за ${C.monthTitle(ym)}</h2>
       ${nErr ? `<div class="flash err">У даних є помилки (${nErr}) — перевірте картки на вкладці «Введення даних».</div>` : ""}
-      ${rows.length ? `<div class="tblwrap">${U.previewHtml(rows, unit.settings.unit)}</div>
-        <p class="muted">* дані графи № 12 повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.<br>
-          * дані графи № 17 повинні відповідати кількості пального в акті списання.<br>
-          Підпис особи, яка склала реєстр: ${esc(unit.settings.compiler || "— (вкажіть у «Автопарк і реквізити»)")}</p>
+      ${rows.length ? `<div class="tblwrap">${U.previewHtml(rows, S, rows.sources)}</div>
+        <p class="muted">* дані графи № ${lay.issTotalNo} повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.<br>
+          * дані графи № ${lay.consTotalNo} повинні відповідати кількості пального в акті списання.<br>
+          Підпис особи, яка склала реєстр: ${esc(S.compiler || "— (вкажіть у «Автопарк і реквізити»)")}</p>
         <button class="btn primary js-reg">📥 Завантажити реєстр «Додаток 6» (Word)</button>` : `<p class="muted">Немає даних за цей місяць.</p>`}</div>
     <div class="panel"><h2>🧾 Акти списання пального</h2>
-      <p class="muted">Два окремі акти: «Талони + см/к» (графи 9, 10) та «АЗС» (АЗС ГУНП талони, АЗС налив — графи 8, 11).
-        Витрата авто розноситься між ними пропорційно до виданого за місяць; якщо нічого не видано — за основним джерелом списання.
+      <p class="muted">Окремі акти: «Талони + см/к» (талони, смарт-картки) та «АЗС» (АЗС ГУНП талони, АЗС налив)${multi ? " — і окремо на кожну МВО" : ""}.
+        ${rows.sources.legacy ? "Витрата авто розноситься між ними пропорційно до виданого за місяць; якщо нічого не видано — за основним джерелом списання."
+          : "Кількість у акті — це витрачене з відповідних джерел (графи «Витрачено»)."}
         Номер, дати, ціна й сума лишаються порожніми.</p><div class="acts">${acts}</div></div>`);
   bindMonthPicker();
   $app.querySelector(".js-reg")?.addEventListener("click", async () => {
-    await download(buildRegister(window.docx, unit.settings, ym, rows), `Додаток_6_Реєстр_пального_${ym}.docx`); store.log("doc_register", ym, unit.id);
+    await download(buildRegister(window.docx, S, ym, rows, rows.sources), `Додаток_6_Реєстр_пального_${ym}.docx`); store.log("doc_register", ym, unit.id);
   });
   $app.querySelectorAll(".js-act").forEach((b) => b.addEventListener("click", async () => {
-    const g = b.dataset.g;
-    await download(buildAct(window.docx, unit.settings, ym, rows, g), `Акт_списання_${C.ACT_GROUPS[g].file}_${ym}.docx`);
-    store.log("doc_act", `${g} ${ym}`, unit.id);
+    const a = actList[Number(b.dataset.i)];
+    await download(buildAct(window.docx, S, ym, a), actFileName(a, ym));
+    store.log("doc_act", `${a.group}${a.mvo ? " " + a.mvo : ""} ${ym}`, unit.id);
   }));
 }
+const actFileName = (a, ym) => `Акт_списання_${C.ACT_GROUPS[a.group].file}${a.mvo ? "_" + String(a.mvo).replace(/[^\p{L}\d]+/gu, "_") : ""}_${ym}.docx`;
 
 // ============================================================ архів
 async function pageArchive() {
@@ -727,9 +773,11 @@ async function pageArchive() {
   if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
   const months = (await listMonthsDec(unit)).reverse();
   const recs = months.map((m) => {
-    const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} });
-    const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id]));
-    const acts = Object.fromEntries(Object.keys(C.ACT_GROUPS).map((g) => [g, C.actGroups(rows, g).reduce((a, l) => a + l.qtyC, 0)]));
+    const sources = C.monthSources(unit.settings, m.sources);
+    const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} }, sources);
+    const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id], sources));
+    rows.sources = sources;
+    const acts = C.actList(rows, unit.settings).filter((a) => a.lines.length);
     return { ym: m.ym, rows, t: C.totals(rows), acts };
   });
   shell(`<div class="panel"><h2>🗂️ Архів місяців</h2>${recs.length ? `<table class="list"><thead><tr><th>Місяць</th><th class="num">Авто</th>
@@ -737,12 +785,12 @@ async function pageArchive() {
     ${recs.map((r) => `<tr><td><a href="#/entry?ym=${r.ym}">${C.monthTitle(r.ym)}</a></td><td class="num">${r.rows.length}</td><td class="num">${C.fmtKm(r.t.km)}</td>
       <td class="num">${C.fmtC(r.t.issuedC)}</td><td class="num">${C.fmtC(r.t.consC)}</td><td class="num">${C.fmtC(r.t.endC)}</td>
       <td><button class="btn sm js-doc" data-ym="${r.ym}" data-k="reg">Реєстр</button>
-        ${Object.entries(C.ACT_GROUPS).map(([g, meta]) => `<button class="btn sm js-doc ${r.acts[g] > 0 ? "" : "disabled"}" data-ym="${r.ym}" data-k="${g}">Акт «${meta.title}»</button>`).join(" ")}</td></tr>`).join("")}
+        ${r.acts.map((a, i) => `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="${i}">Акт «${esc(a.title)}»</button>`).join(" ")}</td></tr>`).join("")}
     </tbody></table>` : `<p class="muted">Збережених місяців ще немає.</p>`}</div>`);
   $app.querySelectorAll(".js-doc").forEach((b) => b.addEventListener("click", async () => {
     const r = recs.find((x) => x.ym === b.dataset.ym); const k = b.dataset.k;
-    if (k === "reg") await download(buildRegister(window.docx, unit.settings, r.ym, r.rows), `Додаток_6_Реєстр_пального_${r.ym}.docx`);
-    else await download(buildAct(window.docx, unit.settings, r.ym, r.rows, k), `Акт_списання_${C.ACT_GROUPS[k].file}_${r.ym}.docx`);
+    if (k === "reg") await download(buildRegister(window.docx, unit.settings, r.ym, r.rows, r.rows.sources), `Додаток_6_Реєстр_пального_${r.ym}.docx`);
+    else { const a = r.acts[Number(k)]; await download(buildAct(window.docx, unit.settings, r.ym, a), actFileName(a, r.ym)); }
   }));
 }
 
@@ -763,9 +811,27 @@ async function pageFleet() {
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr><th style="min-width:200px">Марка, ДНЗ</th><th>Норма, л/100 км</th><th>Надбавка, %</th>
-        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th>АЗС</th><th>Джерело списання</th><th style="min-width:170px">МВО (графа 19)</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th>АЗС</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px">➕ Додати авто</button>
-      <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist></div>
+      <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
+      <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist></div>
+    <div class="panel"><h2>⛽ Джерела пального</h2>
+      <p class="muted">Звідки підрозділ отримує пальне: кожне джерело — окрема колонка «Видано» й «Витрачено» в «Додатку 6» і окремий залишок у баку.
+        Невеликим підрозділам досить стандартних джерел. Якщо пальне видають кілька МВО, різні АЗС чи постачальники — увімкніть свої джерела.</p>
+      <div class="row" style="gap:18px;margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="std" ${s.sources && s.sources.length ? "" : "checked"}> Стандартні (АЗС ГУНП талони, Талони, см/к, АЗС налив)</label>
+        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${s.sources && s.sources.length ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>
+      <div class="js-srcbox">
+        <div class="tblwrap"><table class="edit" id="srcs"><thead><tr><th>Вид пального</th><th>Форма</th><th>Постачальник</th><th>МВО</th>
+          <th style="min-width:220px">Назва колонки в реєстрі</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+        <button class="btn sm js-addsrc" style="margin-top:10px">➕ Додати джерело</button>
+        <p class="muted" style="margin-top:8px">Порожній «Вид пального» — джерело для всіх авто. Порожня «Назва колонки» складається сама: «А-95 с/к UKRNAFTA Мосійченко».
+          Акти списання: с/к і талони — акт «Талони + см/к», АЗС ГУНП талони й АЗС налив — акт «АЗС»; якщо МВО кілька — окремий акт на кожну.</p></div>
+      <h3 style="margin-top:14px">«Додаток 6»</h3>
+      <div class="row" style="gap:18px">
+        <label class="f">Колонки джерел<select data-k="reg_columns"><option value="all" ${s.reg_columns === "used" ? "" : "selected"}>усі налаштовані джерела</option>
+          <option value="used" ${s.reg_columns === "used" ? "selected" : ""}>лише ті, по яких у місяці був рух</option></select></label>
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="js-blago" ${s.show_blago === false ? "" : "checked"}> колонка «благо» у «Витрачено»</label></div></div>
     <div class="panel"><h2>📄 Реквізити бланків</h2><div class="form-grid">
       ${f("org", "Установа (шапка ліворуч)")}${f("dept", "Підрозділ (другий рядок шапки)")}${f("unit", "Графа 2 «Підрозділ» у реєстрі")}
       ${f("title", "Назва реєстру (без «за … року»)", "w2")}${f("appendix", "Номер додатка")}${f("compiler", "Особа, яка склала реєстр (ПІБ для підпису)")}</div></div>
@@ -817,7 +883,7 @@ async function pageFleet() {
       <td><input data-f="month_norm_km" type="number" step="10" min="0" value="${v.month_norm_km ?? 2640}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
       <td><select data-f="supplier">${sup.map((x) => `<option ${x === (v.supplier || "UKRNAFTA") ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>
-      <td><select data-f="source">${C.CONSUME_SOURCES.map(([k, l]) => `<option value="${k}" ${k === (v.source || "smk") ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>
       <td><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав"></td>
       <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
       <td><button class="btn sm danger js-del" title="Видалити з довідника">🗑</button></td>`;
@@ -831,13 +897,51 @@ async function pageFleet() {
     tr.querySelector("button").addEventListener("click", () => tr.remove());
     mbody.appendChild(tr);
   };
+  // --- джерела пального
+  const sbody = $app.querySelector("#srcs tbody");
+  const addSrc = (x) => {
+    const tr = document.createElement("tr"); tr.dataset.id = x.id || C.normalizeSource({}).id;
+    tr.innerHTML = `<td><input data-f="fuel" list="fuels" value="${esc(x.fuel)}" placeholder="будь-який" style="width:90px"></td>
+      <td><select data-f="form">${C.FORMS.map((fm) => `<option ${fm === (x.form || "с/к") ? "selected" : ""}>${esc(fm)}</option>`).join("")}</select></td>
+      <td><input data-f="supplier" list="suppliers" value="${esc(x.supplier)}" placeholder="з картки авто" style="width:120px"></td>
+      <td><input data-f="mvo" value="${esc(x.mvo)}" placeholder="з картки авто" style="width:140px"></td>
+      <td><input data-f="label" value="${esc(C.LEGACY_SOURCES.some((l) => l.id === x.id && l.label === x.label) ? "" : x.label)}" placeholder="${esc(C.sourceTitle({ ...x, label: "" }))}"></td>
+      <td class="c"><input data-f="active" type="checkbox" ${x.active === false ? "" : "checked"}></td>
+      <td><button class="btn sm danger js-del" title="Прибрати джерело">🗑</button></td>`;
+    tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Прибрати джерело? Дані минулих місяців збережуться.")) { tr.remove(); refreshSrcSelects(); } });
+    tr.querySelectorAll("input,select").forEach((i) => i.addEventListener("input", () => {
+      tr.querySelector("[data-f=label]").placeholder = C.sourceTitle({ ...readSrc(tr), label: "" }); refreshSrcSelects(); }));
+    sbody.appendChild(tr);
+  };
+  const readSrc = (tr) => { const x = { id: tr.dataset.id }; tr.querySelectorAll("[data-f]").forEach((i) => { x[i.dataset.f] = i.type === "checkbox" ? i.checked : i.value.trim(); }); return C.normalizeSource(x); };
+  const custom = () => $app.querySelector("input[name=srcmode]:checked").value === "custom";
+  const currentSources = () => (custom() ? [...sbody.querySelectorAll("tr")].map(readSrc) : C.unitSources({}));
+  function refreshSrcSelects() {
+    const list = currentSources().filter((x) => x.active);
+    vbody.querySelectorAll("select[data-f=source]").forEach((sel) => {
+      const cur = sel.value || sel.dataset.cur;
+      sel.innerHTML = list.map((x) => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(C.sourceTitle(x))}</option>`).join("");
+    });
+  }
+  (s.sources && s.sources.length ? C.unitSources(s) : C.LEGACY_SOURCES.map((l) => ({ ...l }))).forEach(addSrc);
+  const toggleBox = () => { $app.querySelector(".js-srcbox").style.display = custom() ? "" : "none"; refreshSrcSelects(); };
+  $app.querySelectorAll("input[name=srcmode]").forEach((r) => r.addEventListener("change", toggleBox));
+  $app.querySelector(".js-addsrc").addEventListener("click", () => { addSrc({ form: "с/к" }); refreshSrcSelects(); });
+
   unit.vehicles.forEach(addVeh); if (!unit.vehicles.length) addVeh({});
+  toggleBox();
   (s.act_members || []).forEach(addMem);
-  $app.querySelector(".js-addveh").addEventListener("click", () => addVeh({}));
+  $app.querySelector(".js-addveh").addEventListener("click", () => { addVeh({}); refreshSrcSelects(); });
   $app.querySelector(".js-addmem").addEventListener("click", () => addMem({}));
   $app.querySelector(".js-save").addEventListener("click", async () => {
     const settings = { ...s };
     $app.querySelectorAll("[data-k]").forEach((i) => { settings[i.dataset.k] = i.value.trim(); });
+    settings.show_blago = $app.querySelector(".js-blago").checked;
+    if (custom()) {
+      const list = [...sbody.querySelectorAll("tr")].map(readSrc);
+      if (!list.length) { flash("err", "Додайте хоча б одне джерело пального або оберіть стандартні."); return render(); }
+      settings.sources = list;
+    } else delete settings.sources;
     settings.act_members = [...mbody.querySelectorAll("tr")].map((tr) => ({ full: tr.querySelector("[data-f=full]").value.trim(),
       short: tr.querySelector("[data-f=short]").value.trim() })).filter((m) => m.full || m.short);
     const vehicles = [...vbody.querySelectorAll("tr")].map((tr) => {
@@ -924,8 +1028,8 @@ async function pageAdmin(sub, q) {
       const exp = { org: unit.settings.org, unit: u.name, vehicles: st.vehicles, entries: st.entries };
       const m = st.saved;
       if (!m) return { u, n: unit.vehicles.filter((v) => v.active).length, done: 0, err: 0, t: null, exp };
-      const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} });
-      const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id]));
+      const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} }, st.sources);
+      const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id], st.sources));
       const sts = rows.map((r, i) => C.statusOf(r, (m.entries || {})[vehicles[i].id] || {}));
       return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows), updated: m.updated_at, exp };
     }));
@@ -1132,8 +1236,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261026h")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261026h")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261027b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -275,3 +275,22 @@ table.list th, table.list td { border-bottom-color: rgba(96,165,250,.14); }
 .who-stats li:first-child { border-top: 0; }
 .who-stats li b { color: #fff; font-weight: 600; } .who-stats li span { color: #7dd3fc; font-size: .72rem; }
 .who-stats li b::before { content: "● "; color: #22c55e; }
+
+/* ---------- джерела пального в картці авто ---------- */
+.frc .grid.ext { grid-template-columns: 1.3fr 1.9fr 5.6fr 2.2fr; }
+.f2 { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+.srcs { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:8px; }
+.srct { background:rgba(2,6,23,.38); border:1px solid rgba(255,255,255,.16); border-radius:12px; padding:7px 9px 8px; }
+.srct.main { border-color:rgba(250,204,21,.6); box-shadow: inset 0 0 0 1px rgba(250,204,21,.18); }
+.srct.neg { border-color:#ef4444; }
+.srct .st { font-size:.72rem; font-weight:800; color:#e0f2fe; margin-bottom:6px; line-height:1.25; min-height:1.8em; }
+.srct .st .mb { font-size:.62rem; font-weight:800; color:#0f172a; background:#facc15; border-radius:6px; padding:1px 5px; margin-left:3px; }
+.srct .sr { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.srct .sr label { font-size:.66rem; }
+.srct .sr input { padding:6px 7px !important; font-size:.92rem !important; }
+.srct .sc { display:flex; justify-content:space-between; gap:6px; margin-top:6px; font-size:.72rem; color:#cbd5e1; align-items:center; }
+.srct .sc b { color:#fff; font-size:.86rem; }
+.srct .js-ci { display:none; width:70px !important; padding:4px 6px !important; font-size:.85rem !important; margin-left:4px; }
+.frc.split .srct .js-ci { display:inline-block; }
+.frc.split .srct .js-c { display:none; }
+@media (max-width: 1150px) { .frc .grid.ext { grid-template-columns: 1fr 1fr; } .frc .grid.ext > :nth-child(3) { grid-column: 1 / -1; } }

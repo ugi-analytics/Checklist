@@ -1,7 +1,7 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261026h";
-import { litresWords } from "./words.js?v=20261026h";
+import * as C from "./core.js?v=20261027b";
+import { litresWords } from "./words.js?v=20261027b";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -47,12 +47,21 @@ function baseDoc(D, sectionProps, children, defaultSize) {
 }
 
 // ================================================================= реєстр «Додаток 6»
-const W = [480, 560, 1080, 640, 760, 760, 620, 640, 560, 760, 700, 760, 640, 560, 760, 620, 760, 760, 1900];
-
-export function buildRegister(D, s, ym, rows) {
+// Колонки «Видано» і «Витрачено» будуються з джерел пального підрозділу (усі або лише з рухом — налаштування),
+// «благо» — за налаштуванням. Для стандартних джерел вигляд той самий, що й раніше (19 граф).
+export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSources(s)) {
+  const lay = C.registerLayout(rows, sources, s);
+  const legacy = !!sources.legacy;
+  const nI = lay.iss.length, nC = lay.cons.length + (lay.blago ? 1 : 0);
+  // ширини: фіксовані колонки + колонки джерел (у стандартному режимі — як у затвердженому зразку)
+  const base = { no: 480, unit: 560, name: 1080, norm: 640, km: 760, sl: 760, sv: legacy ? 620 : 1500, src: legacy ? 640 : 600,
+    tot: 760, blago: 560, el: 760, ev: legacy ? 1900 : 1700 };
+  const W = [base.no, base.unit, base.name, base.norm, base.km, base.sl, base.sv, ...Array(nI).fill(base.src), base.tot,
+    ...Array(lay.cons.length).fill(base.src), ...(lay.blago ? [base.blago] : []), base.tot, base.el, base.ev];
   const usable = cm(29.7 - 3.0);
   const k = usable / W.reduce((a, b) => a + b, 0);
   const widths = W.map((w) => Math.floor(w * k));
+  const fs = lay.total > 24 ? 7 : lay.total > 19 ? 8 : 9;      // багато колонок — дрібніший шрифт
   const children = [];
   children.push(para(D, [runTab(D, s.org || "", s.appendix || "", { size: 12 })], { align: "left",
     tabs: [{ type: D.TabStopType.RIGHT, position: usable }] }));
@@ -60,51 +69,59 @@ export function buildRegister(D, s, ym, rows) {
   children.push(para(D, [run(D, `${s.title || ""} за ${C.monthTitle(ym)}`, { size: 13, bold: true, italics: true })],
     { before: 4, after: 6 }));
 
+  const c = (t, o = {}) => cell(D, t, { size: fs, ...o });
   const hdr = (cells, height, extra = {}) => new D.TableRow({ children: cells, tableHeader: true, cantSplit: true,
     ...(height ? { height: { value: cm(height), rule: D.HeightRule.ATLEAST } } : {}), ...extra });
   const r0 = [
-    cell(D, "№\nп/п", { rowSpan: 2 }), cell(D, "Підрозділ", { rowSpan: 2, vertical: true }),
-    cell(D, "Марка, днз", { rowSpan: 2 }), cell(D, "Місячна норма пробігу (км)", { rowSpan: 2, vertical: true }),
-    cell(D, "Пробіг за звітний місяць (км)", { rowSpan: 2, vertical: true }),
-    cell(D, "Залишок палива у баку на початок місяця, (л)", { colSpan: 2 }),
-    cell(D, "Видано палива (л)", { colSpan: 5 }),
-    cell(D, "Витрачено палива згідно пробігу, (л)", { colSpan: 5 }),
-    cell(D, "Залишок палива у баку на кінець місяця, (л)", { colSpan: 2 }),
+    c("№\nп/п", { rowSpan: 2 }), c("Підрозділ", { rowSpan: 2, vertical: true }),
+    c("Марка, днз", { rowSpan: 2 }), c("Місячна норма пробігу (км)", { rowSpan: 2, vertical: true }),
+    c("Пробіг за звітний місяць (км)", { rowSpan: 2, vertical: true }),
+    c("Залишок палива у баку на початок місяця, (л)", { colSpan: 2 }),
+    c("Видано палива (л)", { colSpan: nI + 1 }),
+    c("Витрачено палива згідно пробігу, (л)", { colSpan: nC + 1 }),
+    c("Залишок палива у баку на кінець місяця, (л)", { colSpan: 2 }),
   ];
-  const sub = [["л"], ["вид"], ["АЗС ГУНП талони", 1], ["Талони", 1], ["см/к"], ["АЗС налив"], ["Всього", 1, 1],
-    ["АЗС ГУНП талони", 1], ["Талони", 1], ["см/к"], ["благо"], ["Всього", 1, 1], ["л"], ["Вид"]];
-  const r1 = sub.map(([t, v, b]) => cell(D, t, { vertical: !!v, bold: !!b }));
-  const r2 = Array.from({ length: 19 }, (_, i) => cell(D, String(i + 1)));
-  const tableRows = [hdr(r0, 1.3), hdr(r1, 2.1), hdr(r2)];
+  const sub = [["л"], [legacy ? "вид" : "вид пального на залишку", !legacy]];
+  lay.iss.forEach((x) => sub.push([C.sourceTitle(x), 1]));
+  sub.push(["Всього", 1, 1]);
+  lay.cons.forEach((x) => sub.push([C.sourceTitle(x), 1]));
+  if (lay.blago) sub.push(["благо"]);
+  sub.push(["Всього", 1, 1], ["л"], [legacy ? "Вид" : "Вид пального на залишку"]);
+  const r1 = sub.map(([t, v, b]) => c(t, { vertical: !!v, bold: !!b }));
+  const r2 = Array.from({ length: lay.total }, (_, i) => c(String(i + 1)));
+  const tableRows = [hdr(r0, 1.3), hdr(r1, legacy ? 2.1 : 3.2), hdr(r2)];
+  const boldIdx = new Set([lay.issTotalNo - 1, lay.consTotalNo - 1]);
 
   rows.forEach((r, i) => {
     const v = r.vehicle;
-    const kind = v.fuel || "";
-    let vid19 = kind + (v.supplier ? ` (${v.supplier})` : "");
-    if (v.mvo_text) vid19 += "\nМВО\n" + splitNames(v.mvo_text).join("\n");
-    const vals = [String(i + 1), s.unit || "", v.name, String(v.month_norm_km || ""), String(r.km),
-      C.fmtC(r.startC), kind];
-    for (const [key] of C.ISSUE_SOURCES) vals.push(C.fmtC(r.issued[key], true));
-    vals.push(C.fmtC(r.issuedC));
-    for (const [key] of C.CONSUME_SOURCES) vals.push(C.fmtC(r.consBy[key], true));
-    vals.push("", C.fmtC(r.consC), C.fmtC(r.endC), vid19);
-    tableRows.push(new D.TableRow({ cantSplit: true, children: vals.map((t, ci) => cell(D, t, { bold: ci === 11 || ci === 16 })) }));
+    let startVid, endVid;
+    if (legacy) {
+      startVid = v.fuel || "";
+      endVid = (v.fuel || "") + (v.supplier ? ` (${v.supplier})` : "");
+      if (v.mvo_text) endVid += "\nМВО\n" + splitNames(v.mvo_text).join("\n");
+    } else {
+      startVid = C.balanceText(r, "start", s).split(" + ").join(" +\n");
+      endVid = C.balanceText(r, "end", s).split(" + ").join(" +\n");
+    }
+    const vals = [String(i + 1), s.unit || "", v.name, String(v.month_norm_km || ""), String(r.km), C.fmtC(r.startC), startVid,
+      ...lay.iss.map((x) => C.fmtC(r.issued[x.id] || 0, true)), C.fmtC(r.issuedC),
+      ...lay.cons.map((x) => C.fmtC(r.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(r.consC),
+      C.fmtC(r.endC), endVid];
+    tableRows.push(new D.TableRow({ cantSplit: true, children: vals.map((t, ci) => c(t, { bold: boldIdx.has(ci) })) }));
   });
 
   const t = C.totals(rows);
-  const tv = { 5: C.fmtC(t.startC), 11: C.fmtC(t.issuedC), 16: C.fmtC(t.consC), 17: C.fmtC(t.endC) };
-  C.ISSUE_SOURCES.forEach(([key], j) => { tv[7 + j] = C.fmtC(t.issued[key], true); });
-  C.CONSUME_SOURCES.forEach(([key], j) => { tv[12 + j] = C.fmtC(t.consBy[key], true); });
-  const totCells = [cell(D, "Всього", { colSpan: 5, bold: true })];
-  for (let ci = 5; ci < 19; ci++) totCells.push(cell(D, tv[ci] || "", { bold: true }));
+  const tv = [C.fmtC(t.startC), "", ...lay.iss.map((x) => C.fmtC(t.issued[x.id] || 0, true)), C.fmtC(t.issuedC),
+    ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
+  const totCells = [c("Всього", { colSpan: 5, bold: true }), ...tv.map((x) => c(x, { bold: true }))];
   tableRows.push(new D.TableRow({ cantSplit: true, children: totCells }));
 
   children.push(new D.Table({ rows: tableRows, columnWidths: widths, width: { size: usable, type: D.WidthType.DXA },
     layout: D.TableLayoutType.FIXED, alignment: D.AlignmentType.CENTER,
     margins: { top: 30, bottom: 30, left: 40, right: 40 } }));
 
-  for (const txt of ["дані графи № 12 повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.",
-    "дані графи № 17 повинні відповідати кількості пального в акті списання."]) {
+  for (const txt of [`дані графи № ${lay.issTotalNo} повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.`,
+    `дані графи № ${lay.consTotalNo} повинні відповідати кількості пального в акті списання.`]) {
     children.push(para(D, [runTab(D, "*", txt, { size: 9 })], { align: "left", before: 4, indentLeft: cm(0.5), hanging: cm(0.5),
       keepNext: true }));
   }
@@ -125,11 +142,12 @@ function joinMembers(members = []) {
   return full.slice(0, -1).join(", ") + " та " + full[full.length - 1];
 }
 
-export function buildAct(D, s, ym, rows, group = null, now = new Date()) {
+/** act — один елемент C.actList(rows, s): {group, mvo, title, lines}. */
+export function buildAct(D, s, ym, act, now = new Date()) {
   const [y, m] = C.parseYm(ym);
   const yearNow = now.getFullYear();
   const monthTxt = C.MONTHS_UA[m - 1];
-  const groups = C.actGroups(rows, group);
+  const groups = act.lines || [];
   const total = groups.reduce((a, g) => a + g.qtyC, 0);
   const usable = cm(21.0 - 3.5);
   const lw = Math.floor(usable * 0.44), rw = usable - lw;
@@ -192,7 +210,7 @@ export function buildAct(D, s, ym, rows, group = null, now = new Date()) {
     sign(s.act_chair || ""),
     P("Члени комісії:", { indentLeft: cm(0.6), before: 6, keepNext: true }),
     ...(s.act_members || []).filter((mb) => String(mb.short || "").trim()).map((mb) => sign(String(mb.short).trim())),
-    P(`${BLANK_DATE}${yearNow}      МВО:  ___________________      ${s.compiler || ""}`, { indentLeft: cm(0.6), before: 30 }),
+    P(`${BLANK_DATE}${yearNow}      МВО:  ___________________      ${act.mvo || s.compiler || ""}`, { indentLeft: cm(0.6), before: 30 }),
   ];
   return baseDoc(D, { page: { size: { width: cm(21.0), height: cm(29.7) },
     margin: { top: cm(1), bottom: cm(1), left: cm(2), right: cm(1.5) } } }, children, 12);
