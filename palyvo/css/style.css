@@ -319,3 +319,4 @@ textarea.vtxt.filled { border:1px solid rgba(250,204,21,.7); }
 .disp-kv span { font-size:.75rem; color:#cbd5e1; } .disp-kv b { font-size:1.1rem; color:#fff; }
 .disp-kv > div.hl { border-color:rgba(250,204,21,.7); } .disp-kv > div.hl b { color:#facc15; }
 .js-pick { cursor:pointer; } .js-pick:hover td { background:rgba(56,189,248,.12); } .js-pick.on td { background:rgba(250,204,21,.15); }
+.disp-calc input.bad { border-color:#ef4444 !important; }

@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261027t";
-import * as U from "./ui.js?v=20261027t";
-import { litresWords } from "./words.js?v=20261027t";
-import { buildRegister, buildAct } from "./docs.js?v=20261027t";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261027t";
-import * as X from "./crypto.js?v=20261027t";
-import { qrSvg } from "../vendor/qrcode.js?v=20261027t";
-import { buildXlsx } from "./xlsx.js?v=20261027t";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261027t";
+import * as C from "./core.js?v=20261028a";
+import * as U from "./ui.js?v=20261028a";
+import { litresWords } from "./words.js?v=20261028a";
+import { buildRegister, buildAct } from "./docs.js?v=20261028a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261028a";
+import * as X from "./crypto.js?v=20261028a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261028a";
+import { buildXlsx } from "./xlsx.js?v=20261028a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261028a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -860,7 +860,8 @@ function dispView(q) {
       <label class="f">Норма, л/100 км<input name="rate" type="number" min="0" step="0.01" value="${esc(String(sel.rate ?? ""))}"></label>
       <label class="f">Зимова надбавка, %<input name="winter_pct" type="number" min="0" max="100" step="1" value="${esc(String(sel.winter_pct ?? 0))}"></label>
       <label class="f">Залишок на початок, л<input name="fuel_start" type="number" min="0" step="0.01"></label>
-      <label class="f">Видано, л<input name="issued" type="number" min="0" step="0.01"></label>
+      <label class="f">Видано, л <span class="muted">(можна кілька: 10+15+11,25)</span><input name="issued" type="text" inputmode="decimal" autocomplete="off" placeholder="10+15+11,25+58">
+        <span class="js-isum muted" style="font-size:.85rem;margin-top:3px"></span></label>
     </form>
     <div class="js-dres disp-res"></div>
     <button class="btn sm js-dclear">Очистити</button></div>` : "";
@@ -883,7 +884,14 @@ function dispView(q) {
     const run = () => {
       const val = (n) => f[n].value;
       const v = { ...sel, rate: val("rate"), winter_pct: val("winter_pct"), source: "smk" };
-      const r = C.calcRow(v, { odo_start: val("odo_start"), odo_end: val("odo_end"), fuel_start: val("fuel_start"), smk: val("issued") }, C.unitSources({}));
+      // «10+15+11,25» → сума; неправильні частини підсвічуються
+      const parts = val("issued").split(/[+;\n]/).map((x) => x.trim().replace(/\s/g, "").replace(",", ".")).filter(Boolean);
+      const bad = parts.filter((x) => !/^\d+(\.\d+)?$/.test(x));
+      const issuedSum = parts.filter((x) => !bad.includes(x)).reduce((a, x) => a + C.toC(x), 0);
+      f.issued.classList.toggle("bad", bad.length > 0);
+      $app.querySelector(".js-isum").innerHTML = bad.length ? `⚠️ не число: ${esc(bad.join(", "))}`
+        : parts.length > 1 ? `${parts.length} видач · разом <b style="color:#facc15">${C.fmtC(issuedSum)} л</b>` : "";
+      const r = C.calcRow(v, { odo_start: val("odo_start"), odo_end: val("odo_end"), fuel_start: val("fuel_start"), smk: issuedSum / 100 }, C.unitSources({}));
       const coef = 1 + (Number(val("winter_pct")) || 0) / 100;
       res.innerHTML = r.empty && !r.km ? `<p class="muted">Введіть пробіг на початок і кінець.</p>` : `<div class="disp-kv">
         <div><span>Пробіг</span><b>${C.fmtKm(r.km)} км</b></div>
@@ -1461,8 +1469,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261027t")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261027t")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261028a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261028a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
