@@ -247,6 +247,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       (sp.hint && x.fuel && normFuel(sp.hint).includes(normFuel(x.fuel)) ? 2 : 0);
     return cand.sort((a, b) => score(b) - score(a))[0];
   };
+  // джерело залишку на початок, вибране вручну («з якого джерела залишок»)
+  const pickedStart = e.start_src ? sources.find((x) => x.id === e.start_src) : null;
+  if (pickedStart && !list.includes(pickedStart)) list.push(pickedStart);
   for (const sp of splitIn) { sp.src = sp.src || (sp.c ? pickSrc(sp) : null); if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
   // свої джерела: «різні» за замовчуванням — також коли вибране основне джерело вже не існує
   const free = !sources.legacy && (vehicle.source === NO_MAIN || !sources.some((x) => x.id === vehicle.source));
@@ -290,8 +293,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
         (isText ? ` — різниця ${fmtC(T - sum)} л віднесена на основне джерело.` : "."));
     }
     r.warnings.push(...textWarn);
-    if (anchor && T > sum) r.startBy[anchor.id] += T - sum;
-    if (anchor && free && T > 0 && sum === 0 && vehicleMvos(sources).length > 1)
+    const startTo = pickedStart || anchor;
+    if (startTo && T > sum) r.startBy[startTo.id] += T - sum;
+    if (anchor && free && !pickedStart && T > 0 && sum === 0 && vehicleMvos(sources).length > 1)
       r.warnings.push(`Залишок на початок не описано (чий і який) — віднесено на «${sourceTitle(anchor)}». Опишіть його в полі «Вид залишку на початок», напр. «${fmtC(T)} с/к Прізвище».`);
     r.startSplit = splitIn.some((x) => x.c > 0) && sum > 0;
   }
@@ -326,10 +330,16 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   // --- розподіл витрати між джерелами
   const availBy = (id) => r.startBy[id] + r.issued[id];
   if (sources.legacy && !e.split) {
-    // стандартний режим — точно як раніше: уся витрата в колонку основного джерела, залишок одним числом
-    if (main) r.consBy[main.id] = r.consC;
+    // стандартний режим — як раніше: витрата в колонку основного джерела, залишок одним числом;
+    // якщо залишок на початок вказано в іншому джерелі — спершу витрата з нього (у його колонку)
+    let left = r.consC;
     for (const s of list) r.endBy[s.id] = 0;
-    if (main) r.endBy[main.id] = avail - r.consC;
+    for (const s of list) {
+      if (main && s.id === main.id) continue;
+      const q = Math.min(left, Math.max(r.startBy[s.id], 0)); if (!q && !r.startBy[s.id]) continue;
+      r.consBy[s.id] = q; left -= q; r.endBy[s.id] = r.startBy[s.id] - q;
+    }
+    if (main) { r.consBy[main.id] = left; r.endBy[main.id] = avail - r.consC - list.reduce((a, s) => a + (s.id !== main.id ? r.endBy[s.id] : 0), 0); }
     r.endC = avail - r.consC;
   } else if (e.split && e.cons) {
     let sum = 0;
@@ -398,6 +408,13 @@ function propTake(r, arr, left, availBy) {
   }
   arr.forEach((s, i) => { r.consBy[s.id] += t[i]; });
   return left - want;
+}
+
+/** Стандартний режим: вид залишку на початок — пальне авто + джерело, якщо його вказано вручну. */
+export function legacyStartVid(r) {
+  const id = (r.entry || {}).start_src;
+  const src = id && r.sources.find((x) => x.id === id);
+  return [r.vehicle.fuel || "", src && id !== r.mainId ? sourceTitle(src) : ""].filter(Boolean).join(" ");
 }
 
 /** «Вид пального на залишку»: «125 А-95 с/к UKRNAFTA Мосійченко + 167 …». */
@@ -521,6 +538,7 @@ export function cleanEntry(raw = {}) {
   for (const f of ["odo_start", "odo_end"]) { const x = num2(raw[f]); out[f] = x === null ? null : Math.round(x); }
   out.consumed_manual = num2(raw.consumed_manual);
   if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
+  if (raw.start_src) out.start_src = String(raw.start_src);
   for (const t of ["start_text", "end_text"]) { const x = String(raw[t] || "").trim().slice(0, 300); if (x) out[t] = x; }
   for (const m of ["start", "iss", "cons", "start_mvo"]) {
     out[m] = {};

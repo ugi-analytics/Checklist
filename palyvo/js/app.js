@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261029c";
-import * as U from "./ui.js?v=20261029c";
-import { litresWords } from "./words.js?v=20261029c";
-import { buildRegister, buildAct } from "./docs.js?v=20261029c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029c";
-import * as X from "./crypto.js?v=20261029c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261029c";
-import { buildXlsx } from "./xlsx.js?v=20261029c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029c";
+import * as C from "./core.js?v=20261029e";
+import * as U from "./ui.js?v=20261029e";
+import { litresWords } from "./words.js?v=20261029e";
+import { buildRegister, buildAct } from "./docs.js?v=20261029e";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029e";
+import * as X from "./crypto.js?v=20261029e";
+import { qrSvg } from "../vendor/qrcode.js?v=20261029e";
+import { buildXlsx } from "./xlsx.js?v=20261029e";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029e";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -639,6 +639,17 @@ async function pageEntry(q) {
       ${txt("start_text", e.start_text, "напр. 125 А-95 с/к UKRNAFTA Мосійченко + 197 А-95 BVS Левошко", 3)}</div>` : "");
   const endTxt = (r, e) => (multiMvo(r) || e.end_text ? `<div class="mvo endt"><label title="Якщо порожньо — рахується автоматично за джерелами">Вид залишку на кінець / МВО (довільно; якщо порожньо — автоматично)</label>
       ${txt("end_text", e.end_text, C.balanceText({ ...r, entry: { ...e, end_text: "" } }, "end", unit.settings))}</div>` : "");
+  // «з якого джерела залишок на початок» (налаштування підрозділу) — щоб витрата із залишку йшла в потрібну колонку
+  const pick = !!unit.settings.start_pick;
+  const startSrc = (r, e) => {
+    if (!pick) return "";
+    const mapKeys = Object.entries(e.start || {}).filter(([, x]) => Number(x) > 0).map(([k]) => k);
+    const cur = e.start_src || (mapKeys.length === 1 ? mapKeys[0] : "");
+    const opts = [...r.sources, ...SRC.filter((x) => x.active && !r.sources.includes(x))];
+    return `<div class="mvo" style="margin-top:6px"><label>Залишок на початок — з якого джерела</label><select name="start_src" class="ssrc">
+      <option value="">${simple ? "— основне джерело авто —" : "— визначити автоматично —"}</option>
+      ${opts.map((x) => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(C.sourceTitle(x))}</option>`).join("")}</select></div>`;
+  };
   const cards = st.vehicles.map((v) => {
     const e = entries[v.id] || {};
     const r = C.calcRow(v, e, SRC); const s = C.statusOf(r, e);
@@ -647,10 +658,10 @@ async function pageEntry(q) {
       <div><div class="fr-h">Пробіг і залишок на початок</div>${simple ? `<div class="f3">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        <div><label>Залишок, л</label>${inp("start." + r.mainId, lv(r.startC), "л")}</div></div>` : `<div class="f3">
+        <div><label>Залишок, л</label>${pick ? inp("fuel_start", lv(r.startC), "л") : inp("start." + r.mainId, lv(r.startC), "л")}</div></div>${startSrc(r, e)}` : `<div class="f3">
         <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
         <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
-        <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>${startTxt(r, e)}`}
+        <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>${startSrc(r, e)}${startTxt(r, e)}`}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
@@ -677,7 +688,7 @@ async function pageEntry(q) {
   const vmap = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
   const readCard = (card) => {
     const e = { start: {}, iss: {}, cons: {}, start_mvo: {} };
-    card.querySelectorAll("input[name], textarea[name]").forEach((i) => {
+    card.querySelectorAll("input[name], textarea[name], select[name]").forEach((i) => {
       const val = i.type === "checkbox" ? i.checked : i.value;
       const dot = i.name.indexOf(".");
       if (dot > 0) e[i.name.slice(0, dot)][i.name.slice(dot + 1)] = val; else e[i.name] = val;
@@ -726,7 +737,7 @@ async function pageEntry(q) {
       ev.target.textContent = on ? "－ сховати інші джерела" : ev.target.dataset.t;
     });
     const mb = card.querySelector(".js-more"); if (mb) mb.dataset.t = mb.textContent;
-    card.querySelectorAll("input, textarea").forEach((inp) => {
+    card.querySelectorAll("input, textarea, select[name]").forEach((inp) => {
       const mark = () => { if (inp.type !== "checkbox") inp.classList.toggle("filled", inp.value !== ""); };
       mark();
       const onChange = (ms) => {
@@ -752,7 +763,8 @@ async function pageEntry(q) {
       const e = co[card.dataset.vid]; if (!e) continue;
       card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
       card.querySelectorAll("input[name^='start.']").forEach((i) => { const id = i.name.slice(6); i.value = e.start && e.start[id] ? e.start[id] : ""; });
-      const fs = card.querySelector("[name=fuel_start]"); if (fs) fs.value = e.fuel_start ?? "";
+      const fs = card.querySelector("[name=fuel_start]"); if (fs) fs.value = e.fuel_start ?? (Object.values(e.start || {}).reduce((a, b) => a + b, 0) || "");
+      const ss = card.querySelector("[name=start_src]"); if (ss) { const ks = Object.keys(e.start || {}).filter((k) => e.start[k] > 0); ss.value = e.start_src || (ks.length === 1 ? ks[0] : ""); }
       const stx = card.querySelector("[name=start_text]"); if (stx) stx.value = e.start_text || "";
       if (simple) { const i = card.querySelector("input[name^='start.']"); if (i) i.value = Object.values(e.start || {}).reduce((a, b) => a + b, 0) || ""; }
       card.querySelectorAll("input, textarea").forEach((i) => { if (i.type !== "checkbox") i.classList.toggle("filled", i.value !== ""); });
@@ -1005,6 +1017,7 @@ async function pageFleet() {
       <div class="row" style="gap:18px;margin-bottom:10px">
         <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="std" ${s.sources && s.sources.length ? "" : "checked"}> Стандартні (АЗС ГУНП талони, Талони, см/к, АЗС налив)</label>
         <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${s.sources && s.sources.length ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="У картці авто біля залишку на початок з'явиться вибір джерела — витрата із залишку піде в колонку цього джерела"><input type="checkbox" class="js-spick" ${s.start_pick ? "checked" : ""}> вказувати, з якого джерела залишок на початок</label>
       <div class="js-srcbox">
         <div class="tblwrap"><table class="edit" id="srcs"><thead><tr><th>Вид пального</th><th>Форма</th><th>Постачальник</th><th>МВО</th>
           <th style="min-width:220px">Назва колонки в реєстрі</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -1155,6 +1168,7 @@ async function pageFleet() {
     settings.show_blago = $app.querySelector(".js-blago").checked;
     delete settings.start_by_mvo;
     settings.cons_issued_first = $app.querySelector(".js-isfirst").checked;
+    settings.start_pick = $app.querySelector(".js-spick").checked;
     if (custom()) {
       const list = [...sbody.querySelectorAll("tr")].map(readSrc);
       if (!list.length) { flash("err", "Додайте хоча б одне джерело пального або оберіть стандартні."); return render(); }
@@ -1472,8 +1486,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261029c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261029e")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029e")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
