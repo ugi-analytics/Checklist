@@ -21,6 +21,8 @@ export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУ
 export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS"];
 /** Авто без основного джерела (заправляється з різних): витрата — спершу із залишку, потім із виданого, щоб джерела вичерпувались повністю. */
 export const NO_MAIN = "-";
+/** Видача до цієї кількості (5 л) списується першочергово. */
+export const SMALL_ISSUE_C = 500;
 
 export const ACT_GROUPS = {
   tsmk: { title: "Талони + см/к", file: "Талони_см-к" },
@@ -343,7 +345,13 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     const rest = list.filter((x) => !main || x.id !== main.id);
     const pools = [...(main ? [[main]] : []), rest.filter((x) => sourceFits(x, vehicle)), rest.filter((x) => !sourceFits(x, vehicle))];
     const phases = sources.issuedFirst ? ["iss", "start"] : ["start", "iss"];
-    for (const pool of pools) for (const kind of phases) greedy(pool, kind);
+    // дрібні видачі (до 5 л) списуються першочергово й повністю — щоб не лишати на залишку «0,18 л»
+    const smallFirst = (pool) => {
+      for (const x of pool.filter((y) => remOf(y, "iss") > 0 && remOf(y, "iss") <= SMALL_ISSUE_C).sort((a, b) => remOf(a, "iss") - remOf(b, "iss"))) {
+        if (left <= 0) return; take(x, "iss", Math.min(left, remOf(x, "iss")));
+      }
+    };
+    for (const pool of pools) { smallFirst(pool); for (const kind of phases) greedy(pool, kind); }
     // джерел не вистачило — списуємо з давніх талонів (їх кількість у описі зменшується)
     for (const k of r.keep) { if (left <= 0) break; const take = Math.min(left, k.left); k.left -= take; left -= take; r.keepConsC = (r.keepConsC || 0) + take; }
     if (left > 0 && anchor) r.consBy[anchor.id] += left;   // не має статися (витрата обмежена наявним)
