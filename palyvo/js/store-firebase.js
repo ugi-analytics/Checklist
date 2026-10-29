@@ -186,7 +186,7 @@ export function createStore(config) {
     },
     // ---------------------------------------------------------------- місяці
     async getMonth(unitId, ym) { const s = await getDoc(doc(db, "units", unitId, "months", ym)); return s.exists() ? s.data() : null; },
-    saveMonth: (unitId, ym, encBlob) => setDoc(doc(db, "units", unitId, "months", ym), { enc: encBlob, updated_at: nowIso(),
+    saveMonth: (unitId, ym, encBlob, extra = {}) => setDoc(doc(db, "units", unitId, "months", ym), { ...extra, enc: encBlob, updated_at: nowIso(),
       updated_by: auth.currentUser.uid }),
     async listMonths(unitId) { return (await getDocs(collection(db, "units", unitId, "months"))).docs.map((d) => ({ ym: d.id, ...d.data() }))
       .sort((a, b) => a.ym.localeCompare(b.ym)); },

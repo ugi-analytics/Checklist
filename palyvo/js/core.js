@@ -412,6 +412,7 @@ function propTake(r, arr, left, availBy) {
 
 /** Стандартний режим: вид залишку на початок — пальне авто + джерело, якщо його вказано вручну. */
 export function legacyStartVid(r) {
+  if (r.frozenTxt) return r.frozenTxt.legacyStart;
   const id = (r.entry || {}).start_src;
   const src = id && r.sources.find((x) => x.id === id);
   return [r.vehicle.fuel || "", src && id !== r.mainId ? sourceTitle(src) : ""].filter(Boolean).join(" ");
@@ -419,6 +420,7 @@ export function legacyStartVid(r) {
 
 /** «Вид пального на залишку»: «125 А-95 с/к UKRNAFTA Мосійченко + 167 …». */
 export function balanceText(r, which = "end", settings = {}) {
+  if (r.frozenTxt) return r.frozenTxt[which];        // закритий місяць — текст як у день закриття
   const by = which === "start" ? r.startBy : r.endBy;
   const own = String(((r.entry || {})[which === "start" ? "start_text" : "end_text"]) || "").trim();
   if (own) return own;                                // довільний опис, введений вручну
@@ -506,10 +508,12 @@ export function monthVehicles(vehicles, month, sources = LEGACY_SOURCES) {
 export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSources = sources) {
   if (!prevMonth) return {};
   const out = {};
-  for (const v of monthVehicles(vehicles, prevMonth, prevSources)) {
-    const pe = prevMonth.entries[v.id];
+  // закритий місяць — переносимо з його знімка (результати як у день закриття)
+  const fr = prevMonth.frozen && Array.isArray(prevMonth.frozen.rows) ? prevMonth.frozen.rows : null;
+  for (const v of fr ? fr.map((x) => x.vehicle) : monthVehicles(vehicles, prevMonth, prevSources)) {
+    const pe = fr ? (fr.find((x) => x.vehicle.id === v.id) || {}).entry || {} : prevMonth.entries[v.id];
     if (!pe) continue;
-    const r = calcRow(v, pe, prevSources);
+    const r = fr ? fr.find((x) => x.vehicle.id === v.id) : calcRow(v, pe, prevSources);
     const odo = isBlank(pe.odo_end) ? null : pe.odo_end;
     if (sources.legacy) {
       const start = {};
@@ -629,4 +633,21 @@ export function registerLayout(rows, sources, settings = {}) {
   const issTotalNo = 7 + cols.iss.length + 1;
   const consTotalNo = issTotalNo + cols.cons.length + (blago ? 1 : 0) + 1;
   return { ...cols, blago, issTotalNo, consTotalNo, total: consTotalNo + 2 };
+}
+
+// ---------------------------------------------------------------- закриття місяця
+/** Знімок закритого місяця: джерела, налаштування, готові рядки (з текстами залишків) і акти — щоб пізніші зміни їх не чіпали. */
+export function freezeMonth(rows, settings, sources) {
+  const clean = (x) => JSON.parse(JSON.stringify(x));
+  const fr = rows.map((r) => ({ ...clean(r), frozenTxt: { start: balanceText(r, "start", settings), end: balanceText(r, "end", settings), legacyStart: legacyStartVid(r) } }));
+  return { settings: clean(settings), sources: clean(sources), flags: { legacy: !!sources.legacy, issuedFirst: !!sources.issuedFirst },
+    rows: fr, acts: clean(actList(rows, settings)) };
+}
+/** Рядки закритого місяця з його знімка (з прапорцями джерел). */
+export function frozenRows(frozen) {
+  const sources = frozen.sources.map((x) => ({ ...x }));
+  sources.legacy = !!frozen.flags.legacy; sources.issuedFirst = !!frozen.flags.issuedFirst;
+  const rows = frozen.rows.map((r) => ({ ...r, sources: r.sources.map((x) => sources.find((y) => y.id === x.id) || x) }));
+  rows.sources = sources;
+  return rows;
 }

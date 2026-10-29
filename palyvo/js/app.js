@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261029f";
-import * as U from "./ui.js?v=20261029f";
-import { litresWords } from "./words.js?v=20261029f";
-import { buildRegister, buildAct } from "./docs.js?v=20261029f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029f";
-import * as X from "./crypto.js?v=20261029f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261029f";
-import { buildXlsx } from "./xlsx.js?v=20261029f";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029f";
+import * as C from "./core.js?v=20261029g";
+import * as U from "./ui.js?v=20261029g";
+import { litresWords } from "./words.js?v=20261029g";
+import { buildRegister, buildAct } from "./docs.js?v=20261029g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029g";
+import * as X from "./crypto.js?v=20261029g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261029g";
+import { buildXlsx } from "./xlsx.js?v=20261029g";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -496,8 +496,8 @@ async function readMonth(unit, ym) {
   if (!m) return null;
   return m.enc ? { ...m, ...(await X.decJson(unit.dk, m.enc, X.aadMonth(unit.id, ym))) } : m;
 }
-async function writeMonth(unit, ym, data) {
-  await store.saveMonth(unit.id, ym, await X.encJson(unit.dk, data, X.aadMonth(unit.id, ym)));
+async function writeMonth(unit, ym, data, extra = {}) {
+  await store.saveMonth(unit.id, ym, await X.encJson(unit.dk, data, X.aadMonth(unit.id, ym)), extra);
 }
 async function listMonthsDec(unit) {
   const ms = await store.listMonths(unit.id);
@@ -520,17 +520,38 @@ async function monthState(unit, ym) {
   else {
     const prev = await readMonth(unit, C.prevYm(ym));
     const prevSources = C.monthSources(unit.settings, prev && prev.sources);
-    entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} }, sources, prevSources) : {};
+    entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, sources, prevSources) : {};
     if (prev) carried = C.prevYm(ym);
   }
   const vehicles = C.monthVehicles(unit.vehicles, { entries, snapshot: (saved && saved.snapshot) || {} }, sources);
   return { saved, entries, carried, vehicles, sources };
 }
-async function rowsFor(unit, ym) {
-  const st = await monthState(unit, ym);
+async function rowsFor(unit, ym) { return (await monthView(unit, ym)).rows; }
+// місяць для перегляду й документів: закритий — зі знімка (як у день закриття), відкритий — розрахунок за поточними даними
+function viewOf(unit, st) {
+  const fz = st.saved && st.saved.closed && st.saved.frozen;
+  if (fz) return { st, rows: C.frozenRows(fz), S: { ...C.DEFAULT_SETTINGS, ...fz.settings }, acts: fz.acts, closed: st.saved };
   const rows = st.vehicles.map((v) => C.calcRow(v, st.entries[v.id], st.sources));
   rows.sources = st.sources;
-  return rows;
+  return { st, rows, S: unit.settings, acts: C.actList(rows, unit.settings), closed: null };
+}
+async function monthView(unit, ym) { return viewOf(unit, await monthState(unit, ym)); }
+const closedNote = (m) => `🔒 Місяць закрито ${esc(m.closed_at || "")}${m.closed_name ? " · " + esc(m.closed_name) : ""} — дані й документи не змінюються`;
+// закрити місяць: знімок джерел, реквізитів, авто і готових результатів
+async function closeMonth(unit, ym) {
+  const v = await monthView(unit, ym);
+  const st = v.st;
+  const frozen = C.freezeMonth(v.rows, unit.settings, st.sources);
+  const snapshot = Object.fromEntries(st.vehicles.map((x) => [x.id, x]));
+  // відкрито в базі лише позначку «закрито» (для правил доступу); хто й коли закрив — у зашифрованих даних
+  await writeMonth(unit, ym, { entries: st.entries, snapshot, sources: st.sources.map((x) => ({ ...x })), frozen,
+    closed_at: new Date().toLocaleString("sv-SE").slice(0, 16), closed_name: state.me.full_name || state.authUser.email }, { closed: true });
+  store.log("month_close", ym, unit.id);
+}
+async function reopenMonth(unit, ym) {
+  const m = await readMonth(unit, ym);
+  await writeMonth(unit, ym, { entries: m.entries || {}, snapshot: m.snapshot || {}, sources: m.sources || [] });
+  store.log("month_reopen", ym, unit.id);
 }
 
 // ------------------------------------------------------------ ключ підрозділу: створення / введення
@@ -611,6 +632,24 @@ async function pageEntry(q) {
   if (!unit.vehicles.length) return go("#/fleet?new=1");
   const ym = currentYm(q);
   const st = await monthState(unit, ym);
+  if (st.saved && st.saved.closed && st.saved.frozen) {
+    // закритий місяць — лише перегляд (як у день закриття)
+    const v = viewOf(unit, st);
+    shell(`<div class="row" style="justify-content:space-between;margin-top:14px">${monthPicker(ym, "#/entry")}
+        <div style="flex:1;min-width:280px"><div class="flash ok" style="margin:0">${closedNote(st.saved)}</div></div></div>
+      <div id="kpi"></div>
+      <div class="panel"><h2>${esc(v.S.title)} за ${C.monthTitle(ym)}</h2><div class="tblwrap">${U.previewHtml(v.rows, v.S, v.rows.sources)}</div>
+        <div class="row" style="margin-top:12px"><a class="btn sky" href="#/report?ym=${ym}">🧾 Реєстр і акти</a>
+          ${isAdmin() ? `<button class="btn js-reopen">🔓 Відкрити для змін</button>` : `<span class="muted">Змінити закритий місяць може лише адміністратор.</span>`}</div></div>`);
+    bindMonthPicker();
+    $app.querySelector("#kpi").innerHTML = U.kpiHtml(v.rows, v.rows.map((r) => C.statusOf(r, r.entry || {})), C.MONTHS_UA[C.parseYm(ym)[1] - 1]);
+    $app.querySelector(".js-reopen")?.addEventListener("click", async () => {
+      if (!confirm(`Відкрити ${C.monthTitle(ym)} для змін?`)) return;
+      busy(true); try { await reopenMonth(unit, ym); flash("ok", "Місяць відкрито для змін. Після виправлень закрийте його знову на сторінці «Звіт і акти»."); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+      render();
+    });
+    return;
+  }
   const entries = st.entries;
   const SRC = st.sources;
   const simple = !!SRC.legacy;          // стандартні джерела: картка як раніше
@@ -758,7 +797,7 @@ async function pageEntry(q) {
   $app.querySelector(".js-prev")?.addEventListener("click", async () => {
     if (!confirm("Перезаписати «Пробіг на початок» і «Залишок на початок» значеннями на кінець попереднього місяця?")) return;
     const prev = await readMonth(unit, C.prevYm(ym));
-    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {} }, SRC, C.monthSources(unit.settings, prev.sources));
+    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, SRC, C.monthSources(unit.settings, prev.sources));
     for (const card of cardEls) {
       const e = co[card.dataset.vid]; if (!e) continue;
       card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
@@ -925,11 +964,11 @@ async function pageReport(q) {
   const unit = await loadUnit();
   if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
   const ym = currentYm(q);
-  const rows = await rowsFor(unit, ym);
-  const S = unit.settings;
+  const view = await monthView(unit, ym);
+  const { rows, S, closed } = view;
   const nErr = rows.reduce((a, r) => a + r.errors.length, 0);
   const lay = C.registerLayout(rows, rows.sources, S);
-  const actList = C.actList(rows, S);
+  const actList = view.acts;
   const acts = actList.map((a, i) => {
     const tot = a.lines.reduce((x, l) => x + l.qtyC, 0);
     return `<div class="act"><h3>Акт «${esc(a.title)}»</h3><div class="big">${C.fmtC(tot)} л</div>
@@ -940,6 +979,9 @@ async function pageReport(q) {
   const multi = actList.some((a) => a.perMvo);
   shell(`<div style="margin-top:14px">${monthPicker(ym, "#/report")}</div>
     <div class="panel"><h2>${esc(S.title)} за ${C.monthTitle(ym)}</h2>
+      ${closed ? `<div class="flash ok">${closedNote(closed)}${isAdmin() ? ` <button class="btn sm js-reopen" style="margin-left:8px">🔓 Відкрити для змін</button>` : " · змінити може лише адміністратор"}</div>`
+        : rows.length ? `<div class="row" style="justify-content:space-between;margin-bottom:8px"><span class="muted">Коли реєстр і акти здано — закрийте місяць: пізніші зміни джерел, авто й правил його не змінять.</span>
+          <button class="btn sm js-close" ${nErr ? "disabled title='Спершу виправте помилки'" : ""}>🔒 Закрити місяць</button></div>` : ""}
       ${nErr ? `<div class="flash err">У даних є помилки (${nErr}) — перевірте картки на вкладці «Введення даних».</div>` : ""}
       ${rows.length ? `<div class="tblwrap">${U.previewHtml(rows, S, rows.sources)}</div>
         <p class="muted">* дані графи № ${lay.issTotalNo} повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.<br>
@@ -952,6 +994,16 @@ async function pageReport(q) {
           : "Кількість у акті — це витрачене з відповідних джерел (графи «Витрачено»)."}
         Номер, дати, ціна й сума лишаються порожніми.</p><div class="acts">${acts}</div></div>`);
   bindMonthPicker();
+  $app.querySelector(".js-close")?.addEventListener("click", async () => {
+    if (!confirm(`Закрити ${C.monthTitle(ym)}? Дані й документи місяця зафіксуються; змінити їх зможе лише адміністратор.`)) return;
+    busy(true); try { await closeMonth(unit, ym); flash("ok", "Місяць закрито."); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+    render();
+  });
+  $app.querySelector(".js-reopen")?.addEventListener("click", async () => {
+    if (!confirm(`Відкрити ${C.monthTitle(ym)} для змін? Місяць знову рахуватиметься за поточними джерелами, авто й правилами.`)) return;
+    busy(true); try { await reopenMonth(unit, ym); flash("ok", "Місяць відкрито для змін. Після виправлень закрийте його знову."); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+    render();
+  });
   $app.querySelector(".js-reg")?.addEventListener("click", async () => {
     await download(buildRegister(window.docx, S, ym, rows, rows.sources), `Додаток_6_Реєстр_пального_${ym}.docx`); store.log("doc_register", ym, unit.id);
   });
@@ -971,22 +1023,20 @@ async function pageArchive() {
   const recs = months.map((m) => {
     const sources = C.monthSources(unit.settings, m.sources);
     const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} }, sources);
-    const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id], sources));
-    rows.sources = sources;
-    const acts = C.actList(rows, unit.settings).filter((a) => a.lines.length);
-    return { ym: m.ym, rows, t: C.totals(rows), acts };
+    const v = viewOf(unit, { saved: m, entries: m.entries || {}, vehicles, sources });
+    return { ym: m.ym, rows: v.rows, S: v.S, t: C.totals(v.rows), acts: v.acts.filter((a) => a.lines.length), closed: v.closed };
   });
   shell(`<div class="panel"><h2>🗂️ Архів місяців</h2>${recs.length ? `<table class="list"><thead><tr><th>Місяць</th><th class="num">Авто</th>
     <th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Документи</th></tr></thead><tbody>
-    ${recs.map((r) => `<tr><td><a href="#/entry?ym=${r.ym}">${C.monthTitle(r.ym)}</a></td><td class="num">${r.rows.length}</td><td class="num">${C.fmtKm(r.t.km)}</td>
+    ${recs.map((r) => `<tr><td><a href="#/entry?ym=${r.ym}">${C.monthTitle(r.ym)}</a>${r.closed ? ` <span class="pill ok" title="${esc(r.closed.closed_at || "")}">🔒 закрито</span>` : ""}</td><td class="num">${r.rows.length}</td><td class="num">${C.fmtKm(r.t.km)}</td>
       <td class="num">${C.fmtC(r.t.issuedC)}</td><td class="num">${C.fmtC(r.t.consC)}</td><td class="num">${C.fmtC(r.t.endC)}</td>
       <td><button class="btn sm js-doc" data-ym="${r.ym}" data-k="reg">Реєстр</button>
         ${r.acts.map((a, i) => `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="${i}">Акт «${esc(a.title)}»</button>`).join(" ")}</td></tr>`).join("")}
     </tbody></table>` : `<p class="muted">Збережених місяців ще немає.</p>`}</div>`);
   $app.querySelectorAll(".js-doc").forEach((b) => b.addEventListener("click", async () => {
     const r = recs.find((x) => x.ym === b.dataset.ym); const k = b.dataset.k;
-    if (k === "reg") await download(buildRegister(window.docx, unit.settings, r.ym, r.rows, r.rows.sources), `Додаток_6_Реєстр_пального_${r.ym}.docx`);
-    else { const a = r.acts[Number(k)]; await download(buildAct(window.docx, unit.settings, r.ym, a), actFileName(a, r.ym)); }
+    if (k === "reg") await download(buildRegister(window.docx, r.S, r.ym, r.rows, r.rows.sources), `Додаток_6_Реєстр_пального_${r.ym}.docx`);
+    else { const a = r.acts[Number(k)]; await download(buildAct(window.docx, r.S, r.ym, a), actFileName(a, r.ym)); }
   }));
 }
 
@@ -1270,13 +1320,15 @@ async function pageAdmin(sub, q) {
       publishCatalog(unit);
       const st = await monthState(unit, ym);
       // для вивантаження в Excel (модуль хабу «Пробіг і пальне»): збережений місяць або перенесений з попереднього показник на початок
-      const exp = { org: unit.settings.org, unit: u.name, vehicles: st.vehicles, entries: st.entries };
       const m = st.saved;
+      const view = viewOf(unit, st);
+      const exp = view.closed ? { org: view.S.org, unit: u.name, vehicles: view.rows.map((r) => r.vehicle), entries: Object.fromEntries(view.rows.map((r) => [r.vehicle.id, r.entry])) }
+        : { org: unit.settings.org, unit: u.name, vehicles: st.vehicles, entries: st.entries };
       if (!m) return { u, n: unit.vehicles.filter((v) => v.active).length, done: 0, err: 0, t: null, exp };
-      const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} }, st.sources);
-      const rows = vehicles.map((v) => C.calcRow(v, (m.entries || {})[v.id], st.sources));
-      const sts = rows.map((r, i) => C.statusOf(r, (m.entries || {})[vehicles[i].id] || {}));
-      return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows), updated: m.updated_at, exp };
+      const rows = view.rows;
+      const sts = rows.map((r) => C.statusOf(r, r.entry || {}));
+      return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows),
+        updated: m.updated_at, exp, closed: !!view.closed };
     }));
     state.lastSummary = { ym, rowsSum };
     const sum = (k) => rowsSum.reduce((a, r) => a + (r.t ? r.t[k] : 0), 0);
@@ -1290,7 +1342,7 @@ async function pageAdmin(sub, q) {
       ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
         : r.done ? `<span class="pill warn">${r.done}/${r.n}</span>` : `<span class="pill err">0/${r.n}</span>`}${r.err ? ` <span class="pill err">помилок: ${r.err}</span>` : ""}</td>
         <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
-        <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}</td></tr>`).join("")}</tbody></table></div>`;
+        <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table></div>`;
   } else if (tab === "audit") {
     const audit = await store.listAudit(200);
     body = `<div class="panel"><h2>Журнал дій (останні 200)</h2><table class="list"><thead><tr><th>Час</th><th>Користувач</th><th>Підрозділ</th><th>Дія</th><th>Деталі</th></tr></thead><tbody>
@@ -1513,8 +1565,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261029f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261029g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
