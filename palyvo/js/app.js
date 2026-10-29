@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261029g";
-import * as U from "./ui.js?v=20261029g";
-import { litresWords } from "./words.js?v=20261029g";
-import { buildRegister, buildAct } from "./docs.js?v=20261029g";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029g";
-import * as X from "./crypto.js?v=20261029g";
-import { qrSvg } from "../vendor/qrcode.js?v=20261029g";
-import { buildXlsx } from "./xlsx.js?v=20261029g";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029g";
+import * as C from "./core.js?v=20261029h";
+import * as U from "./ui.js?v=20261029h";
+import { litresWords } from "./words.js?v=20261029h";
+import { buildRegister, buildAct } from "./docs.js?v=20261029h";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029h";
+import * as X from "./crypto.js?v=20261029h";
+import { qrSvg } from "../vendor/qrcode.js?v=20261029h";
+import { buildXlsx } from "./xlsx.js?v=20261029h";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029h";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -972,7 +972,7 @@ async function pageReport(q) {
   const acts = actList.map((a, i) => {
     const tot = a.lines.reduce((x, l) => x + l.qtyC, 0);
     return `<div class="act"><h3>Акт «${esc(a.title)}»</h3><div class="big">${C.fmtC(tot)} л</div>
-      ${a.lines.length ? `<ul>${a.lines.map((l) => `<li>${esc(l.fuel)} ${esc(l.supplier)} — ${C.fmtC(l.qtyC)} л (МВО ${esc(l.mvo)})</li>`).join("")}</ul>
+      ${a.lines.length ? `<ul>${a.lines.map((l) => `<li>${esc([l.fuel, l.form, l.supplier].filter(Boolean).join(" "))} — ${C.fmtC(l.qtyC)} л (МВО ${esc(l.mvo)})</li>`).join("")}</ul>
         <p class="muted">«${litresWords(tot)}»</p><button class="btn sky js-act" data-i="${i}">📥 Завантажити акт (Word)</button>`
         : `<p class="muted">Немає пального до списання.</p>`}</div>`;
   }).join("");
@@ -1565,8 +1565,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261029g")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029g")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261029h")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029h")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

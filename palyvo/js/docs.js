@@ -1,7 +1,7 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261029g";
-import { litresWords } from "./words.js?v=20261029g";
+import * as C from "./core.js?v=20261029h";
+import { litresWords } from "./words.js?v=20261029h";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -188,7 +188,7 @@ export function buildAct(D, s, ym, act, now = new Date()) {
     new D.TableRow({ children: heads.map((_, i) => cell(D, `${i + 1}.`, { size: 10 })) })];
   const lines = groups.length ? groups : [null];
   lines.forEach((g, i) => {
-    const vals = g ? [`${i + 1}.`, "", [g.fuel, g.supplier].filter(Boolean).join(" "), "л", C.fmtC(g.qtyC), "", "",
+    const vals = g ? [`${i + 1}.`, "", [g.fuel, g.form === "с/к" ? "с/к" : g.form, g.supplier].filter(Boolean).join(" "), "л", C.fmtC(g.qtyC), "", "",
       g.mvo ? `МВО ${g.mvo}` : "", period] : ["1.", "", "", "л", "0", "", "", "", period];
     tr.push(new D.TableRow({ cantSplit: true, children: vals.map((v) => cell(D, v, { size: 11 })) }));
   });

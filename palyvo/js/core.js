@@ -577,13 +577,16 @@ export function actGroups(rows, group = null, settings = {}, mvo = null) {
       const f = sourceFor(s, r.vehicle, settings);
       if (group !== null && f.group !== group) continue;
       if (mvo !== null && f.mvo !== mvo) continue;
-      const k = JSON.stringify([f.fuel, f.supplier, f.mvo]);
+      // окремі пункти акта за видом пального І формою (с/к окремо від талонів)
+      const k = JSON.stringify([f.fuel, f.supplier, f.mvo, f.form]);
       m.set(k + "|" + f.group, { k, q: ((m.get(k + "|" + f.group) || {}).q || 0) + q });
     }
   }
   const agg = new Map();
   for (const { k, q } of m.values()) agg.set(k, (agg.get(k) || 0) + q);
-  return [...agg.entries()].map(([k, q]) => { const [fuel, supplier, mvo2] = JSON.parse(k); return { fuel, supplier, mvo: mvo2, qtyC: q }; });
+  const FORM_ORDER = FORMS;
+  return [...agg.entries()].map(([k, q]) => { const [fuel, supplier, mvo2, form] = JSON.parse(k); return { fuel, supplier, mvo: mvo2, form: form || "", qtyC: q }; })
+    .sort((a, b) => String(a.fuel).localeCompare(String(b.fuel), "uk") || FORM_ORDER.indexOf(a.form) - FORM_ORDER.indexOf(b.form) || String(a.mvo).localeCompare(String(b.mvo), "uk"));
 }
 function legacyActSplit(r) {
   const out = { tsmk: 0, azs: 0 };
