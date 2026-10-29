@@ -566,8 +566,16 @@ export function actGroups(rows, group = null, settings = {}, mvo = null) {
       for (const g of Object.keys(split)) {
         const q = split[g];
         if (q <= 0 || (group !== null && g !== group) || (mvo !== null && f.mvo !== mvo)) continue;
-        const k = JSON.stringify([f.fuel, f.supplier, f.mvo]);
-        m.set(k + "|" + g, { k, q: ((m.get(k + "|" + g) || {}).q || 0) + q });
+        // усередині акта — окремими пунктами за формою (с/к / талони; АЗС талони / АЗС налив), пропорційно до виданого
+        const inG = r.sources.filter((s) => (FORM_GROUP[s.form] || "tsmk") === g && (r.issued[s.id] || 0) > 0);
+        const tot = inG.reduce((a, s) => a + r.issued[s.id], 0);
+        const parts = tot > 0 ? inG.map((s) => [s.form, q % 100 === 0 ? divHalfUp(q * r.issued[s.id], tot * 100) * 100 : divHalfUp(q * r.issued[s.id], tot)]) : [[(main && FORM_GROUP[main.form] === g ? main.form : ""), q]];
+        const diff = q - parts.reduce((a, x) => a + x[1], 0); if (parts.length) parts[parts.length - 1][1] += diff;
+        for (const [form, qq] of parts) {
+          if (qq <= 0) continue;
+          const k = JSON.stringify([f.fuel, f.supplier, f.mvo, form]);
+          m.set(k + "|" + g, { k, q: ((m.get(k + "|" + g) || {}).q || 0) + qq });
+        }
       }
       continue;
     }
@@ -595,7 +603,8 @@ function legacyActSplit(r) {
   for (const s of r.sources) by[FORM_GROUP[s.form] || "tsmk"] += r.issued[s.id] || 0;
   const tot = by.tsmk + by.azs;
   if (tot <= 0) { const main = r.sources.find((s) => s.id === r.mainId); out[(main && FORM_GROUP[main.form]) || "tsmk"] = r.consC; return out; }
-  const a = divHalfUp(r.consC * by.tsmk, tot);
+  // цілими літрами, якщо витрата ціла
+  const a = r.consC % 100 === 0 ? divHalfUp(r.consC * by.tsmk, tot * 100) * 100 : divHalfUp(r.consC * by.tsmk, tot);
   out.tsmk = a; out.azs = r.consC - a;
   return out;
 }

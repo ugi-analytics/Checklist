@@ -4,7 +4,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, applyActionCode, checkActionCode, verifyPasswordResetCode, confirmPasswordReset }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { FIREBASE_CONFIG } from "./config.js?v=20261029h";
+import { FIREBASE_CONFIG } from "./config.js?v=20261029i";
 
 const box = document.getElementById("box");
 const q = new URLSearchParams(location.search);
