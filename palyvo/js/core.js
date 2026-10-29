@@ -39,7 +39,7 @@ export function sourceTitle(src) {
 export function sourceFor(src, v = {}, settings = {}) {
   const custom = Array.isArray(settings.sources) && settings.sources.length;   // свої джерела: МВО — лише з джерела
   return { fuel: src.fuel || v.fuel || "", supplier: src.supplier || v.supplier || "",
-    mvo: src.mvo || (custom ? "" : v.mvo_text) || settings.compiler || "", form: src.form || "", group: FORM_GROUP[src.form] || "tsmk" };
+    mvo: src.mvo || (custom ? "" : v.mvo_text || settings.compiler) || "", form: src.form || "", group: FORM_GROUP[src.form] || "tsmk" };
 }
 /** Підпис джерела для «Вид пального на залишку»: «А-95 с/к UKRNAFTA Мосійченко». */
 export function sourceLabelFor(src, v = {}, settings = {}) {
@@ -185,9 +185,10 @@ export function mainSource(v, list) {
 /** Форма джерела зі слів опису: «т», «тал.», «талони» → талони; «АЗС» → АЗС; «с/к», «см/к» → с/к. */
 export function textForms(low) {
   low = String(low || "").toLowerCase();
-  if (/талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low)) return ["талони", "АЗС ГУНП талони"];
+  const tal = /талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low);
   if (/ова/.test(low)) return ["Налив ОВА"];
-  if (/азс/.test(low)) return ["АЗС ГУНП талони", "АЗС налив"];
+  if (/азс/.test(low)) return tal ? ["АЗС ГУНП талони", "АЗС налив"] : ["АЗС налив", "АЗС ГУНП талони"];   // «т АЗС» — талони АЗС ГУНП
+  if (tal) return ["талони", "АЗС ГУНП талони"];
   if (/(?:^|[\s\d])см?\/к/.test(low)) return ["с/к"];
   return null;
 }
@@ -196,7 +197,11 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const e = entry || {};
   const list = vehicleSources(vehicle, e, sources);
   // розбивка залишку на початок за МВО: числа (start_mvo) або довільний опис (start_text, «202 А-95 Мосійченко + 167 … Левошко»)
-  const useStartMap = e.start && Object.values(e.start).some((x) => !isBlank(x)) && isBlank(e.fuel_start);
+  const hasMap = e.start && Object.values(e.start).some((x) => !isBlank(x));
+  // розбивка залишку за джерелами (start: {джерело: л}) — лише стандартний режим; у своїх джерелах старі записи
+  // (з часу, коли залишок вводився в плитки джерел) читаються як загальний залишок + опис
+  const useStartMap = hasMap && isBlank(e.fuel_start) && sources.legacy;
+  const startTotal = !isBlank(e.fuel_start) ? e.fuel_start : hasMap && !sources.legacy ? Object.values(e.start).reduce((a, x) => a + (Number(x) || 0), 0) : null;
   const splitIn = [];          // [{mvo, c, hint}]
   const textWarn = [];
   if (!useStartMap) {
@@ -214,7 +219,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       parts.forEach((p) => { p.own = !!p.mv; });
       // опис без числа («ДП с/к Ольховський») — увесь загальний залишок належить цьому МВО / формі
       const withNum = parts.filter((p) => p.c !== null);
-      if (!withNum.length && parts.length === 1 && !isBlank(e.fuel_start)) parts[0].c = toC(e.fuel_start);
+      if (!withNum.length && parts.length === 1 && !isBlank(startTotal)) parts[0].c = toC(startTotal);
       for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mv) nxt = parts[k].mv; else parts[k].mv = nxt; }
       for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mv) prv = parts[k].mv; else parts[k].mv = prv; }
       for (const p of parts) {
@@ -245,7 +250,12 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   for (const sp of splitIn) { sp.src = sp.src || (sp.c ? pickSrc(sp) : null); if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
   // свої джерела: «різні» за замовчуванням — також коли вибране основне джерело вже не існує
   const free = !sources.legacy && (vehicle.source === NO_MAIN || !sources.some((x) => x.id === vehicle.source));
-  const anchor = mainSource(free ? { ...vehicle, source: "" } : vehicle, list);   // куди йде нерозбитий залишок
+  // куди йде залишок, не описаний за МВО: основне джерело; для «різних» — джерело того ж пального, з якого видавали цього місяця,
+  // і не АЗС (талони/с/к), щоб не «списувати» з АЗС ГУНП пальне, якого там не було
+  const issNow = (x) => { const m = e.iss || {}; return !isBlank(m[x.id]) && Number(m[x.id]) > 0; };
+  const anchorScore = (x) => (x.fuel && sourceFits(x, vehicle) ? 4 : 0) + (issNow(x) ? 2 : 0) + (FORM_GROUP[x.form] === "tsmk" ? 1 : 0);
+  const anchor = free ? ([...list].filter((x) => sourceFits(x, vehicle)).sort((a, b) => anchorScore(b) - anchorScore(a))[0] || list[0])
+    : mainSource(vehicle, list);
   const main = free ? null : anchor;
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
@@ -261,7 +271,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   }
   r.startSplit = hasStartMap && Object.values(e.start).filter((x) => toC(x) > 0).length > 1;
   if (!hasStartMap) {
-    const T = toC(e.fuel_start);
+    const T = toC(startTotal);
     let sum = 0;
     for (const sp of splitIn) {
       sum += sp.c; if (!sp.c) continue;
@@ -281,6 +291,8 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     }
     r.warnings.push(...textWarn);
     if (anchor && T > sum) r.startBy[anchor.id] += T - sum;
+    if (anchor && free && T > 0 && sum === 0 && vehicleMvos(sources).length > 1)
+      r.warnings.push(`Залишок на початок не описано (чий і який) — віднесено на «${sourceTitle(anchor)}». Опишіть його в полі «Вид залишку на початок», напр. «${fmtC(T)} с/к Прізвище».`);
     r.startSplit = splitIn.some((x) => x.c > 0) && sum > 0;
   }
   for (const s of list) r.startC += r.startBy[s.id];
