@@ -320,3 +320,4 @@ textarea.vtxt.filled { border:1px solid rgba(250,204,21,.7); }
 .disp-kv > div.hl { border-color:rgba(250,204,21,.7); } .disp-kv > div.hl b { color:#facc15; }
 .js-pick { cursor:pointer; } .js-pick:hover td { background:rgba(56,189,248,.12); } .js-pick.on td { background:rgba(250,204,21,.15); }
 .disp-calc input.bad { border-color:#ef4444 !important; }
+#veh.custom .col-mvo { display:none; }

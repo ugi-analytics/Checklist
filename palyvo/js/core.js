@@ -8,8 +8,8 @@ export const MONTHS_UA = ["січень", "лютий", "березень", "к�
 // Джерело = вид пального + форма видачі + постачальник + МВО. Підрозділ налаштовує їх сам
 // («Автопарк і реквізити»); якщо не налаштовано — чотири стандартні джерела, як було раніше.
 // У стандартних джерелах вид пального, постачальник і МВО беруться з картки авто.
-export const FORMS = ["с/к", "талони", "АЗС ГУНП талони", "АЗС налив"];
-export const FORM_GROUP = { "с/к": "tsmk", "талони": "tsmk", "АЗС ГУНП талони": "azs", "АЗС налив": "azs" };
+export const FORMS = ["с/к", "талони", "АЗС ГУНП талони", "АЗС налив", "Налив ОВА"];
+export const FORM_GROUP = { "с/к": "tsmk", "талони": "tsmk", "АЗС ГУНП талони": "azs", "АЗС налив": "azs", "Налив ОВА": "ova" };
 export const LEGACY_SOURCES = [
   { id: "azs_gunp", form: "АЗС ГУНП талони", fuel: "", supplier: "", mvo: "", label: "АЗС ГУНП талони" },
   { id: "talony", form: "талони", fuel: "", supplier: "", mvo: "", label: "Талони" },
@@ -17,14 +17,15 @@ export const LEGACY_SOURCES = [
   { id: "azs_smk", form: "АЗС налив", fuel: "", supplier: "", mvo: "", label: "АЗС налив" },
 ];
 /** Коротка форма для опису залишку. */
-export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС" };
+export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС", "Налив ОВА": "ОВА" };
 export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS"];
-/** Авто без основного джерела (заправляється з різних): витрата ділиться між джерелами пропорційно до наявного. */
+/** Авто без основного джерела (заправляється з різних): витрата — спершу із залишку, потім із виданого, щоб джерела вичерпувались повністю. */
 export const NO_MAIN = "-";
 
 export const ACT_GROUPS = {
   tsmk: { title: "Талони + см/к", file: "Талони_см-к" },
   azs: { title: "АЗС", file: "АЗС" },
+  ova: { title: "Налив ОВА", file: "Налив_ОВА" },
 };
 
 /** Назва джерела для шапки таблиці (без даних авто). */
@@ -34,8 +35,9 @@ export function sourceTitle(src) {
 }
 /** Реквізити джерела для конкретного авто (порожні поля стандартних джерел — з картки авто). */
 export function sourceFor(src, v = {}, settings = {}) {
+  const custom = Array.isArray(settings.sources) && settings.sources.length;   // свої джерела: МВО — лише з джерела
   return { fuel: src.fuel || v.fuel || "", supplier: src.supplier || v.supplier || "",
-    mvo: src.mvo || v.mvo_text || settings.compiler || "", form: src.form || "", group: FORM_GROUP[src.form] || "tsmk" };
+    mvo: src.mvo || (custom ? "" : v.mvo_text) || settings.compiler || "", form: src.form || "", group: FORM_GROUP[src.form] || "tsmk" };
 }
 /** Підпис джерела для «Вид пального на залишку»: «А-95 с/к UKRNAFTA Мосійченко». */
 export function sourceLabelFor(src, v = {}, settings = {}) {
@@ -174,13 +176,15 @@ export function byMvo(r, which = "end") {
 }
 /** Основне джерело авто (куди йде витрата в першу чергу). */
 export function mainSource(v, list) {
-  return list.find((s) => s.id === v.source) || list.find((s) => sourceFits(s, v)) || list[0];
+  // спершу джерело з тим самим видом пального (а не «будь-яке»), потім будь-яке, що підходить
+  return list.find((s) => s.id === v.source) || list.find((s) => s.fuel && sourceFits(s, v)) || list.find((s) => sourceFits(s, v)) || list[0];
 }
 
 /** Форма джерела зі слів опису: «т», «тал.», «талони» → талони; «АЗС» → АЗС; «с/к», «см/к» → с/к. */
 export function textForms(low) {
   low = String(low || "").toLowerCase();
   if (/талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low)) return ["талони", "АЗС ГУНП талони"];
+  if (/ова/.test(low)) return ["Налив ОВА"];
   if (/азс/.test(low)) return ["АЗС ГУНП талони", "АЗС налив"];
   if (/(?:^|[\s\d])см?\/к/.test(low)) return ["с/к"];
   return null;
@@ -206,6 +210,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
         return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mv: mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "", own: false };
       });
       parts.forEach((p) => { p.own = !!p.mv; });
+      // опис без числа («ДП с/к Ольховський») — увесь загальний залишок належить цьому МВО / формі
+      const withNum = parts.filter((p) => p.c !== null);
+      if (!withNum.length && parts.length === 1 && !isBlank(e.fuel_start)) parts[0].c = toC(e.fuel_start);
       for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mv) nxt = parts[k].mv; else parts[k].mv = nxt; }
       for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mv) prv = parts[k].mv; else parts[k].mv = prv; }
       for (const p of parts) {
@@ -234,7 +241,8 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     return cand.sort((a, b) => score(b) - score(a))[0];
   };
   for (const sp of splitIn) { sp.src = sp.src || (sp.c ? pickSrc(sp) : null); if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
-  const free = !sources.legacy && vehicle.source === NO_MAIN;
+  // свої джерела: «різні» за замовчуванням — також коли вибране основне джерело вже не існує
+  const free = !sources.legacy && (vehicle.source === NO_MAIN || !sources.some((x) => x.id === vehicle.source));
   const anchor = mainSource(free ? { ...vehicle, source: "" } : vehicle, list);   // куди йде нерозбитий залишок
   const main = free ? null : anchor;
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
@@ -291,7 +299,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   // загальне правило: витрата за нормою округлюється до цілих літрів (половина — вгору);
   // десяті/соті лишаються лише в залишку (або коли списується весь наявний залишок із сотими)
   r.normExactC = r.normC;
-  r.normC = divHalfUp(r.normC, 100) * 100;
+  // соті лишаються, якщо вони були в залишку на початок або у виданому за місяць; інакше — до цілих літрів
+  r.hasFrac = r.startC % 100 !== 0 || list.some((x) => r.issued[x.id] % 100 !== 0);
+  if (!r.hasFrac) r.normC = divHalfUp(r.normC, 100) * 100;
   const target = e.manual ? toC(e.consumed_manual) : r.normC;
   if (target > avail) {
     r.capped = true; r.consC = avail;
@@ -315,20 +325,25 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     }
     if (sum !== r.consC) r.errors.push(`Розподіл витрати за джерелами (${fmtC(sum)} л) не дорівнює загальній витраті (${fmtC(r.consC)} л).`);
   } else {
-    // як і раніше: уся витрата — на основне джерело авто; якщо там бракує — з інших джерел по черзі
+    // спершу залишок на початок, потім видане за місяць (або навпаки — налаштування «спочатку видане»);
+    // у кожній черзі — так, щоб джерела вичерпувались повністю: якщо одне джерело покриває решту — лише з нього,
+    // інакше спершу повністю найбільше. Основне джерело (якщо вибране) — першим; джерела іншого пального — в останню чергу.
     let left = r.consC;
-    const rest = list.filter((s) => !main || s.id !== main.id);
-    const order = [...(main ? [main] : []), ...rest.filter((s) => sourceFits(s, vehicle)), ...rest.filter((s) => !sourceFits(s, vehicle))];
-    if (sources.issuedFirst) {
-      // спершу списується видане за місяць, потім — залишок на початок
-      for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(r.issued[s.id], 0)); r.consBy[s.id] += take; left -= take; }
-    }
-    if (free) {
-      // без основного джерела: пропорційно до наявного, спершу серед джерел того ж виду пального
-      const fit = order.filter((s) => sourceFits(s, vehicle));
-      left = propTake(r, fit, left, availBy);
-    }
-    for (const s of order) { if (left <= 0) break; const take = Math.min(left, Math.max(availBy(s.id) - r.consBy[s.id], 0)); r.consBy[s.id] += take; left -= take; }
+    const used = { start: {}, iss: {} };
+    const remOf = (x, kind) => Math.max((kind === "start" ? r.startBy[x.id] : r.issued[x.id]) - (used[kind][x.id] || 0), 0);
+    const take = (x, kind, q) => { used[kind][x.id] = (used[kind][x.id] || 0) + q; r.consBy[x.id] += q; left -= q; };
+    const greedy = (pool, kind) => {
+      while (left > 0) {
+        const c = pool.filter((x) => remOf(x, kind) > 0); if (!c.length) return;
+        const enough = c.filter((x) => remOf(x, kind) >= left).sort((a, b) => remOf(a, kind) - remOf(b, kind));
+        if (enough.length) { take(enough[0], kind, left); return; }
+        const big = c.sort((a, b) => remOf(b, kind) - remOf(a, kind))[0]; take(big, kind, remOf(big, kind));
+      }
+    };
+    const rest = list.filter((x) => !main || x.id !== main.id);
+    const pools = [...(main ? [[main]] : []), rest.filter((x) => sourceFits(x, vehicle)), rest.filter((x) => !sourceFits(x, vehicle))];
+    const phases = sources.issuedFirst ? ["iss", "start"] : ["start", "iss"];
+    for (const pool of pools) for (const kind of phases) greedy(pool, kind);
     // джерел не вистачило — списуємо з давніх талонів (їх кількість у описі зменшується)
     for (const k of r.keep) { if (left <= 0) break; const take = Math.min(left, k.left); k.left -= take; left -= take; r.keepConsC = (r.keepConsC || 0) + take; }
     if (left > 0 && anchor) r.consBy[anchor.id] += left;   // не має статися (витрата обмежена наявним)

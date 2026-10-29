@@ -1,7 +1,7 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261028a";
-import { litresWords } from "./words.js?v=20261028a";
+import * as C from "./core.js?v=20261029a";
+import { litresWords } from "./words.js?v=20261029a";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -127,8 +127,8 @@ export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSo
   }
   children.push(para(D, [run(D, "Підпис особи, яка склала реєстр:", { size: 12, bold: true })],
     { align: "left", before: 14, after: 10, keepNext: true }));
-  children.push(para(D, [run(D, `______________________________  ${s.compiler || ""}`, { size: 12 })],
-    { align: "left", indentLeft: cm(12.5) }));
+  for (const nm of [s.compiler, s.compiler2, s.compiler3].map((x) => String(x || "").trim()).filter((x, i) => i === 0 || x))
+    children.push(para(D, [run(D, `______________________________  ${nm}`, { size: 12 })], { align: "left", indentLeft: cm(12.5), before: 8, keepNext: true }));
 
   return baseDoc(D, { page: { size: { orientation: D.PageOrientation.LANDSCAPE, width: cm(21.0), height: cm(29.7) },
     margin: { top: cm(1), bottom: cm(1), left: cm(1.5), right: cm(1.5) } } }, children, 11);
