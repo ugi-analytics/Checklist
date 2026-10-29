@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261029e";
-import * as U from "./ui.js?v=20261029e";
-import { litresWords } from "./words.js?v=20261029e";
-import { buildRegister, buildAct } from "./docs.js?v=20261029e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029e";
-import * as X from "./crypto.js?v=20261029e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261029e";
-import { buildXlsx } from "./xlsx.js?v=20261029e";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029e";
+import * as C from "./core.js?v=20261029f";
+import * as U from "./ui.js?v=20261029f";
+import { litresWords } from "./words.js?v=20261029f";
+import { buildRegister, buildAct } from "./docs.js?v=20261029f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261029f";
+import * as X from "./crypto.js?v=20261029f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261029f";
+import { buildXlsx } from "./xlsx.js?v=20261029f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261029f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1223,8 +1223,16 @@ async function pageAdmin(sub, q) {
       }).join("")}</div>`;
   } else if (tab === "users") {
     const list = users.filter((u) => u.status !== "pending").sort((a, b) => unitName(a.unit_id).localeCompare(unitName(b.unit_id), "uk"));
-    body = `<div class="panel"><h2>Користувачі</h2><table class="list"><thead><tr><th>ПІБ / посада</th><th>E-mail</th><th>Підрозділ і роль</th><th>Статус</th><th>Останній вхід</th><th>Дії</th></tr></thead><tbody>
-      ${list.map((u) => `<tr data-uid="${u.uid}"><td><b>${esc(u.full_name)}</b><br><span class="muted">${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}</span></td>
+    body = `<div class="panel"><h2>Користувачі</h2>
+      <div class="row ufilter" style="gap:10px;margin-bottom:12px">
+        <input class="js-uq" placeholder="🔍 ПІБ, e-mail, посада, телефон" style="flex:1;min-width:240px;max-width:420px">
+        <select class="js-urole"><option value="">усі ролі</option>${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
+        <select class="js-uunit"><option value="">усі підрозділи</option><option value="-">без підрозділу</option>${units.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select>
+        <select class="js-ust"><option value="">усі статуси</option><option value="active">активні</option><option value="blocked">заблоковані</option><option value="rejected">відхилені</option></select>
+        <span class="muted js-ucount"></span></div>
+      <table class="list"><thead><tr><th>ПІБ / посада</th><th>E-mail</th><th>Підрозділ і роль</th><th>Статус</th><th>Останній вхід</th><th>Дії</th></tr></thead><tbody>
+      ${list.map((u) => `<tr data-uid="${u.uid}" data-role="${esc(u.role || "user")}" data-unit="${esc(u.unit_id && units.some((x) => x.id === u.unit_id) ? u.unit_id : "-")}" data-st="${esc(u.status)}"
+        data-s="${esc([u.full_name, u.email, u.position, u.phone, unitName(u.unit_id)].join(" ").toLowerCase())}"><td><b>${esc(u.full_name)}</b><br><span class="muted">${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}</span></td>
         <td>${esc(u.email)}</td>
         <td><div class="row" style="gap:6px"><select class="js-unitsel">${unitOptions(u.unit_id)}</select>
           <select class="js-role">${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}" ${u.role === k ? "selected" : ""}>${l}</option>`).join("")}</select>
@@ -1327,6 +1335,25 @@ async function pageAdmin(sub, q) {
     if (uid === state.authUser.uid && role !== "admin") { flash("err", "Не можна зняти роль адміністратора із себе."); return render(); }
     act(() => store.updateUser(uid, { unit_id: role === "dispatcher" ? "" : tr.querySelector(".js-unitsel").value, role }), "Користувача оновлено.");
   }));
+  // пошук і фільтри користувачів (запам'ятовуються на час вкладки)
+  const uq = $app.querySelector(".js-uq");
+  if (uq) {
+    const ctl = { q: uq, role: $app.querySelector(".js-urole"), unit: $app.querySelector(".js-uunit"), st: $app.querySelector(".js-ust") };
+    let saved = {}; try { saved = JSON.parse(sessionStorage.getItem("ufilter") || "{}"); } catch { /* */ }
+    for (const k in ctl) ctl[k].value = saved[k] || "";
+    const apply = () => {
+      const t = ctl.q.value.trim().toLowerCase(); let n = 0, all = 0;
+      $app.querySelectorAll("tr[data-uid]").forEach((tr) => {
+        all++;
+        const ok = (!t || tr.dataset.s.includes(t)) && (!ctl.role.value || tr.dataset.role === ctl.role.value)
+          && (!ctl.unit.value || tr.dataset.unit === ctl.unit.value) && (!ctl.st.value || tr.dataset.st === ctl.st.value);
+        tr.style.display = ok ? "" : "none"; if (ok) n++;
+      });
+      $app.querySelector(".js-ucount").textContent = n === all ? `усього: ${all}` : `знайдено: ${n} з ${all}`;
+      try { sessionStorage.setItem("ufilter", JSON.stringify(Object.fromEntries(Object.entries(ctl).map(([k, el]) => [k, el.value])))); } catch { /* */ }
+    };
+    Object.values(ctl).forEach((el) => el.addEventListener(el === ctl.q ? "input" : "change", apply)); apply();
+  }
   $app.querySelector(".js-dispreset")?.addEventListener("click", () => {
     if (!confirm("Скинути ключ диспетчера? Диспетчер створить новий, а довідники авто оновляться, коли підрозділи відкриють портал (або ви відкриєте «Зведення по області»).")) return;
     act(async () => { await store.resetDispKeys(); state.dispPub = undefined; store.log("disp_key_reset", ""); }, "Ключ диспетчера скинуто.");
@@ -1486,8 +1513,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261029e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261029f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261029f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

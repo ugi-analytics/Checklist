@@ -322,3 +322,4 @@ textarea.vtxt.filled { border:1px solid rgba(250,204,21,.7); }
 .disp-calc input.bad { border-color:#ef4444 !important; }
 #veh.custom .col-mvo { display:none; }
 select.ssrc { width:100%; font-size:.86rem; padding:6px 8px; }
+.ufilter select { min-width:150px; }
