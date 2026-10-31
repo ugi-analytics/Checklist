@@ -186,7 +186,7 @@ export function mainSource(v, list) {
 export function textForms(low) {
   low = String(low || "").toLowerCase();
   const tal = /талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low);
-  if (/ова/.test(low)) return ["Налив ОВА"];
+  if (/(?:^|[^а-яґєіїa-z])ова(?![а-яґєіїa-z])/.test(low)) return ["Налив ОВА"];   // окреме слово «ОВА» (не «Коваленко»)
   if (/азс/.test(low)) return tal ? ["АЗС ГУНП талони", "АЗС налив"] : ["АЗС налив", "АЗС ГУНП талони"];   // «т АЗС» — талони АЗС ГУНП
   if (tal) return ["талони", "АЗС ГУНП талони"];
   if (/(?:^|[\s\d])см?\/к/.test(low)) return ["с/к"];
