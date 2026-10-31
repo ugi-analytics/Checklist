@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261031a";
+import * as C from "./core.js?v=20261031b";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -18,7 +18,7 @@ export function idHtml(v, status, srcTitle = "") {
   const head = plate
     ? `<div class='model'>${esc(model)}</div><div class='fr-plate'><div class='ua'><i></i>UA</div><div class='n'>${esc(plate)}</div></div>`
     : `<div class='fr-name'>${esc(model) || "—"}</div>`;
-  const rate = `${fmtNum(v.rate)} л/100 км` + (v.winter_pct ? ` +${fmtNum(v.winter_pct)}%` : "");
+  const rate = `${fmtNum(v.rate)} л/100 км`;
   let chips = `<span class='fr-chip y'>${rate}</span>`;
   if (v.fuel) chips += `<span class='fr-chip'>${esc(v.fuel)}</span>`;
   if (srcTitle) chips += `<span class='fr-chip' title='Основне джерело списання'>${esc(srcTitle)}</span>`;

@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261031a";
-import * as U from "./ui.js?v=20261031a";
-import { litresWords } from "./words.js?v=20261031a";
-import { buildRegister, buildAct } from "./docs.js?v=20261031a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261031a";
-import * as X from "./crypto.js?v=20261031a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261031a";
-import { buildXlsx } from "./xlsx.js?v=20261031a";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261031a";
+import * as C from "./core.js?v=20261031b";
+import * as U from "./ui.js?v=20261031b";
+import { litresWords } from "./words.js?v=20261031b";
+import { buildRegister, buildAct } from "./docs.js?v=20261031b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261031b";
+import * as X from "./crypto.js?v=20261031b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261031b";
+import { buildXlsx } from "./xlsx.js?v=20261031b";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261031b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -475,7 +475,7 @@ async function loadUnit(id = state.unitId) {
   publishCatalog(unit);
   return unit;
 }
-// довідник авто для диспетчера: лише назва, норма, надбавка, пальне (без показників за місяці);
+// довідник авто для диспетчера: лише назва, норма, пальне (без показників за місяці);
 // публікується, коли змінився довідник або ключ диспетчера
 async function publishCatalog(unit) {
   try {
@@ -483,7 +483,7 @@ async function publishCatalog(unit) {
     if (state.dispPub === undefined) state.dispPub = await store.getDispPub();
     const pub = state.dispPub; if (!pub) return;
     const cat = { unit: unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
-      .map((v) => ({ id: v.id, name: v.name, rate: v.rate, winter_pct: v.winter_pct, month_norm_km: v.month_norm_km, fuel: v.fuel })) };
+      .map((v) => ({ id: v.id, name: v.name, rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel })) };
     const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
     const cur = await store.getFleetCat(unit.id);
     if (cur && cur.h === h) return;
@@ -845,7 +845,7 @@ async function pageDisp(q) {
   const cacheId = pub ? `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser.uid}:disp:${pub.kid}` : "";
   if (!pub) {
     shell(`<div class="auth" style="max-width:640px"><div class="panel"><h2 class="display">🔑 Створіть ключ диспетчера</h2>
-      <div class="note"><p>Довідники авто підрозділів зашифровані. Ключ диспетчера — це фраза, якою відкриваються <b>лише довідники авто</b> (назва, норма, надбавка, пальне).
+      <div class="note"><p>Довідники авто підрозділів зашифровані. Ключ диспетчера — це фраза, якою відкриваються <b>лише довідники авто</b> (назва, норма, пальне).
         Показників підрозділів за місяці диспетчер не бачить.</p><p>Ключ знаєте лише ви (та інші диспетчери, яким ви його передасте). Адміністратор його не бачить; якщо ключ забуто — він скидає його, і ви створюєте новий.</p></div>
       <form class="js-dnew" autocomplete="off"><label class="f">Ключ диспетчера (від 10 символів, краще фраза)<input name="k1" type="password" required></label>
         <label class="f">Повторіть<input name="k2" type="password" required></label>${rememberBox}<button class="btn primary">Створити ключ</button></form></div></div>`);
@@ -902,14 +902,13 @@ function dispView(q) {
   const all = cats.flatMap((c) => c.vehicles.map((v) => ({ ...v, unit: c.unit, unit_id: c.unit_id })));
   const sel = q.get("v") ? all.find((v) => `${v.unit_id}:${v.id}` === q.get("v")) : null;
   const rowHtml = (v) => `<tr class="js-pick ${sel && sel === v ? "on" : ""}" data-k="${esc(v.unit_id + ":" + v.id)}" data-s="${esc((v.name + " " + v.unit + " " + (v.fuel || "")).toLowerCase())}">
-    <td><b>${esc(v.name)}</b></td><td class="muted">${esc(v.unit)}</td><td>${esc(v.fuel || "")}</td><td class="num">${esc(String(v.rate ?? ""))}</td><td class="num">${v.winter_pct ? esc(String(v.winter_pct)) + "%" : "—"}</td></tr>`;
+    <td><b>${esc(v.name)}</b></td><td class="muted">${esc(v.unit)}</td><td>${esc(v.fuel || "")}</td><td class="num">${esc(String(v.rate ?? ""))}</td></tr>`;
   const calc = sel ? `<div class="panel disp-calc"><h2>🧮 ${esc(sel.name)} <span class="muted" style="font-size:.9rem">· ${esc(sel.unit)}</span></h2>
     <p class="muted">Розрахунок лише на цьому екрані — нікуди не зберігається і не змінює даних підрозділу.</p>
     <form class="js-dcalc grid-calc" autocomplete="off">
       <label class="f">Пробіг на початок, км<input name="odo_start" type="number" min="0" step="1"></label>
       <label class="f">Пробіг на кінець, км<input name="odo_end" type="number" min="0" step="1"></label>
       <label class="f">Норма, л/100 км<input name="rate" type="number" min="0" step="0.01" value="${esc(String(sel.rate ?? ""))}"></label>
-      <label class="f">Зимова надбавка, %<input name="winter_pct" type="number" min="0" max="100" step="1" value="${esc(String(sel.winter_pct ?? 0))}"></label>
       <label class="f">Залишок на початок, л<input name="fuel_start" type="number" min="0" step="0.01"></label>
       <label class="f">Видано, л <span class="muted">(можна кілька: 10+15+11,25)</span><input name="issued" type="text" inputmode="decimal" autocomplete="off" placeholder="10+15+11,25+58">
         <span class="js-isum muted" style="font-size:.85rem;margin-top:3px"></span></label>
@@ -923,7 +922,7 @@ function dispView(q) {
       ${all.length ? "" : `<div class="flash info" style="margin-top:10px">Довідників авто ще немає. Вони з'являються, коли хтось із підрозділу відкриває портал (або адміністратор відкриває «Зведення по області»).</div>`}
     </div>
     ${calc}
-    <div class="panel"><div class="tblwrap" style="max-height:${sel ? 360 : 640}px;overflow:auto"><table class="list js-dlist"><thead><tr><th>Авто</th><th>Підрозділ</th><th>Пальне</th><th class="num">Норма</th><th class="num">Надбавка</th></tr></thead>
+    <div class="panel"><div class="tblwrap" style="max-height:${sel ? 360 : 640}px;overflow:auto"><table class="list js-dlist"><thead><tr><th>Авто</th><th>Підрозділ</th><th>Пальне</th><th class="num">Норма, л/100 км</th></tr></thead>
       <tbody>${all.map(rowHtml).join("")}</tbody></table></div></div>`);
   const qi = $app.querySelector(".js-dq");
   const filter = () => { const t = qi.value.trim().toLowerCase(); $app.querySelectorAll(".js-pick").forEach((tr) => { tr.style.display = !t || tr.dataset.s.includes(t) ? "" : "none"; }); };
@@ -934,7 +933,7 @@ function dispView(q) {
     const f = $app.querySelector(".js-dcalc"), res = $app.querySelector(".js-dres");
     const run = () => {
       const val = (n) => f[n].value;
-      const v = { ...sel, rate: val("rate"), winter_pct: val("winter_pct"), source: "smk" };
+      const v = { ...sel, rate: val("rate"), winter_pct: 0, source: "smk" };
       // «10+15+11,25» → сума; неправильні частини підсвічуються
       const parts = val("issued").split(/[+;\n]/).map((x) => x.trim().replace(/\s/g, "").replace(",", ".")).filter(Boolean);
       const bad = parts.filter((x) => !/^\d+(\.\d+)?$/.test(x));
@@ -943,10 +942,10 @@ function dispView(q) {
       $app.querySelector(".js-isum").innerHTML = bad.length ? `⚠️ не число: ${esc(bad.join(", "))}`
         : parts.length > 1 ? `${parts.length} видач · разом <b style="color:#facc15">${C.fmtC(issuedSum)} л</b>` : "";
       const r = C.calcRow(v, { odo_start: val("odo_start"), odo_end: val("odo_end"), fuel_start: val("fuel_start"), smk: issuedSum / 100 }, C.unitSources({}));
-      const coef = 1 + (Number(val("winter_pct")) || 0) / 100;
+      const coef = 1;
       res.innerHTML = r.empty && !r.km ? `<p class="muted">Введіть пробіг на початок і кінець.</p>` : `<div class="disp-kv">
         <div><span>Пробіг</span><b>${C.fmtKm(r.km)} км</b></div>
-        <div><span>Норма з надбавкою</span><b>${C.fmtC(Math.round(C.toC(val("rate")) * coef))} л/100 км</b></div>
+        <div><span>Норма витрати</span><b>${C.fmtC(C.toC(val("rate")))} л/100 км</b></div>
         <div><span>За нормою (точно)</span><b>${C.fmtC(r.normExactC)} л</b></div>
         <div class="hl"><span>${r.hasFrac ? "Витрата (є соті — без округлення)" : "Витрата (округлено до цілих)"}</span><b>${C.fmtC(r.consC)} л</b></div>
         <div><span>Залишок на початок + видано</span><b>${C.fmtC(r.startC)} + ${C.fmtC(r.issuedC)} л</b></div>
@@ -954,7 +953,7 @@ function dispView(q) {
         <p class="muted" style="margin-top:6px">${C.fmtKm(r.km)} км × ${esc(val("rate") || "0")} л/100 км${coef !== 1 ? ` × ${coef.toFixed(2).replace(".", ",")}` : ""} = ${C.fmtC(r.normExactC)} л → ${C.fmtC(r.normC)} л</p>`;
     };
     f.addEventListener("input", run); run();
-    $app.querySelector(".js-dclear").addEventListener("click", () => { ["odo_start", "odo_end", "fuel_start", "issued"].forEach((n) => { f[n].value = ""; }); f.rate.value = sel.rate ?? ""; f.winter_pct.value = sel.winter_pct ?? 0; run(); });
+    $app.querySelector(".js-dclear").addEventListener("click", () => { ["odo_start", "odo_end", "fuel_start", "issued"].forEach((n) => { f[n].value = ""; }); f.rate.value = sel.rate ?? ""; run(); });
     f.odo_start.focus();
   }
 }
@@ -1056,7 +1055,7 @@ async function pageFleet() {
     <div class="panel"><h2>🚗 Автопарк підрозділу</h2>
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
-      <div class="tblwrap"><table class="edit" id="veh"><thead><tr><th style="min-width:200px">Марка, ДНЗ</th><th>Норма, л/100 км</th><th>Надбавка, %</th>
+      <div class="tblwrap"><table class="edit" id="veh"><thead><tr><th style="min-width:200px">Марка, ДНЗ</th><th>Норма, л/100 км</th>
         <th>Норма пробігу, км/міс</th><th>Вид пального</th><th>АЗС</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
@@ -1128,7 +1127,6 @@ async function pageFleet() {
     const sup = [...new Set([...C.SUPPLIERS, v.supplier].filter(Boolean))];
     tr.innerHTML = `<td><input data-f="name" value="${esc(v.name)}" placeholder="Марка модель номер"></td>
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
-      <td><input data-f="winter_pct" type="number" step="1" min="0" max="100" value="${v.winter_pct ?? 0}"></td>
       <td><input data-f="month_norm_km" type="number" step="10" min="0" value="${v.month_norm_km ?? 2640}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
       <td><select data-f="supplier">${sup.map((x) => `<option ${x === (v.supplier || "UKRNAFTA") ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>
@@ -1294,7 +1292,7 @@ async function pageAdmin(sub, q) {
           <button class="btn sm danger js-udel">🗑 Видалити</button>` : ""}</td></tr>`).join("")}</tbody></table>
       <p class="muted">Видалення прибирає профіль і доступ до даних. Якщо людина знову увійде зі своїм e-mail, портал запропонує подати нову заявку.</p>
       <h3 style="margin-top:18px">🧮 Диспетчер</h3>
-      <p class="muted">Диспетчер бачить лише довідник авто всіх підрозділів (назва, норма, надбавка, пальне) і рахує витрату на своєму екрані — показників підрозділів він не бачить і нічого в них не змінює.
+      <p class="muted">Диспетчер бачить лише довідник авто всіх підрозділів (назва, норма, пальне) і рахує витрату на своєму екрані — показників підрозділів він не бачить і нічого в них не змінює.
         Ключ диспетчера створює перший диспетчер; якщо його забули — скиньте, і диспетчер створить новий (довідники підрозділів оновляться, коли їх відкриють).</p>
       ${(await store.getDispPub().catch(() => null)) ? `<button class="btn sm danger js-dispreset">Скинути ключ диспетчера</button>` : `<span class="muted">Ключ диспетчера ще не створено.</span>`}</div>`;
   } else if (tab === "units") {
@@ -1565,8 +1563,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261031a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261031a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261031b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261031b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

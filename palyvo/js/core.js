@@ -311,7 +311,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     r.warnings.push("Не заповнено пробіг на " + (isBlank(s1) ? "кінець" : "початок") + " періоду.");
   }
   const rateC = toC(vehicle.rate);                 // норма ×100
-  const wC = toC(vehicle.winter_pct);              // надбавка % ×100
+  const wC = 0;                                    // зимової надбавки немає (прибрано з порталу)
   r.normC = divHalfUp(r.km * rateC * (10000 + wC), 1000000);
   const avail = r.startC + r.issuedC;
   // загальне правило: витрата за нормою округлюється до цілих літрів (половина — вгору);
