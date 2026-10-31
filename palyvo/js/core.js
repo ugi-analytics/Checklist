@@ -21,8 +21,8 @@ export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУ
 export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS"];
 /** Авто без основного джерела (заправляється з різних): витрата — спершу із залишку, потім із виданого, щоб джерела вичерпувались повністю. */
 export const NO_MAIN = "-";
-/** Видача до цієї кількості (5 л) списується першочергово. */
-export const SMALL_ISSUE_C = 500;
+/** Видача до цієї кількості (10 л) списується першочергово. */
+export const SMALL_ISSUE_C = 1000;
 
 export const ACT_GROUPS = {
   tsmk: { title: "Талони + см/к", file: "Талони_см-к" },
@@ -367,7 +367,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     const rest = list.filter((x) => !main || x.id !== main.id);
     const pools = [...(main ? [[main]] : []), rest.filter((x) => sourceFits(x, vehicle)), rest.filter((x) => !sourceFits(x, vehicle))];
     const phases = sources.issuedFirst ? ["iss", "start"] : ["start", "iss"];
-    // дрібні видачі (до 5 л) списуються першочергово й повністю — щоб не лишати на залишку «0,18 л»
+    // дрібні видачі (до 10 л) списуються першочергово й повністю — щоб не лишати на залишку «0,18 л»
     const smallFirst = (pool) => {
       for (const x of pool.filter((y) => remOf(y, "iss") > 0 && remOf(y, "iss") <= SMALL_ISSUE_C).sort((a, b) => remOf(a, "iss") - remOf(b, "iss"))) {
         if (left <= 0) return; take(x, "iss", Math.min(left, remOf(x, "iss")));
