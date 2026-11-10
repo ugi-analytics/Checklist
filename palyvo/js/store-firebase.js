@@ -13,7 +13,7 @@ import {
   browserLocalPersistence, sendEmailVerification, multiFactor, TotpMultiFactorGenerator, getMultiFactorResolver,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, orderBy, limit,
+  getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, where, orderBy, limit,
   addDoc, deleteField, runTransaction, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -162,6 +162,14 @@ export function createStore(config) {
       await b.commit();
     },
     async resetDispKeys() { await deleteDoc(doc(db, "meta", "disp_priv")); await deleteDoc(doc(db, "meta", "disp_pub")); },
+    // ПОГ: відкритий ключ (для підрозділу) і зашифрована копія реквізитів підрозділу
+    savePogKey: (pogId, data) => setDoc(doc(db, "pogkeys", pogId), { ...data, updated_at: nowIso() }),
+    async listPogKeys(parentId) {
+      const q = parentId ? query(collection(db, "pogkeys"), where("parent_id", "==", parentId)) : collection(db, "pogkeys");
+      return (await getDocs(q)).docs.map((d) => ({ pog_id: d.id, ...d.data() }));
+    },
+    savePogSeed: (pogId, data) => setDoc(doc(db, "pogseed", pogId), { ...data, updated_at: nowIso() }),
+    async getPogSeed(pogId) { const s = await getDoc(doc(db, "pogseed", pogId)); return s.exists() ? s.data() : null; },
     async getFleetCat(unitId) { const s = await getDoc(doc(db, "fleet", unitId)); return s.exists() ? s.data() : null; },
     async listFleetCats() { return (await getDocs(collection(db, "fleet"))).docs.map((d) => ({ unit_id: d.id, ...d.data() })); },
     saveFleetCat: (unitId, data) => setDoc(doc(db, "fleet", unitId), { ...data, updated_at: nowIso() }),

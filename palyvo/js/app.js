@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261110d";
-import * as U from "./ui.js?v=20261110d";
-import { litresWords } from "./words.js?v=20261110d";
-import { buildRegister, buildAct } from "./docs.js?v=20261110d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261110d";
-import * as X from "./crypto.js?v=20261110d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261110d";
-import { buildXlsx } from "./xlsx.js?v=20261110d";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261110d";
+import * as C from "./core.js?v=20261110f";
+import * as U from "./ui.js?v=20261110f";
+import { litresWords } from "./words.js?v=20261110f";
+import { buildRegister, buildAct } from "./docs.js?v=20261110f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261110f";
+import * as X from "./crypto.js?v=20261110f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261110f";
+import { buildXlsx } from "./xlsx.js?v=20261110f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261110f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -474,7 +474,45 @@ async function loadUnit(id = state.unitId) {
   if (!dk) throw new NeedKey("unlock", u);
   const unit = await decUnit(u, dk);
   publishCatalog(unit);
+  if (unit.kind === "pog") ensurePogKey(unit); else publishPogSeeds(unit);
   return unit;
+}
+// ПОГ: власна пара ключів — підрозділ шифрує нею копію своїх реквізитів і комісії
+function ensurePogKey(unit) {
+  // один раз на сесію (паралельні завантаження сторінки не створюють різних ключів)
+  state.pogKeyJob = state.pogKeyJob || {};
+  if (!state.pogKeyJob[unit.id]) state.pogKeyJob[unit.id] = ensurePogKeyNow(unit).finally(() => { setTimeout(() => { delete state.pogKeyJob[unit.id]; }, 0); });
+  return state.pogKeyJob[unit.id].then((k) => { if (k) unit.pogkey = k; return k; });
+}
+async function ensurePogKeyNow(unit) {
+  try {
+    const fresh = await store.getUnit(unit.id);
+    if (fresh && fresh.pogkey) unit.pogkey = fresh.pogkey;
+    if (!unit.pogkey) {
+      unit.pogkey = await X.newPogKeys(unit.dk, X.aadPogKey(unit.id));
+      await store.updateUnit(unit.id, { pogkey: unit.pogkey });
+    }
+    if (state.pogKeyPub !== unit.id + "|" + unit.parent_id) {
+      await store.savePogKey(unit.id, { parent_id: unit.parent_id || "", spki: unit.pogkey.spki, kid: unit.pogkey.kid });
+      state.pogKeyPub = unit.id + "|" + unit.parent_id;
+    }
+    return unit.pogkey;
+  } catch (err) { console.warn("Ключ ПОГ не оновлено:", err && err.message); return null; }
+}
+// підрозділ (або адміністратор) — копія реквізитів і комісії для своїх ПОГ, зашифрована ключем кожного ПОГ
+async function publishPogSeeds(unit, settings = unit.settings) {
+  try {
+    if (isDisp() || unit.kind === "pog") return;
+    const keys = await store.listPogKeys(unit.id); if (!keys.length) return;
+    const seed = C.pickSeed(settings); state.seedH = state.seedH || {};
+    for (const k of keys) {
+      const h = await X.sha256(k.kid + "|" + unit.id + "|" + JSON.stringify(seed));
+      if (state.seedH[k.pog_id] === h) continue;
+      const sealed = await X.sealForDisp(seed, { spki: k.spki, kid: k.kid }, X.aadPogSeed(k.pog_id));
+      await store.savePogSeed(k.pog_id, { ...sealed, h, parent_id: unit.id });
+      state.seedH[k.pog_id] = h;
+    }
+  } catch (err) { console.warn("Реквізити для ПОГ не оновлено:", err && err.message); }
 }
 // довідник авто для диспетчера: лише назва, норма, пальне (без показників за місяці);
 // публікується, коли змінився довідник або ключ диспетчера
@@ -507,6 +545,7 @@ async function listMonthsDec(unit) {
 async function writeUnit(unit, settings, vehicles) {
   await store.saveUnitData(unit.id, await X.encJson(unit.dk, { settings, vehicles }, X.aadUnit(unit.id)), vehicles.filter((v) => v.active !== false).length);
   await publishCatalog({ ...unit, settings, vehicles: vehicles.map(C.normalizeVehicle) });
+  if (unit.kind !== "pog") await publishPogSeeds(unit, settings);
 }
 async function rememberKey(unitId, dk, remember) {
   const locked = await X.lockDown(dk);
@@ -1069,8 +1108,8 @@ async function pageFleet() {
     ${pog ? `<div class="panel" style="border-color:rgba(56,189,248,.45)"><h2>👮 Поліцейський офіцер громади</h2>
       <p>Ваш кабінет належить до підрозділу <b>${esc(unit.parent_name || "—")}</b>. Ви — окрема МВО: тут лише ваш автомобіль, ваші джерела пального й ваші «Додаток 6» та акт.
         Реквізити бланків і склад комісії скопійовано з підрозділу; змінювати їх можна тут — це не змінює реквізитів підрозділу.</p>
-      <div class="row"><button class="btn sm js-seedreq" ${unit.seed_req ? "disabled" : ""}>🔄 Взяти реквізити й комісію з підрозділу</button>
-        <span class="muted">${unit.seed_req ? "Запит надіслано — адміністратор скопіює актуальні реквізити підрозділу." : "Копіює адміністратор (реквізити підрозділу зашифровані)."}</span></div></div>` : ""}
+      <div class="row"><button class="btn sm js-seedreq">🔄 Взяти реквізити й комісію з підрозділу</button>
+        <span class="muted">Замінить реквізити бланків і склад комісії на актуальні з підрозділу; автомобіль і джерела пального не зміняться.</span></div></div>` : ""}
     <div class="panel"><h2>${pog ? "🚗 Мій автомобіль" : "🚗 Автопарк підрозділу"}</h2>
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
@@ -1233,9 +1272,21 @@ async function pageFleet() {
     if (pog && vbody.querySelectorAll("tr").length >= 1) $app.querySelector(".js-addveh").style.display = "none";   // ПОГ — один автомобіль
   });
   $app.querySelector(".js-seedreq")?.addEventListener("click", async () => {
+    if (!confirm("Замінити реквізити бланків і склад комісії на актуальні з підрозділу?")) return;
     busy(true);
-    try { await store.updateUnit(unit.id, { seed_req: true }); store.log("pog_seed_req", "", unit.id); flash("ok", "Запит надіслано адміністратору — він скопіює реквізити й комісію підрозділу."); }
-    catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+    try {
+      await ensurePogKey(unit);
+      const seed = await store.getPogSeed(unit.id);
+      if (!seed || !unit.pogkey || seed.kid !== unit.pogkey.kid || seed.parent_id !== unit.parent_id) {
+        flash("info", "Реквізити підрозділу ще не надійшли: вони оновлюються, коли хтось із працівників підрозділу відкриває портал (або адміністратор — «Зведення по області»). Спробуйте пізніше.");
+      } else {
+        const priv = await X.openPogPriv(unit.dk, unit.pogkey, X.aadPogKey(unit.id));
+        const fromParent = await X.openForDisp(seed, priv, X.aadPogSeed(unit.id));
+        await writeUnit(unit, { ...unit.settings, ...C.pickSeed(fromParent) }, unit.vehicles);
+        store.log("pog_seed_self", unit.parent_name || "", unit.id);
+        flash("ok", `Реквізити й комісію взято з підрозділу (стан на ${String(seed.updated_at || "").slice(0, 16).replace("T", " ")}).`);
+      }
+    } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
     render();
   });
   $app.querySelector(".js-addmem").addEventListener("click", () => addMem({}));
@@ -1363,6 +1414,7 @@ async function pageAdmin(sub, q) {
       if (!u.crypto) return { u, n: 0, done: 0, err: 0, t: null };
       const unit = await decUnit(u, await getUnitKey(u));
       publishCatalog(unit);
+      if (unit.kind !== "pog") publishPogSeeds(unit);
       const st = await monthState(unit, ym);
       // для вивантаження в Excel (модуль хабу «Пробіг і пальне»): збережений місяць або перенесений з попереднього показник на початок
       const m = st.saved;
@@ -1655,8 +1707,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261110d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261110d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261110f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261110f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

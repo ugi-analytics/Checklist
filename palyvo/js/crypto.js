@@ -99,6 +99,23 @@ export async function openForDisp(doc, priv, aad) {
   const ck = await subtle().unwrapKey("raw", unb64(doc.k.w), priv, RSA, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
   return decJson(ck, doc.enc, aad);
 }
+// ------------------------------------------------------------- ключі ПОГ (реквізити від свого підрозділу)
+// ПОГ має власну пару RSA: відкритий ключ бачать працівники батьківського підрозділу й шифрують ним копію реквізитів і комісії;
+// закритий зберігається лише зашифрованим ключем даних ПОГ.
+export async function newPogKeys(dk, aad) {
+  const kp = await subtle().generateKey({ ...RSA, modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]) }, true, ["wrapKey", "unwrapKey"]);
+  const spki = b64(await subtle().exportKey("spki", kp.publicKey));
+  const pk8 = b64(await subtle().exportKey("pkcs8", kp.privateKey));
+  const kid = b64(await subtle().digest("SHA-256", enc.encode(spki))).slice(0, 16);
+  return { spki, kid, priv: await encJson(dk, { pk8 }, aad) };
+}
+export async function openPogPriv(dk, pogkey, aad) {
+  const { pk8 } = await decJson(dk, pogkey.priv, aad);
+  return subtle().importKey("pkcs8", unb64(pk8), RSA, false, ["unwrapKey"]);
+}
+export const aadPogKey = (unitId) => `pogkey:${unitId}`;
+export const aadPogSeed = (unitId) => `pogseed:${unitId}`;
+
 export async function sha256(text) { return b64(await subtle().digest("SHA-256", enc.encode(text))); }
 export const aadFleet = (unitId) => `fleet:${unitId}`;
 
