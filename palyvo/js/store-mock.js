@@ -61,7 +61,7 @@ export function createStore() {
     async deleteUser(uid) { delete S.users[uid]; save(); },
     async listUnits() { return Object.entries(S.units).map(([id, u]) => ({ id, ...clone(u) })).sort((a, b) => a.name.localeCompare(b.name, "uk")); },
     async getUnit(id) { return S.units[id] ? { id, ...clone(S.units[id]) } : null; },
-    async createUnit(name, settings) { const id = "un" + rid(); S.units[id] = { name, settings, n_vehicles: 0, created_at: nowIso() }; save(); return id; },
+    async createUnit(name, settings, extra = {}) { const id = "un" + rid(); S.units[id] = { ...clone(extra), name, settings, n_vehicles: 0, created_at: nowIso() }; save(); return id; },
     async updateUnit(id, f) { Object.assign(S.units[id], clone(f)); save(); },
     async deleteUnit(id) { delete S.units[id]; if (S.fleet) delete S.fleet[id]; for (const k of Object.keys(S.months)) if (k.startsWith(id + "/")) delete S.months[k]; save(); },
     async getAdminPub() { if (!S.meta.admin_pub) err("x", "Адміністратор порталу ще не завершив налаштування шифрування (ключ адміністратора не створено). Зверніться до нього."); return clone(S.meta.admin_pub); },

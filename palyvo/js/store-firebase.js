@@ -139,7 +139,7 @@ export function createStore(config) {
     async listUnits() { return (await getDocs(collection(db, "units"))).docs.map((d) => ({ id: d.id, ...d.data() }))
       .sort((a, b) => a.name.localeCompare(b.name, "uk")); },
     async getUnit(id) { const s = await getDoc(doc(db, "units", id)); return s.exists() ? { id, ...s.data() } : null; },
-    async createUnit(name, settings) { const r = doc(collection(db, "units")); await setDoc(r, { name, settings, n_vehicles: 0, created_at: nowIso() }); return r.id; },
+    async createUnit(name, settings, extra = {}) { const r = doc(collection(db, "units")); await setDoc(r, { ...extra, name, settings, n_vehicles: 0, created_at: nowIso() }); return r.id; },
     // ---------------------------------------------------------------- шифрування
     async getAdminPub() { const s = await getDoc(doc(db, "meta", "admin_pub")); if (!s.exists()) throw new Error("Адміністратор порталу ще не завершив налаштування шифрування (ключ адміністратора не створено). Зверніться до нього."); return s.data(); },
     async hasAdminKey() { return (await getDoc(doc(db, "meta", "admin_pub"))).exists(); },

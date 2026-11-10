@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261031c";
-import * as U from "./ui.js?v=20261031c";
-import { litresWords } from "./words.js?v=20261031c";
-import { buildRegister, buildAct } from "./docs.js?v=20261031c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261031c";
-import * as X from "./crypto.js?v=20261031c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261031c";
-import { buildXlsx } from "./xlsx.js?v=20261031c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261031c";
+import * as C from "./core.js?v=20261110c";
+import * as U from "./ui.js?v=20261110c";
+import { litresWords } from "./words.js?v=20261110c";
+import { buildRegister, buildAct } from "./docs.js?v=20261110c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261110c";
+import * as X from "./crypto.js?v=20261110c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261110c";
+import { buildXlsx } from "./xlsx.js?v=20261110c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261110c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -165,11 +165,12 @@ function pageForgot() {
 
 function profileFields(p = {}) {
   return `<label class="f">Підрозділ *<input name="unit" required value="${esc(p.requested_unit || "")}" placeholder="напр. Миргородський РВП ГУНП"></label>
+    <label style="display:flex;gap:8px;align-items:center;margin:-4px 0 10px"><input type="checkbox" name="pog" ${p.pog_req ? "checked" : ""}> Я — поліцейський офіцер громади (ПОГ): звітую окремо за свій автомобіль</label>
     <label class="f">Прізвище, ім'я, по батькові *<input name="full_name" required value="${esc(p.full_name || "")}"></label>
     <div class="two"><label class="f">Посада *<input name="position" required value="${esc(p.position || "")}"></label>
       <label class="f">Телефон<input name="phone" value="${esc(p.phone || "")}"></label></div>`;
 }
-const readProfile = (f) => ({ requested_unit: f.unit.value.trim(), full_name: f.full_name.value.trim(), position: f.position.value.trim(), phone: f.phone.value.trim() });
+const readProfile = (f) => ({ requested_unit: f.unit.value.trim(), pog_req: !!(f.pog && f.pog.checked), full_name: f.full_name.value.trim(), position: f.position.value.trim(), phone: f.phone.value.trim() });
 
 function pageRegister() {
   shell(authCard(`<h2 class="display">📝 Заявка на реєстрацію</h2>
@@ -482,7 +483,7 @@ async function publishCatalog(unit) {
     if (isDisp()) return;
     if (state.dispPub === undefined) state.dispPub = await store.getDispPub();
     const pub = state.dispPub; if (!pub) return;
-    const cat = { unit: unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
+    const cat = { unit: unit.kind === "pog" ? `${unit.parent_name || ""} · ${unit.name}` : unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
       .map((v) => ({ id: v.id, name: v.name, rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel })) };
     const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
     const cur = await store.getFleetCat(unit.id);
@@ -527,6 +528,13 @@ async function monthState(unit, ym) {
   return { saved, entries, carried, vehicles, sources };
 }
 async function rowsFor(unit, ym) { return (await monthView(unit, ym)).rows; }
+// реквізити підрозділу (для копіювання до кабінету ПОГ) — адміністратор розшифровує своїм ключем
+async function parentSettings(parent) {
+  const fresh = await store.getUnit(parent.id);
+  if (!fresh) throw new Error("Підрозділ не знайдено.");
+  if (!fresh.crypto) return { ...C.DEFAULT_SETTINGS, ...(fresh.settings || {}) };
+  return (await decUnit(fresh, await getUnitKey(fresh))).settings;
+}
 // місяць для перегляду й документів: закритий — зі знімка (як у день закриття), відкритий — розрахунок за поточними даними
 function viewOf(unit, st) {
   const fz = st.saved && st.saved.closed && st.saved.frozen;
@@ -763,6 +771,9 @@ async function pageEntry(q) {
     const touched = [...dirtyCards]; dirtyCards = new Set();
     const ss = $app.querySelector(".js-savestate");
     try {
+      // місяць могли щойно закрити (в іншій вкладці чи кнопкою на «Звіті») — тоді не перезаписуємо
+      const cur = await store.getMonth(unit.id, ym).catch(() => null);
+      if (cur && cur.closed) { if (ss) ss.textContent = "🔒 Місяць закрито — зміни не збережено"; return; }
       const snapshot = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
       await writeMonth(unit, ym, { entries, snapshot, sources: SRC.map((x) => ({ ...x })) });
       touched.forEach((c) => { const s = c.querySelector(".saving"); s.classList.add("on"); setTimeout(() => s.classList.remove("on"), 1200); });
@@ -770,6 +781,8 @@ async function pageEntry(q) {
     } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
   };
   const schedule = (card, ms) => { dirtyCards.add(card); clearTimeout(timer); timer = setTimeout(saveNow, ms); };
+  // при переході на іншу сторінку — зберегти негайно (а не через таймер після переходу)
+  state.flushEntry = () => { if (dirtyCards.size) { clearTimeout(timer); return saveNow(); } };
   cardEls.forEach((card) => {
     card.querySelector(".js-more")?.addEventListener("click", (ev) => {
       const on = card.classList.toggle("showall");
@@ -1045,22 +1058,28 @@ async function pageFleet() {
   if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
   const onboarding = !unit.vehicles.length;
   const s = unit.settings;
+  const pog = unit.kind === "pog";
   const f = (k, label, cls = "") => `<label class="f ${cls}">${label}<input data-k="${k}" value="${esc(s[k] ?? "")}"></label>`;
   shell(`${onboarding ? `<div class="panel" style="border-color:rgba(250,204,21,.5);background:linear-gradient(120deg,rgba(8,145,178,.25),rgba(55,48,163,.25))">
-      <h2 class="display">👋 Вітаємо! Створіть автопарк свого підрозділу</h2>
+      <h2 class="display">👋 Вітаємо! ${pog ? "Додайте свій службовий автомобіль" : "Створіть автопарк свого підрозділу"}</h2>
       <p>Це перший вхід для підрозділу <b>${esc(unit.name)}</b> — автопарк ще порожній. Додайте службові авто (марка, модель і номер,
         норма витрати, вид пального, АЗС), перевірте реквізити бланків і склад комісії для акта списання, а потім натисніть
         <b>«Зберегти шаблон підрозділу»</b>. Після цього відкриється введення даних за місяць.</p>
       <p class="muted">Шаблон створюється один раз: колеги з вашого підрозділу, які зареєструються пізніше, одразу побачать цей автопарк.</p></div>` : ""}
-    <div class="panel"><h2>🚗 Автопарк підрозділу</h2>
+    ${pog ? `<div class="panel" style="border-color:rgba(56,189,248,.45)"><h2>👮 Поліцейський офіцер громади</h2>
+      <p>Ваш кабінет належить до підрозділу <b>${esc(unit.parent_name || "—")}</b>. Ви — окрема МВО: тут лише ваш автомобіль і ваші «Додаток 6» та акт.
+        Реквізити бланків і склад комісії скопійовано з підрозділу; змінювати їх можна тут — це не змінює реквізитів підрозділу.</p>
+      <div class="row"><button class="btn sm js-seedreq" ${unit.seed_req ? "disabled" : ""}>🔄 Взяти реквізити й комісію з підрозділу</button>
+        <span class="muted">${unit.seed_req ? "Запит надіслано — адміністратор скопіює актуальні реквізити підрозділу." : "Копіює адміністратор (реквізити підрозділу зашифровані)."}</span></div></div>` : ""}
+    <div class="panel"><h2>${pog ? "🚗 Мій автомобіль" : "🚗 Автопарк підрозділу"}</h2>
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr><th style="min-width:200px">Марка, ДНЗ</th><th>Норма, л/100 км</th>
         <th>Норма пробігу, км/міс</th><th>Вид пального</th><th>АЗС</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
-      <button class="btn sm js-addveh" style="margin-top:10px">➕ Додати авто</button>
+      <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist></div>
-    <div class="panel"><h2>⛽ Джерела пального</h2>
+    <div class="panel" ${pog ? 'style="display:none"' : ""}><h2>⛽ Джерела пального</h2>
       <p class="muted">Звідки підрозділ отримує пальне: кожне джерело — окрема колонка «Видано» й «Витрачено» в «Додатку 6» і окремий залишок у баку.
         Невеликим підрозділам досить стандартних джерел. Якщо пальне видають кілька МВО, різні АЗС чи постачальники — увімкніть свої джерела.</p>
       <div class="row" style="gap:18px;margin-bottom:10px">
@@ -1206,9 +1225,19 @@ async function pageFleet() {
   $app.querySelector(".js-addsrc").addEventListener("click", () => { addSrc({ form: "с/к" }); refreshSrcSelects(); });
 
   unit.vehicles.forEach(addVeh); if (!unit.vehicles.length) addVeh({});
+  if (pog && vbody.querySelectorAll("tr").length >= 1) $app.querySelector(".js-addveh").style.display = "none";   // ПОГ — один автомобіль
   toggleBox();
   (s.act_members || []).forEach(addMem);
-  $app.querySelector(".js-addveh").addEventListener("click", () => { addVeh({}); refreshSrcSelects(); });
+  $app.querySelector(".js-addveh").addEventListener("click", () => {
+    addVeh({}); refreshSrcSelects();
+    if (pog && vbody.querySelectorAll("tr").length >= 1) $app.querySelector(".js-addveh").style.display = "none";   // ПОГ — один автомобіль
+  });
+  $app.querySelector(".js-seedreq")?.addEventListener("click", async () => {
+    busy(true);
+    try { await store.updateUnit(unit.id, { seed_req: true }); store.log("pog_seed_req", "", unit.id); flash("ok", "Запит надіслано адміністратору — він скопіює реквізити й комісію підрозділу."); }
+    catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+    render();
+  });
   $app.querySelector(".js-addmem").addEventListener("click", () => addMem({}));
   $app.querySelector(".js-save").addEventListener("click", async () => {
     const settings = { ...s };
@@ -1246,26 +1275,28 @@ async function pageAdmin(sub, q) {
   const tab = sub || "requests";
   const [users, units] = await Promise.all([store.listUsers(), store.listUnits()]);
   state.units = units; setUserStats(users);
-  const unitName = (id) => units.find((u) => u.id === id)?.name || "—";
+  const unitName = (id) => { const x = units.find((u) => u.id === id); return x ? (x.kind === "pog" ? `${x.name} (${x.parent_name || "—"})` : x.name) : "—"; };
+  const regular = units.filter((u) => u.kind !== "pog"), pogs = units.filter((u) => u.kind === "pog");
   const usersIn = (id) => users.filter((u) => u.unit_id === id).length;
   const tabs = `<nav class="tabs" style="margin-top:16px">
-    ${[["requests", "Заявки", state.pendingCount], ["users", "Користувачі"], ["units", `Підрозділи (${units.length})`], ["summary", "📊 Зведення по області"], ["audit", "Журнал дій"]]
+    ${[["requests", "Заявки", state.pendingCount], ["users", "Користувачі"], ["units", `Підрозділи (${regular.length})`], ["pog", `👮 ПОГ (${pogs.length})`], ["summary", "📊 Зведення по області"], ["audit", "Журнал дій"]]
       .map(([k, l, b]) => `<a href="#/admin/${k}" class="${tab === k ? "on" : ""}">${l}${b ? `<span class="badge">${b}</span>` : ""}</a>`).join("")}</nav>`;
   let body = "";
-  const unitOptions = (sel) => units.map((u) => `<option value="${u.id}" ${u.id === sel ? "selected" : ""}>${esc(u.name)}</option>`).join("");
+  const unitOptions = (sel) => regular.map((u) => `<option value="${u.id}" ${u.id === sel ? "selected" : ""}>${esc(u.name)}</option>`).join("");
 
   if (tab === "requests") {
     const pend = users.filter((u) => u.status === "pending");
     body = `<div class="panel"><h2>Заявки на реєстрацію</h2>${pend.length ? "" : `<p class="muted">Нових заявок немає.</p>`}
+      ${pend.some((u) => u.pog_req) && !state.adminPriv ? adminKeyForm("Для ПОГ реквізити й комісія копіюються з підрозділу — для цього потрібен ключ адміністратора.") : ""}
       ${pend.map((u) => {
-        const match = units.find((x) => x.name.toLowerCase() === String(u.requested_unit || "").toLowerCase());
+        const match = regular.find((x) => x.name.toLowerCase() === String(u.requested_unit || "").toLowerCase());
         return `<div class="panel" style="background:rgba(2,6,23,.45)" data-uid="${u.uid}">
           <div><b>${esc(u.full_name)}</b> · ${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}<br>
-            <span class="muted">${esc(u.email)} · вказаний підрозділ: <b>${esc(u.requested_unit)}</b> · подано ${esc(u.created_at || "")}</span></div>
+            <span class="muted">${esc(u.email)} · вказаний підрозділ: <b>${esc(u.requested_unit)}</b>${u.pog_req ? ` · <span class="pill info">👮 ПОГ</span>` : ""} · подано ${esc(u.created_at || "")}</span></div>
           <div class="row" style="margin-top:10px">
             <label class="f">Прив'язати до підрозділу<select class="js-unitsel"><option value="new" ${match ? "" : "selected"}>➕ Створити новий підрозділ</option>${unitOptions(match?.id)}</select></label>
             <label class="f js-newname" ${match ? 'style="display:none"' : ""}>Назва нового підрозділу<input value="${esc(u.requested_unit)}"></label>
-            <label class="f">Роль<select class="js-role"><option value="user">Користувач підрозділу</option><option value="dispatcher">Диспетчер (перевірка розрахунків, уся область)</option><option value="admin">Адміністратор</option></select></label>
+            <label class="f">Роль<select class="js-role"><option value="user" ${u.pog_req ? "" : "selected"}>Користувач підрозділу</option><option value="pog" ${u.pog_req ? "selected" : ""}>ПОГ — окремий кабінет у складі підрозділу</option><option value="dispatcher">Диспетчер (перевірка розрахунків, уся область)</option><option value="admin">Адміністратор</option></select></label>
             <button class="btn primary js-approve">✓ Підтвердити</button></div>
           <div style="margin-top:8px"><button class="btn sm danger js-reject">✕ Відхилити</button> <button class="btn sm danger js-udel">🗑 Видалити заявку</button></div></div>`;
       }).join("")}</div>`;
@@ -1274,17 +1305,18 @@ async function pageAdmin(sub, q) {
     body = `<div class="panel"><h2>Користувачі</h2>
       <div class="row ufilter" style="gap:10px;margin-bottom:12px">
         <input class="js-uq" placeholder="🔍 ПІБ, e-mail, посада, телефон" style="flex:1;min-width:240px;max-width:420px">
-        <select class="js-urole"><option value="">усі ролі</option>${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select>
-        <select class="js-uunit"><option value="">усі підрозділи</option><option value="-">без підрозділу</option>${units.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select>
+        <select class="js-urole"><option value="">усі ролі</option>${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}<option value="pog">👮 ПОГ</option></select>
+        <select class="js-uunit"><option value="">усі підрозділи</option><option value="-">без підрозділу</option>${regular.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select>
         <select class="js-ust"><option value="">усі статуси</option><option value="active">активні</option><option value="blocked">заблоковані</option><option value="rejected">відхилені</option></select>
         <span class="muted js-ucount"></span></div>
       <table class="list"><thead><tr><th>ПІБ / посада</th><th>E-mail</th><th>Підрозділ і роль</th><th>Статус</th><th>Останній вхід</th><th>Дії</th></tr></thead><tbody>
-      ${list.map((u) => `<tr data-uid="${u.uid}" data-role="${esc(u.role || "user")}" data-unit="${esc(u.unit_id && units.some((x) => x.id === u.unit_id) ? u.unit_id : "-")}" data-st="${esc(u.status)}"
+      ${list.map((u) => `<tr data-uid="${u.uid}" data-pog="${pogs.some((x) => x.id === u.unit_id) ? 1 : 0}" data-role="${esc(u.role || "user")}" data-unit="${esc((() => { const x = units.find((y) => y.id === u.unit_id); return x ? (x.kind === "pog" ? x.parent_id : x.id) : "-"; })())}" data-st="${esc(u.status)}"
         data-s="${esc([u.full_name, u.email, u.position, u.phone, unitName(u.unit_id)].join(" ").toLowerCase())}"><td><b>${esc(u.full_name)}</b><br><span class="muted">${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}</span></td>
         <td>${esc(u.email)}</td>
-        <td><div class="row" style="gap:6px"><select class="js-unitsel">${unitOptions(u.unit_id)}</select>
+        <td>${pogs.some((x) => x.id === u.unit_id) ? `<span class="pill info">👮 ПОГ</span> ${esc(unitName(u.unit_id))}<br><span class="muted">переведення — на вкладці «ПОГ»</span>`
+          : `<div class="row" style="gap:6px"><select class="js-unitsel">${unitOptions(u.unit_id)}</select>
           <select class="js-role">${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}" ${u.role === k ? "selected" : ""}>${l}</option>`).join("")}</select>
-          <button class="btn sm js-usave">Зберегти</button></div></td>
+          <button class="btn sm js-usave">Зберегти</button></div>`}</td>
         <td>${u.status === "active" ? `<span class="pill ok">активний</span>` : u.status === "blocked" ? `<span class="pill err">заблокований</span>` : `<span class="pill mut">${esc(u.status)}</span>`}</td>
         <td class="muted">${esc(u.last_login || "—")}</td>
         <td><button class="btn sm js-ureset">✉️ Лист для скидання пароля</button>
@@ -1300,7 +1332,7 @@ async function pageAdmin(sub, q) {
       <label class="f">Новий підрозділ<input class="js-newunit" placeholder="напр. Кременчуцьке РУП ГУНП" style="min-width:320px"></label><button class="btn sky js-ucreate">➕ Створити</button></div>
       ${state.adminPriv ? "" : adminKeyForm("Відкрийте ключ адміністратора, щоб встановлювати новий ключ підрозділу, який його забув.")}
       <table class="list"><thead><tr><th>Назва</th><th class="num">Користувачів</th><th class="num">Авто</th><th>Шифрування</th><th>Дії</th></tr></thead><tbody>
-      ${units.map((u) => `<tr data-id="${u.id}"><td><div class="row" style="gap:6px"><input class="js-uname" value="${esc(u.name)}" style="min-width:300px"><button class="btn sm js-urename">Перейменувати</button></div></td>
+      ${regular.map((u) => `<tr data-id="${u.id}"><td><div class="row" style="gap:6px"><input class="js-uname" value="${esc(u.name)}" style="min-width:300px"><button class="btn sm js-urename">Перейменувати</button></div></td>
         <td class="num">${usersIn(u.id)}</td><td class="num">${u.n_vehicles ?? 0}</td>
         <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
         <td><button class="btn sm js-open">Відкрити як підрозділ →</button> ${usersIn(u.id) ? "" : `<button class="btn sm danger js-unitdel">🗑 Видалити</button>`}
@@ -1308,11 +1340,26 @@ async function pageAdmin(sub, q) {
           <form class="js-rk row" hidden autocomplete="off" style="margin-top:8px"><input name="n1" type="password" placeholder="новий ключ (від 10 символів)" required minlength="10">
             <input name="n2" type="password" placeholder="повторіть" required minlength="10"><button class="btn sm primary">Встановити</button></form>` : ""}</td></tr>`).join("")}
       </tbody></table></div>`;
+  } else if (tab === "pog") {
+    body = `<div class="panel"><h2>👮 Поліцейські офіцери громад</h2>
+      <p class="muted">ПОГ — окрема МВО зі своїм автомобілем, ключем і документами. У «Зведенні по області» їхні авто зараховуються до підрозділу, де ПОГ проходить службу.
+        Перевести ПОГ до іншого підрозділу може лише адміністратор. Реквізити й комісія копіюються з підрозділу ключем адміністратора.</p>
+      ${state.adminPriv ? "" : adminKeyForm("Щоб копіювати реквізити підрозділу до кабінету ПОГ, введіть ключ адміністратора.")}
+      ${pogs.length ? `<table class="list"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Користувач</th><th class="num">Авто</th><th>Шифрування</th><th>Реквізити</th><th>Дії</th></tr></thead><tbody>
+      ${pogs.map((u) => `<tr data-id="${u.id}"><td><b>${esc(u.name)}</b></td>
+        <td><div class="row" style="gap:6px"><select class="js-pparent">${regular.map((x) => `<option value="${x.id}" ${x.id === u.parent_id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+          <button class="btn sm js-ptransfer">Перевести</button></div></td>
+        <td>${users.filter((x) => x.unit_id === u.id).map((x) => esc(x.full_name)).join("<br>") || "—"}</td><td class="num">${u.n_vehicles ?? 0}</td>
+        <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
+        <td>${u.seed_req ? `<span class="pill warn">запит на оновлення</span>` : `<span class="muted">—</span>`}</td>
+        <td>${u.crypto && state.adminPriv ? `<button class="btn sm js-pseed">🔄 Скопіювати реквізити з підрозділу</button> ` : ""}<button class="btn sm js-open">Відкрити →</button>
+          ${usersIn(u.id) ? "" : ` <button class="btn sm danger js-unitdel">🗑 Видалити</button>`}</td></tr>`).join("")}</tbody></table>`
+        : `<p class="muted">ПОГ ще немає. Вони з'являються, коли ви підтверджуєте заявку з роллю «ПОГ».</p>`}</div>`;
   } else if (tab === "summary" && !state.adminPriv) {
     body = adminKeyForm("Зведення по області формується з даних усіх підрозділів, а вони зашифровані. Введіть ключ адміністратора.");
   } else if (tab === "summary") {
     const ym = currentYm(q);
-    const rowsSum = await Promise.all(units.map(async (u) => {
+    let rowsSum = await Promise.all(units.map(async (u) => {
       if (!u.crypto) return { u, n: 0, done: 0, err: 0, t: null };
       const unit = await decUnit(u, await getUnitKey(u));
       publishCatalog(unit);
@@ -1328,19 +1375,36 @@ async function pageAdmin(sub, q) {
       return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows),
         updated: m.updated_at, exp, closed: !!view.closed };
     }));
-    state.lastSummary = { ym, rowsSum };
+    // ПОГ — у залік підрозділу, де проходять службу (і окремим списком нижче)
+    const allRows = rowsSum;
+    const byId = Object.fromEntries(allRows.map((r) => [r.u.id, r]));
+    const pogRows = allRows.filter((r) => r.u.kind === "pog");
+    for (const r of pogRows) {
+      const p = byId[r.u.parent_id]; r.parentName = p ? p.u.name : (r.u.parent_name || "—");
+      if (r.exp) r.exp = { ...r.exp, unit: r.parentName };          // у модулі хабу — у складі свого підрозділу
+      if (!p) continue;
+      p.n += r.n; p.done += r.done; p.err += r.err; p.pogN = (p.pogN || 0) + 1;
+      if (r.t) { p.t = p.t ? { ...p.t } : {}; for (const [k, v] of Object.entries(r.t)) if (typeof v === "number") p.t[k] = (p.t[k] || 0) + v; }
+    }
+    rowsSum = allRows.filter((r) => r.u.kind !== "pog" || !byId[r.u.parent_id]);
+    state.lastSummary = { ym, rowsSum, all: allRows };
     const sum = (k) => rowsSum.reduce((a, r) => a + (r.t ? r.t[k] : 0), 0);
     body = `<div class="panel"><div class="row" style="margin-bottom:12px">${monthPicker(ym, "#/admin/summary")}<button class="btn sm js-sumdoc">📥 Зведення у Word</button>
         <button class="btn sm sky js-fleetxl" data-kind="end" title="Показники на початок і на кінець місяця — для модуля «Пробіг і пальне автопарку» в хабі">📊 Excel для модуля пробігу · на ${dmy(firstOf(nextYm(ym)))}</button>
         <button class="btn sm js-fleetxl" data-kind="start" title="Лише показники на початок місяця — коли файлу за попередній місяць ще немає">Зріз на початок · ${dmy(firstOf(ym))}</button></div>
       <h2>Зведення по області за ${C.monthTitle(ym)}</h2>
-      <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів ·
+      <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів${pogRows.length ? ` (з урахуванням ${pogRows.length} ПОГ)` : ""} ·
         видано <b>${C.fmtC(sum("issuedC"))} л</b> · витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок у баках <b>${C.fmtC(sum("endC"))} л</b></p>
       <table class="list"><thead><tr><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
-      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
+      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
         : r.done ? `<span class="pill warn">${r.done}/${r.n}</span>` : `<span class="pill err">0/${r.n}</span>`}${r.err ? ` <span class="pill err">помилок: ${r.err}</span>` : ""}</td>
         <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
-        <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table></div>`;
+        <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table>
+      ${pogRows.length ? `<h2 style="margin-top:18px">👮 ПОГ області</h2><p class="muted">Уже враховані в рядках своїх підрозділів вище.</p>
+      <table class="list"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
+      ${pogRows.map((r) => `<tr><td>${esc(r.u.name)}</td><td>${esc(r.parentName)}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>` : `<span class="pill err">${r.done}/${r.n}</span>`}</td>
+        <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
+        <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table>` : ""}</div>`;
   } else if (tab === "audit") {
     const audit = await store.listAudit(200);
     body = `<div class="panel"><h2>Журнал дій (останні 200)</h2><table class="list"><thead><tr><th>Час</th><th>Користувач</th><th>Підрозділ</th><th>Дія</th><th>Деталі</th></tr></thead><tbody>
@@ -1362,6 +1426,17 @@ async function pageAdmin(sub, q) {
       // диспетчер не належить підрозділу і не бачить його даних
       await store.updateUser(uid, { status: "active", unit_id: "", role });
       store.log("approve", `${u.full_name} → диспетчер`); return;
+    }
+    if (role === "pog") {
+      // ПОГ: окремий кабінет (свій ключ, своє авто) у складі підрозділу; реквізити й комісія — копія з підрозділу
+      const parent = regular.find((x) => x.id === unitId);
+      if (!parent) throw new Error("Для ПОГ оберіть наявний підрозділ, де він проходить службу.");
+      if (!state.adminPriv) throw new Error("Введіть ключ адміністратора вгорі — потрібен, щоб скопіювати реквізити підрозділу.");
+      const ps = await parentSettings(parent);
+      const id = await store.createUnit(`ПОГ ${C.shortName(u.full_name)}`, { ...C.DEFAULT_SETTINGS, ...C.pickSeed(ps), compiler: C.shortName(u.full_name) },
+        { kind: "pog", parent_id: parent.id, parent_name: parent.name });
+      await store.updateUser(uid, { status: "active", unit_id: id, role: "user" });
+      store.log("approve", `${u.full_name} → ПОГ (${parent.name})`, id); return;
     }
     if (unitId === "new") {
       const name = box.querySelector(".js-newname input").value.trim(); if (!name) throw new Error("Вкажіть назву нового підрозділу.");
@@ -1395,7 +1470,7 @@ async function pageAdmin(sub, q) {
       const t = ctl.q.value.trim().toLowerCase(); let n = 0, all = 0;
       $app.querySelectorAll("tr[data-uid]").forEach((tr) => {
         all++;
-        const ok = (!t || tr.dataset.s.includes(t)) && (!ctl.role.value || tr.dataset.role === ctl.role.value)
+        const ok = (!t || tr.dataset.s.includes(t)) && (!ctl.role.value || (ctl.role.value === "pog" ? tr.dataset.pog === "1" : tr.dataset.role === ctl.role.value))
           && (!ctl.unit.value || tr.dataset.unit === ctl.unit.value) && (!ctl.st.value || tr.dataset.st === ctl.st.value);
         tr.style.display = ok ? "" : "none"; if (ok) n++;
       });
@@ -1435,6 +1510,23 @@ async function pageAdmin(sub, q) {
       store.log("unit_key_reset", unitName(id), id);
     }, `Новий ключ підрозділу «${unitName(id)}» встановлено. Передайте його підрозділу особисто.`);
   }));
+  $app.querySelectorAll(".js-ptransfer").forEach((b) => b.addEventListener("click", () => {
+    const tr = b.closest("[data-id]"); const id = tr.dataset.id; const pid = tr.querySelector(".js-pparent").value; const parent = regular.find((x) => x.id === pid);
+    if (!parent || pid === pogs.find((x) => x.id === id)?.parent_id) return;
+    if (!confirm(`Перевести ${unitName(id)} до підрозділу «${parent.name}»? Реквізити й комісію після цього варто скопіювати з нового підрозділу.`)) return;
+    act(async () => { await store.updateUnit(id, { parent_id: pid, parent_name: parent.name }); store.log("pog_transfer", parent.name, id); }, `ПОГ переведено до «${parent.name}».`);
+  }));
+  $app.querySelectorAll(".js-pseed").forEach((b) => b.addEventListener("click", () => {
+    const id = b.closest("[data-id]").dataset.id; const pu = pogs.find((x) => x.id === id); const parent = regular.find((x) => x.id === pu.parent_id);
+    if (!parent) { flash("err", "Підрозділ ПОГ не знайдено — спершу переведіть ПОГ до наявного підрозділу."); return render(); }
+    act(async () => {
+      const unit = await decUnit(await store.getUnit(id), await getUnitKey(pu));
+      const ps = await parentSettings(parent);
+      await writeUnit(unit, { ...unit.settings, ...C.pickSeed(ps) }, unit.vehicles);
+      await store.updateUnit(id, { seed_req: false });
+      store.log("pog_seed", parent.name, id);
+    }, "Реквізити й комісію скопійовано з підрозділу.");
+  }));
   $app.querySelectorAll(".js-open").forEach((b) => b.addEventListener("click", () => {
     state.unitId = b.closest("[data-id]").dataset.id; sessionStorage.setItem("unitCtx", state.unitId); go("#/entry");
   }));
@@ -1444,9 +1536,9 @@ async function pageAdmin(sub, q) {
     act(async () => { await store.deleteUnit(id); store.log("unit_delete", unitName(id)); if (state.unitId === id) state.unitId = state.me.unit_id; }, "Підрозділ видалено.");
   }));
   $app.querySelectorAll(".js-fleetxl").forEach((b) => b.addEventListener("click", () => {
-    const { ym, rowsSum } = state.lastSummary;
-    const items = rowsSum.filter((r) => r.exp).map((r) => r.exp);
-    const skipped = rowsSum.filter((r) => !r.exp).map((r) => r.u.name);
+    const { ym, all } = state.lastSummary;
+    const items = all.filter((r) => r.exp).map((r) => r.exp);
+    const skipped = all.filter((r) => !r.exp).map((r) => r.u.name);
     const { rows, date, stats } = buildFleetRows(items, ym, b.dataset.kind);
     downloadBytes(buildXlsx(rows, { sheet: "Портал_МВО", headerRows: 2, widths: FLEET_WIDTHS }), `Пробіг_МВО_на_${dmy(date)}.xlsx`,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1563,14 +1655,19 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261031c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261031c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261110c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261110c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
   }
   if (!store) return render();
-  window.addEventListener("hashchange", () => { window.onbeforeunload = null; render(); });
+  window.addEventListener("hashchange", async () => {
+    window.onbeforeunload = null;
+    const f = state.flushEntry; state.flushEntry = null;
+    if (f) { try { await f(); } catch { /* */ } }
+    render();
+  });
   const net = () => { const el = document.querySelector(".online"); if (!el) return; el.classList.toggle("off", !navigator.onLine); el.querySelector("b").textContent = navigator.onLine ? "ON-LINE" : "OFF-LINE"; };
   window.addEventListener("online", net); window.addEventListener("offline", net);
   store.onAuth(onAuthChanged);

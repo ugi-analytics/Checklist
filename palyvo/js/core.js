@@ -98,6 +98,9 @@ export const DEFAULT_SETTINGS = {
   act_members: [],
 };
 export const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS);
+/** Реквізити й комісія, які ПОГ бере з підрозділу (МВО — сам ПОГ, тому «хто склав» не копіюється). */
+export const SEED_KEYS = ["org", "dept", "unit", "appendix", "title", "edrpou", "act_approver_title", "act_approver", "act_owner", "act_order", "act_chair_full", "act_chair", "act_members"];
+export const pickSeed = (st) => Object.fromEntries(SEED_KEYS.filter((k) => st && st[k] !== undefined).map((k) => [k, JSON.parse(JSON.stringify(st[k]))]));
 
 // ---------------------------------------------------------------- числа
 const isBlank = (x) => x === null || x === undefined || x === "";

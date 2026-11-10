@@ -323,3 +323,4 @@ textarea.vtxt.filled { border:1px solid rgba(250,204,21,.7); }
 #veh.custom .col-mvo { display:none; }
 select.ssrc { width:100%; font-size:.86rem; padding:6px 8px; }
 .ufilter select { min-width:150px; }
+.pill.info { background:rgba(56,189,248,.18); color:#7dd3fc; border:1px solid rgba(56,189,248,.45); }
