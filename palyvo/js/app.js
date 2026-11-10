@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261110c";
-import * as U from "./ui.js?v=20261110c";
-import { litresWords } from "./words.js?v=20261110c";
-import { buildRegister, buildAct } from "./docs.js?v=20261110c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261110c";
-import * as X from "./crypto.js?v=20261110c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261110c";
-import { buildXlsx } from "./xlsx.js?v=20261110c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261110c";
+import * as C from "./core.js?v=20261110d";
+import * as U from "./ui.js?v=20261110d";
+import { litresWords } from "./words.js?v=20261110d";
+import { buildRegister, buildAct } from "./docs.js?v=20261110d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261110d";
+import * as X from "./crypto.js?v=20261110d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261110d";
+import { buildXlsx } from "./xlsx.js?v=20261110d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261110d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1067,7 +1067,7 @@ async function pageFleet() {
         <b>«Зберегти шаблон підрозділу»</b>. Після цього відкриється введення даних за місяць.</p>
       <p class="muted">Шаблон створюється один раз: колеги з вашого підрозділу, які зареєструються пізніше, одразу побачать цей автопарк.</p></div>` : ""}
     ${pog ? `<div class="panel" style="border-color:rgba(56,189,248,.45)"><h2>👮 Поліцейський офіцер громади</h2>
-      <p>Ваш кабінет належить до підрозділу <b>${esc(unit.parent_name || "—")}</b>. Ви — окрема МВО: тут лише ваш автомобіль і ваші «Додаток 6» та акт.
+      <p>Ваш кабінет належить до підрозділу <b>${esc(unit.parent_name || "—")}</b>. Ви — окрема МВО: тут лише ваш автомобіль, ваші джерела пального й ваші «Додаток 6» та акт.
         Реквізити бланків і склад комісії скопійовано з підрозділу; змінювати їх можна тут — це не змінює реквізитів підрозділу.</p>
       <div class="row"><button class="btn sm js-seedreq" ${unit.seed_req ? "disabled" : ""}>🔄 Взяти реквізити й комісію з підрозділу</button>
         <span class="muted">${unit.seed_req ? "Запит надіслано — адміністратор скопіює актуальні реквізити підрозділу." : "Копіює адміністратор (реквізити підрозділу зашифровані)."}</span></div></div>` : ""}
@@ -1079,12 +1079,12 @@ async function pageFleet() {
       <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist></div>
-    <div class="panel" ${pog ? 'style="display:none"' : ""}><h2>⛽ Джерела пального</h2>
+    <div class="panel"><h2>⛽ Джерела пального</h2>
       <p class="muted">Звідки підрозділ отримує пальне: кожне джерело — окрема колонка «Видано» й «Витрачено» в «Додатку 6» і окремий залишок у баку.
         Невеликим підрозділам досить стандартних джерел. Якщо пальне видають кілька МВО, різні АЗС чи постачальники — увімкніть свої джерела.</p>
       <div class="row" style="gap:18px;margin-bottom:10px">
-        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="std" ${s.sources && s.sources.length ? "" : "checked"}> Стандартні (АЗС ГУНП талони, Талони, см/к, АЗС налив)</label>
-        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${s.sources && s.sources.length ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>
+        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="std" ${(s.sources && s.sources.length) || (pog && !s.sources) ? "" : "checked"}> Стандартні (АЗС ГУНП талони, Талони, см/к, АЗС налив)</label>
+        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${(s.sources && s.sources.length) || (pog && !s.sources) ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="У картці авто біля залишку на початок з'явиться вибір джерела — витрата із залишку піде в колонку цього джерела"><input type="checkbox" class="js-spick" ${s.start_pick ? "checked" : ""}> вказувати, з якого джерела залишок на початок</label>
       <div class="js-srcbox">
         <div class="tblwrap"><table class="edit" id="srcs"><thead><tr><th>Вид пального</th><th>Форма</th><th>Постачальник</th><th>МВО</th>
@@ -1655,8 +1655,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261110c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261110c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261110d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261110d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
