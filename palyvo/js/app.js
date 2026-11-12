@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261112a";
-import * as U from "./ui.js?v=20261112a";
-import { litresWords } from "./words.js?v=20261112a";
-import { buildRegister, buildAct } from "./docs.js?v=20261112a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112a";
-import * as X from "./crypto.js?v=20261112a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261112a";
-import { buildXlsx } from "./xlsx.js?v=20261112a";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112a";
+import * as C from "./core.js?v=20261112b";
+import * as U from "./ui.js?v=20261112b";
+import { litresWords } from "./words.js?v=20261112b";
+import { buildRegister, buildAct } from "./docs.js?v=20261112b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112b";
+import * as X from "./crypto.js?v=20261112b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261112b";
+import { buildXlsx } from "./xlsx.js?v=20261112b";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -48,8 +48,8 @@ function pwProblem(pw) {
   return null;
 }
 const isAdmin = () => state.me && state.me.role === "admin" && state.me.status === "active";
-// поштові сервіси, куди листи Firebase часто не доходять (жорсткий антиспам-фільтр)
-const BAD_MAIL = /@(ukr\.net|i\.ua|meta\.ua)$/i;
+// ukr.net — листи Firebase часто не доходять (жорсткий антиспам-фільтр)
+const BAD_MAIL = /@ukr\.net$/i;
 const isDisp = () => state.me && state.me.role === "dispatcher" && state.me.status === "active";
 const ROLE_UA = { user: "користувач", admin: "адміністратор", dispatcher: "диспетчер" };
 const years = () => { const y = new Date().getFullYear(); const a = []; for (let i = 2024; i <= y + 1; i++) a.push(i); return a; };
@@ -179,11 +179,11 @@ function pageRegister() {
     <p class="muted">Після підтвердження адміністратором ви отримаєте доступ до шаблону свого підрозділу.</p>
     <form class="js-reg" autocomplete="off">${profileFields()}
       <label class="f">E-mail * (буде логіном; на нього приходить лист для відновлення пароля)<input name="email" type="email" required autocomplete="username"></label>
-      <div class="js-mailwarn flash err" style="display:none;margin:-4px 0 10px">⚠️ На скриньки <b>@ukr.net</b> (а також @i.ua, @meta.ua) листи порталу часто не доходять —
+      <div class="js-mailwarn flash err" style="display:none;margin:-4px 0 10px">⚠️ На скриньки <b>@ukr.net</b> листи порталу часто не доходять —
         поштовий фільтр блокує їх або кладе в «Спам». Без листа не вийде підтвердити пошту й відновити пароль. Краще вкажіть <b>Gmail</b>.</div>
       <div class="note">Вкажіть <b>особисту пошту</b>, бажано <b>Gmail</b>. <mark>Не службову @police.gov.ua</mark>: захист службової пошти
         автоматично відкриває посилання з листів і через це скасовує прив'язку телефона для входу з кодом.
-        <mark>Не бажано @ukr.net</mark> (а також @i.ua, @meta.ua): листи порталу туди часто не доходять або потрапляють у «Спам».</div>
+        <mark>Не бажано @ukr.net</mark>: листи порталу туди часто не доходять або потрапляють у «Спам».</div>
       <div class="two"><label class="f">Пароль * (від 8 символів, літери й цифри)<input name="pw" type="password" required minlength="8" autocomplete="new-password"></label>
         <label class="f">Повторіть пароль *<input name="pw2" type="password" required minlength="8" autocomplete="new-password"></label></div>
       <button class="btn primary">Надіслати заявку</button></form>
@@ -196,7 +196,7 @@ function pageRegister() {
     if (f.pw.value !== f.pw2.value) { flash("err", "Паролі не збігаються."); return pageRegister(); }
     const pp = pwProblem(f.pw.value); if (pp) { flash("err", pp); return pageRegister(); }
     if (/police\.gov\.ua$/i.test(f.email.value.trim())) { flash("err", "Службова пошта @police.gov.ua не підходить для порталу — вкажіть особисту, бажано Gmail."); return pageRegister(); }
-    if (BAD_MAIL.test(f.email.value.trim()) && !confirm("На пошту @ukr.net (@i.ua, @meta.ua) листи порталу часто не доходять — тоді не вийде підтвердити пошту й відновити пароль.\n\nРекомендуємо вказати Gmail. Все одно продовжити з цією адресою?")) return;
+    if (BAD_MAIL.test(f.email.value.trim()) && !confirm("На пошту @ukr.net листи порталу часто не доходять — тоді не вийде підтвердити пошту й відновити пароль.\n\nРекомендуємо вказати Gmail. Все одно продовжити з цією адресою?")) return;
     const prof = readProfile(f); busy(true);
     try {
       state.registering = true;
@@ -1716,8 +1716,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261112a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261112b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
