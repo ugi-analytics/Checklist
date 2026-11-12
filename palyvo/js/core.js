@@ -90,6 +90,26 @@ export function registerGroups(rows, settings = {}) {
   return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => g);
 }
 
+/** Розбивка залишків і руху за видом (форма + МВО) для рядків групи реєстру — підрядки під «Всього» (налаштування reg_breakdown). */
+export function balanceBreakdown(rows, settings = {}) {
+  const m = new Map();
+  const add = (label, f) => { if (!m.has(label)) m.set(label, { label, startC: 0, issuedC: 0, consC: 0, endC: 0, iss: {}, cons: {} }); f(m.get(label)); };
+  for (const r of rows) {
+    for (const s of r.sources) {
+      const st = r.startBy[s.id] || 0, is = r.issued[s.id] || 0, co = r.consBy[s.id] || 0, en = r.endBy[s.id] || 0;
+      if (!st && !is && !co && !en) continue;
+      const f = sourceFor(s, r.vehicle, settings);
+      const label = [FORM_SHORT[f.form] || f.form, f.mvo].filter(Boolean).join(" ") || sourceTitle(s);
+      add(label, (x) => { x.startC += st; x.issuedC += is; x.consC += co; x.endC += en; x.iss[s.id] = (x.iss[s.id] || 0) + is; x.cons[s.id] = (x.cons[s.id] || 0) + co; });
+    }
+    for (const k of r.keep || []) {
+      const label = String(k.label || "").replace(/(^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])\d+(?:[.,]\d+)?\s*/, "$1").trim() + (k.mvo && !k.own ? " " + k.mvo : "");
+      add(label || "давні талони", (x) => { x.startC += k.c; x.consC += k.c - k.left; x.endC += k.left; });
+    }
+  }
+  return [...m.values()];
+}
+
 /** Чи підходить джерело авто за видом пального (джерело без виду — для всіх). */
 export function sourceFits(src, v) {
   const a = normFuel(src.fuel), b = normFuel(v.fuel);

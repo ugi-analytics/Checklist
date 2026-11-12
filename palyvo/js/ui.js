@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261112e";
+import * as C from "./core.js?v=20261112f";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -121,9 +121,18 @@ export function previewHtml(rows, settings = {}, sources = rows.sources || []) {
       ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
     h.push(`<tr class='tot'><td colspan=5>${esc(label)}</td>` + tc.map((c) => `<td>${c}</td>`).join("") + "</tr>");
   };
+  const breakdown = (rr) => {
+    if (!settings.reg_breakdown || legacy) return;
+    for (const b of C.balanceBreakdown(rr, settings)) {
+      const tc = [C.fmtC(b.startC), esc(b.label), ...lay.iss.map((x) => C.fmtC(b.iss[x.id] || 0, true)), C.fmtC(b.issuedC),
+        ...lay.cons.map((x) => C.fmtC(b.cons[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(b.consC), C.fmtC(b.endC), esc(b.label)];
+      h.push(`<tr class='sub'><td colspan=5></td>` + tc.map((c) => `<td>${c}</td>`).join("") + "</tr>");
+    }
+  };
   const groups = C.registerGroups(rows, settings);
-  groups.forEach((g) => { g.rows.forEach((r, i) => row(r, i)); if (g.title) totRow(`Всього (${g.title})`, g.rows); });
+  groups.forEach((g) => { g.rows.forEach((r, i) => row(r, i)); if (g.title) { totRow(`Всього (${g.title})`, g.rows); breakdown(g.rows); } });
   totRow(groups.length > 1 ? "Разом" : "Всього", rows);
+  if (groups.length === 1 && !groups[0].title) breakdown(rows);
   h.push("</table>");
   return h.join("");
   function row(r, i) {

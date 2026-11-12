@@ -1,7 +1,7 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261112e";
-import { litresWords } from "./words.js?v=20261112e";
+import * as C from "./core.js?v=20261112f";
+import { litresWords } from "./words.js?v=20261112f";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -98,10 +98,19 @@ export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSo
       ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
     tableRows.push(new D.TableRow({ cantSplit: true, children: [c(label, { colSpan: 5, bold: true }), ...tv.map((x) => c(x, { bold: true }))] }));
   };
+  // підрядки під «Всього»: залишки й рух за видом (форма + МВО) — налаштування reg_breakdown
+  const breakdown = (rr) => {
+    if (!s.reg_breakdown || legacy) return;
+    for (const b of C.balanceBreakdown(rr, s)) {
+      const tv = [C.fmtC(b.startC), b.label, ...lay.iss.map((x) => C.fmtC(b.iss[x.id] || 0, true)), C.fmtC(b.issuedC),
+        ...lay.cons.map((x) => C.fmtC(b.cons[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(b.consC), C.fmtC(b.endC), b.label];
+      tableRows.push(new D.TableRow({ cantSplit: true, children: [c("", { colSpan: 5 }), ...tv.map((x) => c(x, { size: fs - 1 }))] }));
+    }
+  };
   const groups = C.registerGroups(rows, s);
-  groups.forEach((g) => { g.rows.forEach((r, i) => pushRow(r, i)); if (groups.length > 1 || g.title) totRow(`Всього${g.title ? " (" + g.title + ")" : ""}`, g.rows); });
+  groups.forEach((g) => { g.rows.forEach((r, i) => pushRow(r, i)); if (groups.length > 1 || g.title) { totRow(`Всього${g.title ? " (" + g.title + ")" : ""}`, g.rows); breakdown(g.rows); } });
   if (groups.length > 1) totRow("Разом", rows);
-  else if (!groups[0].title) totRow("Всього", rows);
+  else if (!groups[0].title) { totRow("Всього", rows); breakdown(rows); }
 
   function pushRow(r, i) {
     const v = r.vehicle;

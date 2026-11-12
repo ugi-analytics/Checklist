@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261112e";
-import * as U from "./ui.js?v=20261112e";
-import { litresWords } from "./words.js?v=20261112e";
-import { buildRegister, buildAct } from "./docs.js?v=20261112e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112e";
-import * as X from "./crypto.js?v=20261112e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261112e";
-import { buildXlsx } from "./xlsx.js?v=20261112e";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112e";
+import * as C from "./core.js?v=20261112f";
+import * as U from "./ui.js?v=20261112f";
+import { litresWords } from "./words.js?v=20261112f";
+import { buildRegister, buildAct } from "./docs.js?v=20261112f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112f";
+import * as X from "./crypto.js?v=20261112f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261112f";
+import { buildXlsx } from "./xlsx.js?v=20261112f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1271,6 +1271,7 @@ async function pageFleet() {
         <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${(s.sources && s.sources.length) || (pog && !s.sources) ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="У картці авто біля залишку на початок з'явиться вибір джерела — витрата із залишку піде в колонку цього джерела"><input type="checkbox" class="js-spick" ${s.start_pick ? "checked" : ""}> вказувати, з якого джерела залишок на початок</label>
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="У «Додатку 6»: спершу бензинові авто й рядок «Всього», потім дизельні й «Всього», в кінці «Разом»"><input type="checkbox" class="js-byfuel" ${s.reg_by_fuel ? "checked" : ""}> «Додаток 6»: розділяти авто за видом пального (бензин / дизель) з підсумками</label>
+      <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="Під рядком «Всього» — окремі рядки: залишок на початок, видано, витрачено й залишок на кінець за кожним видом (с/к, талони…) і МВО"><input type="checkbox" class="js-breakdown" ${s.reg_breakdown ? "checked" : ""}> «Додаток 6»: під «Всього» — розбивка залишків і руху за видом та МВО</label>
       <div class="js-srcbox">
         <div class="tblwrap"><table class="edit" id="srcs"><thead><tr><th>Вид пального</th><th>Форма</th><th>Постачальник</th><th>МВО</th>
           <th style="min-width:220px">Назва колонки в реєстрі</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -1444,6 +1445,7 @@ async function pageFleet() {
     settings.cons_issued_first = $app.querySelector(".js-isfirst").checked;
     settings.start_pick = $app.querySelector(".js-spick").checked;
     settings.reg_by_fuel = $app.querySelector(".js-byfuel").checked;
+    settings.reg_breakdown = $app.querySelector(".js-breakdown").checked;
     if (custom()) {
       const list = [...sbody.querySelectorAll("tr")].map(readSrc);
       if (!list.length) { flash("err", "Додайте хоча б одне джерело пального або оберіть стандартні."); return render(); }
@@ -1869,8 +1871,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261112e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261112f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
