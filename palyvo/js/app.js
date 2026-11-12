@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261112b";
-import * as U from "./ui.js?v=20261112b";
-import { litresWords } from "./words.js?v=20261112b";
-import { buildRegister, buildAct } from "./docs.js?v=20261112b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112b";
-import * as X from "./crypto.js?v=20261112b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261112b";
-import { buildXlsx } from "./xlsx.js?v=20261112b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112b";
+import * as C from "./core.js?v=20261112c";
+import * as U from "./ui.js?v=20261112c";
+import { litresWords } from "./words.js?v=20261112c";
+import { buildRegister, buildAct } from "./docs.js?v=20261112c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112c";
+import * as X from "./crypto.js?v=20261112c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261112c";
+import { buildXlsx } from "./xlsx.js?v=20261112c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -179,11 +179,11 @@ function pageRegister() {
     <p class="muted">Після підтвердження адміністратором ви отримаєте доступ до шаблону свого підрозділу.</p>
     <form class="js-reg" autocomplete="off">${profileFields()}
       <label class="f">E-mail * (буде логіном; на нього приходить лист для відновлення пароля)<input name="email" type="email" required autocomplete="username"></label>
-      <div class="js-mailwarn flash err" style="display:none;margin:-4px 0 10px">⚠️ На скриньки <b>@ukr.net</b> листи порталу часто не доходять —
-        поштовий фільтр блокує їх або кладе в «Спам». Без листа не вийде підтвердити пошту й відновити пароль. Краще вкажіть <b>Gmail</b>.</div>
+      <div class="js-mailwarn flash err" style="display:none;margin:-4px 0 10px">⚠️ На скриньки <b>@ukr.net</b> листи порталу часто взагалі не доходять —
+        їх блокує поштовий фільтр. Без листа не вийде підтвердити пошту й відновити пароль. Краще вкажіть <b>Gmail</b>.</div>
       <div class="note">Вкажіть <b>особисту пошту</b>, бажано <b>Gmail</b>. <mark>Не службову @police.gov.ua</mark>: захист службової пошти
         автоматично відкриває посилання з листів і через це скасовує прив'язку телефона для входу з кодом.
-        <mark>Не бажано @ukr.net</mark>: листи порталу туди часто не доходять або потрапляють у «Спам».</div>
+        <mark>Не бажано @ukr.net</mark>: листи порталу туди часто взагалі не доходять. На будь-яку пошту лист може потрапити в «Спам» — перевіряйте цю папку.</div>
       <div class="two"><label class="f">Пароль * (від 8 символів, літери й цифри)<input name="pw" type="password" required minlength="8" autocomplete="new-password"></label>
         <label class="f">Повторіть пароль *<input name="pw2" type="password" required minlength="8" autocomplete="new-password"></label></div>
       <button class="btn primary">Надіслати заявку</button></form>
@@ -1716,8 +1716,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261112b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261112c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
