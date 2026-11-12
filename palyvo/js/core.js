@@ -38,7 +38,7 @@ export function sourceTitle(src) {
 /** Реквізити джерела для конкретного авто (порожні поля стандартних джерел — з картки авто). */
 export function sourceFor(src, v = {}, settings = {}) {
   const custom = Array.isArray(settings.sources) && settings.sources.length;   // свої джерела: МВО — лише з джерела
-  return { fuel: src.fuel || v.fuel || "", supplier: src.supplier || v.supplier || "",
+  return { fuel: src.fuel || v.fuel || "", supplier: src.supplier || "",
     mvo: src.mvo || (custom ? "" : v.mvo_text || settings.compiler) || "", form: src.form || "", group: FORM_GROUP[src.form] || "tsmk" };
 }
 /** Підпис джерела для «Вид пального на залишку»: «А-95 с/к UKRNAFTA Мосійченко». */
@@ -180,7 +180,7 @@ export function defaultMonth(d = new Date()) {
 // ---------------------------------------------------------------- авто
 export function newId() { return "v" + Math.random().toString(16).slice(2, 10); }
 export function normalizeVehicle(v = {}) {
-  const out = { name: "", rate: 0, month_norm_km: 2640, fuel: "А-95", supplier: "UKRNAFTA", source: "smk", winter_pct: 0,
+  const out = { name: "", rate: 0, month_norm_km: 2640, fuel: "А-95", supplier: "", source: "smk", winter_pct: 0,
     mvo_text: "", active: true };
   for (const [k, val] of Object.entries(v)) if (val !== null && val !== undefined) out[k] = val;
   if (!out.id) out.id = newId();

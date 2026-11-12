@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261112g";
+import * as C from "./core.js?v=20261112h";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -138,7 +138,7 @@ export function previewHtml(rows, settings = {}, sources = rows.sources || []) {
   function row(r, i) {
     const v = r.vehicle;
     const startVid = legacy ? esc(C.legacyStartVid(r)) : esc(C.balanceText(r, "start", settings));
-    let endVid = legacy ? esc((v.fuel || "") + (v.supplier ? ` (${v.supplier})` : "")) : esc(C.balanceText(r, "end", settings));
+    let endVid = legacy ? esc((v.fuel || "")) : esc(C.balanceText(r, "end", settings));
     if (legacy && v.mvo_text) endVid += "<br>МВО " + esc(v.mvo_text);
     const cells = [i + 1, u, esc(v.name), v.month_norm_km || "", C.fmtKm(r.km), C.fmtC(r.startC), startVid,
       ...lay.iss.map((x) => C.fmtC(r.issued[x.id] || 0, true)), `<b>${C.fmtC(r.issuedC)}</b>`,

@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261112g";
-import * as U from "./ui.js?v=20261112g";
-import { litresWords } from "./words.js?v=20261112g";
-import { buildRegister, buildAct } from "./docs.js?v=20261112g";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112g";
-import * as X from "./crypto.js?v=20261112g";
-import { qrSvg } from "../vendor/qrcode.js?v=20261112g";
-import { buildXlsx } from "./xlsx.js?v=20261112g";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112g";
+import * as C from "./core.js?v=20261112h";
+import * as U from "./ui.js?v=20261112h";
+import { litresWords } from "./words.js?v=20261112h";
+import { buildRegister, buildAct } from "./docs.js?v=20261112h";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112h";
+import * as X from "./crypto.js?v=20261112h";
+import { qrSvg } from "../vendor/qrcode.js?v=20261112h";
+import { buildXlsx } from "./xlsx.js?v=20261112h";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112h";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1247,7 +1247,7 @@ async function pageFleet() {
   shell(`${onboarding ? `<div class="panel" style="border-color:rgba(250,204,21,.5);background:linear-gradient(120deg,rgba(8,145,178,.25),rgba(55,48,163,.25))">
       <h2 class="display">👋 Вітаємо! ${pog ? "Додайте свій службовий автомобіль" : "Створіть автопарк свого підрозділу"}</h2>
       <p>Це перший вхід для підрозділу <b>${esc(unit.name)}</b> — автопарк ще порожній. Додайте службові авто (марка, модель і номер,
-        норма витрати, вид пального, АЗС), перевірте реквізити бланків і склад комісії для акта списання, а потім натисніть
+        норма витрати, вид пального), перевірте реквізити бланків і склад комісії для акта списання, а потім натисніть
         <b>«Зберегти шаблон підрозділу»</b>. Після цього відкриється введення даних за місяць.</p>
       <p class="muted">Шаблон створюється один раз: колеги з вашого підрозділу, які зареєструються пізніше, одразу побачать цей автопарк.</p></div>` : ""}
     ${pog ? `<div class="panel" style="border-color:rgba(56,189,248,.45)"><h2>👮 Поліцейський офіцер громади</h2>
@@ -1259,7 +1259,7 @@ async function pageFleet() {
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr><th style="min-width:200px">Марка, ДНЗ</th><th>Норма, л/100 км</th>
-        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th>АЗС</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist></div>
@@ -1329,12 +1329,10 @@ async function pageFleet() {
   const vbody = $app.querySelector("#veh tbody"), mbody = $app.querySelector("#mem tbody");
   const addVeh = (v) => {
     const tr = document.createElement("tr"); tr.dataset.id = v.id || C.newId();
-    const sup = [...new Set([...C.SUPPLIERS, v.supplier].filter(Boolean))];
     tr.innerHTML = `<td><input data-f="name" value="${esc(v.name)}" placeholder="Марка модель номер"></td>
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
       <td><input data-f="month_norm_km" type="number" step="10" min="0" value="${v.month_norm_km ?? 2640}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
-      <td><select data-f="supplier">${sup.map((x) => `<option ${x === (v.supplier || "UKRNAFTA") ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>
       <td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>
       <td class="col-mvo"><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
       <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
@@ -1381,7 +1379,7 @@ async function pageFleet() {
     const tr = document.createElement("tr"); tr.dataset.id = x.id || C.normalizeSource({}).id;
     tr.innerHTML = `<td><input data-f="fuel" list="fuels" value="${esc(x.fuel)}" placeholder="будь-який" style="width:90px"></td>
       <td><select data-f="form">${C.FORMS.map((fm) => `<option ${fm === (x.form || "с/к") ? "selected" : ""}>${esc(fm)}</option>`).join("")}</select></td>
-      <td><input data-f="supplier" list="suppliers" value="${esc(x.supplier)}" placeholder="з картки авто" style="width:120px"></td>
+      <td><input data-f="supplier" list="suppliers" value="${esc(x.supplier)}" placeholder="необов'язково" style="width:120px"></td>
       <td><input data-f="mvo" value="${esc(x.mvo)}" placeholder="з картки авто" style="width:140px"></td>
       <td><input data-f="label" value="${esc(C.LEGACY_SOURCES.some((l) => l.id === x.id && l.label === x.label) ? "" : x.label)}" placeholder="${esc(C.sourceTitle({ ...x, label: "" }))}"></td>
       <td class="c"><input data-f="active" type="checkbox" ${x.active === false ? "" : "checked"}></td>
@@ -1871,8 +1869,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261112g")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112g")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261112h")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112h")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
