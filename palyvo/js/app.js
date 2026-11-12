@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261112c";
-import * as U from "./ui.js?v=20261112c";
-import { litresWords } from "./words.js?v=20261112c";
-import { buildRegister, buildAct } from "./docs.js?v=20261112c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112c";
-import * as X from "./crypto.js?v=20261112c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261112c";
-import { buildXlsx } from "./xlsx.js?v=20261112c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112c";
+import * as C from "./core.js?v=20261112d";
+import * as U from "./ui.js?v=20261112d";
+import { litresWords } from "./words.js?v=20261112d";
+import { buildRegister, buildAct } from "./docs.js?v=20261112d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261112d";
+import * as X from "./crypto.js?v=20261112d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261112d";
+import { buildXlsx } from "./xlsx.js?v=20261112d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261112d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -18,7 +18,7 @@ let store = null;
 const state = { authUser: null, me: null, unitId: null, units: [], flash: null, setupDone: null,
   mfa: null, adminPriv: null, keys: {}, adminKeyReady: null };
 // ключі в пам'яті вкладки скидаються при виході
-function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; state.dispPriv = null; state.dispPub = undefined; state.dispCat = null; }
+function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; state.supPriv = null; state.dispPriv = null; state.dispPub = undefined; state.dispCat = null; }
 const keyCacheId = (unitId) => `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser?.uid}:${unitId}`;
 
 // ============================================================ утиліти
@@ -51,7 +51,8 @@ const isAdmin = () => state.me && state.me.role === "admin" && state.me.status =
 // ukr.net — листи Firebase часто не доходять (жорсткий антиспам-фільтр)
 const BAD_MAIL = /@ukr\.net$/i;
 const isDisp = () => state.me && state.me.role === "dispatcher" && state.me.status === "active";
-const ROLE_UA = { user: "користувач", admin: "адміністратор", dispatcher: "диспетчер" };
+const isPogSup = () => state.me && state.me.role === "pogsup" && state.me.status === "active";
+const ROLE_UA = { user: "користувач", admin: "адміністратор", dispatcher: "диспетчер", pogsup: "керівництво ПОГ" };
 const years = () => { const y = new Date().getFullYear(); const a = []; for (let i = 2024; i <= y + 1; i++) a.push(i); return a; };
 function monthPicker(ym, base) {
   const [y, m] = C.parseYm(ym);
@@ -90,14 +91,15 @@ function shell(content, { nav = true } = {}) {
         <span class="online ${navigator.onLine ? "" : "off"}"><i></i><b>${navigator.onLine ? "ON-LINE" : "OFF-LINE"}</b></span></div>
         <small>Управління головної інспекції ГУНП в Полтавській області</small></div>
       <div class="sp"></div>
-      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : isDisp() ? " · диспетчер" : ""}${isDisp() ? "<br>" : whoUnit}${stats}
+      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : isDisp() ? " · диспетчер" : isPogSup() ? " · керівництво ПОГ" : ""}${isDisp() || isPogSup() ? "<br>" : whoUnit}${stats}
         ${me && me.status === "active" ? `<a href="#/password">змінити пароль</a> · ` : ""}<a href="#" class="js-logout">вийти</a></div>` : ""}
     </div>
     <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
       <div class="chips">${unitChip}${switcher}
       ${DEMO ? `<span class="chip" style="border-color:#f87171;color:#fecaca">ДЕМО-РЕЖИМ · дані не зберігаються</span>` : ""}</div></div>
     ${nav && isDisp() ? `<nav class="tiles">${tab("disp", "🧮", "Диспетчер · перевірка розрахунку")}</nav>` : ""}
-    ${nav && me && me.status === "active" && !isDisp() ? `<nav class="tiles">
+    ${nav && isPogSup() ? `<nav class="tiles">${tab("pogsup", "👮", "ПОГ області")}</nav>` : ""}
+    ${nav && me && me.status === "active" && !isDisp() && !isPogSup() ? `<nav class="tiles">
       ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
       ${isAdmin() ? tab("disp", "🧮", "Режим диспетчера") + tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
   </div></header>
@@ -576,6 +578,26 @@ async function monthState(unit, ym) {
   return { saved, entries, carried, vehicles, sources };
 }
 async function rowsFor(unit, ym) { return (await monthView(unit, ym)).rows; }
+// керівництво ПОГ: ключ даних кабінету ПОГ загортається відкритим ключем керівництва (лише для кабінетів ПОГ)
+async function wrapForPogSup(unitId, dk, pub) {
+  pub = pub || await store.getPogSupPub(); if (!pub) return false;
+  const w = await X.wrapForAdmin(dk, pub);
+  await store.updateUnit(unitId, { supwrap: { ...w, kid: pub.kid } });
+  return true;
+}
+// адміністратор: відкрити кабінети ПОГ для керівництва ПОГ і позначити користувачів-ПОГ
+async function syncPogSupAccess(pogs, users) {
+  if (!state.adminPriv) return 0;
+  const pub = await store.getPogSupPub(); let n = 0;
+  for (const u of pogs) {
+    if (pub && u.crypto && u.crypto.admin && (!u.supwrap || u.supwrap.kid !== pub.kid)) {
+      const dk = await X.unwrapByAdmin(u.crypto.admin, state.adminPriv, true);
+      await wrapForPogSup(u.id, dk, pub); n++;
+    }
+  }
+  for (const x of users) if (!x.pog && pogs.some((u) => u.id === x.unit_id)) await store.updateUser(x.uid, { pog: true });
+  return n;
+}
 // реквізити підрозділу (для копіювання до кабінету ПОГ) — адміністратор розшифровує своїм ключем
 async function parentSettings(parent) {
   const fresh = await store.getUnit(parent.id);
@@ -653,6 +675,7 @@ function pageUnitKey(mode, u) {
         const cryptoObj = { v: 1, pass: await X.wrapWithPass(dk, f.k1.value, X.aadPass(u.id)), admin: await X.wrapForAdmin(dk, pub) };
         const enc = await X.encJson(dk, { settings: { ...C.DEFAULT_SETTINGS, ...(u.settings || {}) }, vehicles: u.vehicles || [] }, X.aadUnit(u.id));
         await store.initUnitCrypto(u.id, cryptoObj, enc, (u.vehicles || []).length);
+        if (u.kind === "pog") await wrapForPogSup(u.id, dk).catch(() => {});
         await rememberKey(u.id, dk, f.remember.checked);
         store.log("unit_key_create", "", u.id);
         flash("ok", "Ключ підрозділу створено. Дані підрозділу тепер шифруються.");
@@ -1019,6 +1042,119 @@ function dispView(q) {
   }
 }
 
+// ============================================================ керівництво ПОГ
+// Бачить кабінети всіх ПОГ області: хто зареєструвався, автомобіль, показники за місяць, документи. Лише перегляд.
+async function pagePogSup(q) {
+  const pub = await store.getPogSupPub();
+  const proj = DEMO ? "demo" : FIREBASE_CONFIG.projectId;
+  const cacheId = pub ? `${proj}:${state.authUser.uid}:pogsup:${pub.kid}` : "";
+  if (!pub) {
+    shell(`<div class="auth" style="max-width:640px"><div class="panel"><h2 class="display">🔑 Створіть ключ керівництва ПОГ</h2>
+      <div class="note"><p>Кабінети ПОГ зашифровані. Ключ керівництва ПОГ — фраза, якою відкриваються <b>лише кабінети ПОГ</b> (для перегляду).
+        Дані інших підрозділів цим ключем не відкриваються.</p><p>Ключ знаєте лише ви (та колеги з керівництва ПОГ, яким ви його передасте особисто). Адміністратор його не бачить;
+        якщо ключ забуто — він скидає його, і ви створюєте новий.</p></div>
+      <form class="js-snew" autocomplete="off"><label class="f">Ключ керівництва ПОГ (від 10 символів, краще фраза)<input name="k1" type="password" required></label>
+        <label class="f">Повторіть<input name="k2" type="password" required></label>${rememberBox}<button class="btn primary">Створити ключ</button></form></div></div>`);
+    $app.querySelector(".js-snew").addEventListener("submit", async (e) => {
+      e.preventDefault(); const f = e.target;
+      const prob = X.passProblem(f.k1.value, "Ключ керівництва ПОГ"); if (prob) { flash("err", prob); return render(); }
+      if (f.k1.value !== f.k2.value) { flash("err", "Ключі не збігаються."); return render(); }
+      busy(true);
+      try {
+        const keys = await X.newDispKeys(f.k1.value);
+        await store.createPogSupKeys(keys);
+        const priv = await X.unlockDisp(keys.priv, f.k1.value); state.supPriv = priv;
+        if (f.remember.checked) await X.keyCache.put(`${proj}:${state.authUser.uid}:pogsup:${keys.pub.kid}`, priv);
+        store.log("pogsup_key_create", "");
+        flash("ok", "Ключ створено. Кабінети ПОГ відкриються для перегляду, щойно адміністратор відкриє вкладку «ПОГ» зі своїм ключем (нові ПОГ — автоматично).");
+      } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
+      render();
+    });
+    return;
+  }
+  if (!state.supPriv) state.supPriv = await X.keyCache.get(cacheId);
+  if (!state.supPriv) {
+    shell(`<div class="auth" style="max-width:560px"><div class="panel"><h2 class="display">🔑 Ключ керівництва ПОГ</h2>
+      <p class="muted">Кабінети ПОГ зашифровані. Введіть ключ керівництва ПОГ.</p>
+      <form class="js-sopen" autocomplete="off"><label class="f">Ключ керівництва ПОГ<input name="k" type="password" required autofocus></label>${rememberBox}
+        <button class="btn primary">Відкрити</button></form>
+      <p class="muted" style="margin-top:12px">Ніхто не пам'ятає ключ? Адміністратор може його скинути — тоді створите новий.</p></div></div>`);
+    $app.querySelector(".js-sopen").addEventListener("submit", async (e) => {
+      e.preventDefault(); const f = e.target; busy(true);
+      try {
+        const priv = await X.unlockDisp(await store.getPogSupPriv(), f.k.value); state.supPriv = priv;
+        if (f.remember.checked) await X.keyCache.put(cacheId, priv);
+      } catch (err) { flash("err", String(err.message || "").includes("диспетчера") ? "Невірний ключ керівництва ПОГ." : store.errUa(err)); } finally { busy(false); }
+      render();
+    });
+    return;
+  }
+  const ym = currentYm(q);
+  const [units, users] = await Promise.all([store.listPogUnits(), store.listPogUsers()]);
+  units.sort((a, b) => String(a.parent_name || "").localeCompare(String(b.parent_name || ""), "uk") || a.name.localeCompare(b.name, "uk"));
+  const recs = await Promise.all(units.map(async (u) => {
+    const people = users.filter((x) => x.unit_id === u.id);
+    if (!u.crypto || !u.supwrap || u.supwrap.kid !== pub.kid) return { u, people, closedAccess: true };
+    try {
+      const dk = await X.unwrapByAdmin(u.supwrap, state.supPriv);
+      const unit = await decUnit(u, dk);
+      const v = await monthView(unit, ym);
+      const sts = v.rows.map((r) => C.statusOf(r, r.entry || {}));
+      return { u, unit, people, v, t: C.totals(v.rows), n: v.rows.length, done: sts.filter((x) => x === "ok" || x === "warn").length, err: sts.filter((x) => x === "err").length };
+    } catch (err) { return { u, people, closedAccess: true, error: err.message }; }
+  }));
+  const pend = users.filter((x) => x.status === "pending" && x.pog_req);
+  const sel = q.get("u") ? recs.find((r) => r.u.id === q.get("u") && r.v) : null;
+  const person = (x) => `<b>${esc(x.full_name || "—")}</b>${x.position ? `, ${esc(x.position)}` : ""}${x.phone ? `<br><span class="muted">${esc(x.phone)}</span>` : ""}
+    <br><span class="muted">${esc(x.email || "")} · ${x.status === "active" ? "активний" : x.status === "blocked" ? "заблокований" : esc(x.status || "")}${x.last_login ? " · вхід " + esc(String(x.last_login).slice(0, 16).replace("T", " ")) : ""}</span>`;
+  const ready = recs.filter((r) => r.v), filled = ready.filter((r) => r.n && r.done === r.n).length;
+  const sum = (k) => ready.reduce((a, r) => a + (r.t ? r.t[k] : 0), 0);
+  let detail = "";
+  if (sel) {
+    const { v, unit } = sel;
+    detail = `<div class="panel"><h2>${esc(unit.name)} <span class="muted" style="font-size:.9rem">· ${esc(unit.parent_name || "")} · ${C.monthTitle(ym)}</span></h2>
+      ${v.closed ? `<div class="flash ok">${closedNote(v.closed)}</div>` : ""}
+      <p class="muted">Автомобіль: <b>${esc(unit.vehicles.map((x) => `${x.name} (${x.fuel || "—"}, ${x.rate ?? "—"} л/100 км)`).join("; ") || "—")}</b> ·
+        джерела: ${esc((v.rows.sources || []).filter((x) => x.active !== false).map((x) => C.sourceTitle(x)).join(", "))}</p>
+      <div class="tblwrap">${U.previewHtml(v.rows, v.S, v.rows.sources)}</div>
+      <div class="row" style="margin-top:12px"><button class="btn sky js-sreg">📥 «Додаток 6» (Word)</button>
+        ${v.acts.filter((a) => a.lines.length).map((a, i) => `<button class="btn js-sact" data-i="${v.acts.indexOf(a)}">📥 Акт «${esc(a.title)}» — ${C.fmtC(a.lines.reduce((x, l) => x + l.qtyC, 0))} л</button>`).join("")}
+        <a class="btn sm" href="#/pogsup?ym=${ym}">← до списку</a></div></div>`;
+  }
+  shell(`<div class="row" style="justify-content:space-between;margin-top:14px">${monthPicker(ym, "#/pogsup")}</div>
+    ${detail}
+    <div class="panel"><h2 class="display">👮 ПОГ області за ${C.monthTitle(ym)}</h2>
+      <p class="muted">Лише перегляд. ПОГ: <b>${units.length}</b> · заповнили місяць: <b>${filled}</b> з ${ready.length} · видано <b>${C.fmtC(sum("issuedC"))} л</b> ·
+        витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок <b>${C.fmtC(sum("endC"))} л</b>${pend.length ? ` · очікують підтвердження: <b>${pend.length}</b>` : ""}</p>
+      <input class="js-sq" placeholder="🔍 ПІБ, підрозділ, авто" style="min-width:280px;max-width:460px;margin-bottom:10px">
+      <div class="tblwrap"><table class="list js-slist"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Користувач</th><th>Автомобіль</th><th>Заповнено</th>
+        <th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th></th></tr></thead><tbody>
+      ${recs.map((r) => `<tr data-s="${esc([r.u.name, r.u.parent_name, ...r.people.map((x) => x.full_name), ...(r.unit ? r.unit.vehicles.map((x) => x.name) : [])].join(" ").toLowerCase())}">
+        <td><b>${esc(r.u.name)}</b></td><td>${esc(r.u.parent_name || "—")}</td><td>${r.people.map(person).join("<hr style='opacity:.15'>") || "—"}</td>
+        ${r.v ? `<td>${esc(r.unit.vehicles.map((x) => x.name).join(", ") || "—")}</td>
+          <td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>` : `<span class="pill ${r.err ? "err" : "warn"}">${r.done}/${r.n}</span>`}${r.v.closed ? " 🔒" : ""}</td>
+          <td class="num">${C.fmtKm(r.t.km)}</td><td class="num">${C.fmtC(r.t.issuedC)}</td><td class="num">${C.fmtC(r.t.consC)}</td><td class="num">${C.fmtC(r.t.endC)}</td>
+          <td><a class="btn sm" href="#/pogsup?ym=${ym}&u=${r.u.id}">Детально →</a></td>`
+        : `<td colspan="7"><span class="muted">${!r.u.crypto ? "ПОГ ще не створив ключ (не заходив після підтвердження)" : "кабінет ще не відкрито для керівництва — відкриється, коли адміністратор зайде на вкладку «ПОГ»"}</span></td>`}</tr>`).join("")}
+      </tbody></table></div>
+      ${pend.length ? `<h3 style="margin-top:16px">Заявки ПОГ, що очікують підтвердження адміністратором</h3>
+        <table class="list"><tbody>${pend.map((x) => `<tr><td>${person(x)}</td><td>вказаний підрозділ: ${esc(x.requested_unit || "—")}</td><td class="muted">подано ${esc(x.created_at || "")}</td></tr>`).join("")}</tbody></table>` : ""}
+    </div>`);
+  bindMonthPicker();
+  const qi = $app.querySelector(".js-sq");
+  qi.addEventListener("input", () => { const t = qi.value.trim().toLowerCase(); $app.querySelectorAll(".js-slist tbody tr").forEach((tr) => { tr.style.display = !t || tr.dataset.s.includes(t) ? "" : "none"; }); });
+  if (sel) {
+    const { v, unit } = sel;
+    $app.querySelector(".js-sreg").addEventListener("click", async () => {
+      await download(buildRegister(window.docx, v.S, ym, v.rows, v.rows.sources), `Додаток_6_${unit.name.replace(/\s+/g, "_")}_${ym}.docx`); store.log("pogsup_doc_register", ym, unit.id);
+    });
+    $app.querySelectorAll(".js-sact").forEach((b) => b.addEventListener("click", async () => {
+      const a = v.acts[Number(b.dataset.i)];
+      await download(buildAct(window.docx, v.S, ym, a), actFileName(a, ym).replace("Акт_списання", `Акт_списання_${unit.name.replace(/\s+/g, "_")}`)); store.log("pogsup_doc_act", ym, unit.id);
+    }));
+  }
+}
+
 // ============================================================ звіт і акти
 async function pageReport(q) {
   const unit = await loadUnit();
@@ -1356,7 +1492,7 @@ async function pageAdmin(sub, q) {
           <div class="row" style="margin-top:10px">
             <label class="f">Прив'язати до підрозділу<select class="js-unitsel"><option value="new" ${match ? "" : "selected"}>➕ Створити новий підрозділ</option>${unitOptions(match?.id)}</select></label>
             <label class="f js-newname" ${match ? 'style="display:none"' : ""}>Назва нового підрозділу<input value="${esc(u.requested_unit)}"></label>
-            <label class="f">Роль<select class="js-role"><option value="user" ${u.pog_req ? "" : "selected"}>Користувач підрозділу</option><option value="pog" ${u.pog_req ? "selected" : ""}>ПОГ — окремий кабінет у складі підрозділу</option><option value="dispatcher">Диспетчер (перевірка розрахунків, уся область)</option><option value="admin">Адміністратор</option></select></label>
+            <label class="f">Роль<select class="js-role"><option value="user" ${u.pog_req ? "" : "selected"}>Користувач підрозділу</option><option value="pog" ${u.pog_req ? "selected" : ""}>ПОГ — окремий кабінет у складі підрозділу</option><option value="dispatcher">Диспетчер (перевірка розрахунків, уся область)</option><option value="pogsup">Керівництво ПОГ (перегляд кабінетів усіх ПОГ області)</option><option value="admin">Адміністратор</option></select></label>
             <button class="btn primary js-approve">✓ Підтвердити</button></div>
           <div style="margin-top:8px"><button class="btn sm danger js-reject">✕ Відхилити</button> <button class="btn sm danger js-udel">🗑 Видалити заявку</button></div></div>`;
       }).join("")}</div>`;
@@ -1401,20 +1537,30 @@ async function pageAdmin(sub, q) {
             <input name="n2" type="password" placeholder="повторіть" required minlength="10"><button class="btn sm primary">Встановити</button></form>` : ""}</td></tr>`).join("")}
       </tbody></table></div>`;
   } else if (tab === "pog") {
+    const supPub = await store.getPogSupPub().catch(() => null);
+    if (state.adminPriv) {
+      try { const n = await syncPogSupAccess(pogs, users); if (n) { const fresh = await store.listUnits(); pogs.splice(0, pogs.length, ...fresh.filter((u) => u.kind === "pog")); } }
+      catch (err) { console.warn(err); }
+    }
     body = `<div class="panel"><h2>👮 Поліцейські офіцери громад</h2>
       <p class="muted">ПОГ — окрема МВО зі своїм автомобілем, ключем і документами. У «Зведенні по області» їхні авто зараховуються до підрозділу, де ПОГ проходить службу.
         Перевести ПОГ до іншого підрозділу може лише адміністратор. Реквізити й комісія копіюються з підрозділу ключем адміністратора.</p>
       ${state.adminPriv ? "" : adminKeyForm("Щоб копіювати реквізити підрозділу до кабінету ПОГ, введіть ключ адміністратора.")}
-      ${pogs.length ? `<table class="list"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Користувач</th><th class="num">Авто</th><th>Шифрування</th><th>Реквізити</th><th>Дії</th></tr></thead><tbody>
+      ${pogs.length ? `<table class="list"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Користувач</th><th class="num">Авто</th><th>Шифрування</th><th>Керівництво ПОГ</th><th>Дії</th></tr></thead><tbody>
       ${pogs.map((u) => `<tr data-id="${u.id}"><td><b>${esc(u.name)}</b></td>
         <td><div class="row" style="gap:6px"><select class="js-pparent">${regular.map((x) => `<option value="${x.id}" ${x.id === u.parent_id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
           <button class="btn sm js-ptransfer">Перевести</button></div></td>
         <td>${users.filter((x) => x.unit_id === u.id).map((x) => esc(x.full_name)).join("<br>") || "—"}</td><td class="num">${u.n_vehicles ?? 0}</td>
         <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
-        <td>${u.seed_req ? `<span class="pill warn">запит на оновлення</span>` : `<span class="muted">—</span>`}</td>
+        <td>${!supPub ? `<span class="muted">ключ не створено</span>` : u.supwrap && u.supwrap.kid === supPub.kid ? `<span class="pill ok">👁 бачить</span>` : `<span class="pill mut">${u.crypto ? "відкриється з ключем адміністратора" : "після ключа ПОГ"}</span>`}</td>
         <td>${u.crypto && state.adminPriv ? `<button class="btn sm js-pseed">🔄 Скопіювати реквізити з підрозділу</button> ` : ""}<button class="btn sm js-open">Відкрити →</button>
           ${usersIn(u.id) ? "" : ` <button class="btn sm danger js-unitdel">🗑 Видалити</button>`}</td></tr>`).join("")}</tbody></table>`
-        : `<p class="muted">ПОГ ще немає. Вони з'являються, коли ви підтверджуєте заявку з роллю «ПОГ».</p>`}</div>`;
+        : `<p class="muted">ПОГ ще немає. Вони з'являються, коли ви підтверджуєте заявку з роллю «ПОГ».</p>`}
+      <h3 style="margin-top:18px">👁 Керівництво ПОГ</h3>
+      <p class="muted">Роль «керівництво ПОГ» бачить кабінети всіх ПОГ області (хто зареєструвався, автомобіль, показники, документи) — лише для перегляду.
+        Кабінети ПОГ відкриваються для керівництва окремим ключем керівництва ПОГ, який створює перший користувач з цією роллю; доступ до вже наявних кабінетів
+        надається автоматично, коли ви відкриваєте цю вкладку з ключем адміністратора.</p>
+      ${supPub ? `<button class="btn sm danger js-supreset">Скинути ключ керівництва ПОГ</button>` : `<span class="muted">Ключ керівництва ПОГ ще не створено.</span>`}</div>`;
   } else if (tab === "summary" && !state.adminPriv) {
     body = adminKeyForm("Зведення по області формується з даних усіх підрозділів, а вони зашифровані. Введіть ключ адміністратора.");
   } else if (tab === "summary") {
@@ -1483,10 +1629,10 @@ async function pageAdmin(sub, q) {
     const box = b.closest("[data-uid]"); const uid = box.dataset.uid; const u = users.find((x) => x.uid === uid);
     let unitId = box.querySelector(".js-unitsel").value;
     const role = box.querySelector(".js-role").value;
-    if (role === "dispatcher") {
-      // диспетчер не належить підрозділу і не бачить його даних
+    if (role === "dispatcher" || role === "pogsup") {
+      // диспетчер / керівництво ПОГ не належать підрозділу і не бачать його даних
       await store.updateUser(uid, { status: "active", unit_id: "", role });
-      store.log("approve", `${u.full_name} → диспетчер`); return;
+      store.log("approve", `${u.full_name} → ${ROLE_UA[role]}`); return;
     }
     if (role === "pog") {
       // ПОГ: окремий кабінет (свій ключ, своє авто) у складі підрозділу; реквізити й комісія — копія з підрозділу
@@ -1496,7 +1642,7 @@ async function pageAdmin(sub, q) {
       const ps = await parentSettings(parent);
       const id = await store.createUnit(`ПОГ ${C.shortName(u.full_name)}`, { ...C.DEFAULT_SETTINGS, ...C.pickSeed(ps), compiler: C.shortName(u.full_name) },
         { kind: "pog", parent_id: parent.id, parent_name: parent.name });
-      await store.updateUser(uid, { status: "active", unit_id: id, role: "user" });
+      await store.updateUser(uid, { status: "active", unit_id: id, role: "user", pog: true });
       store.log("approve", `${u.full_name} → ПОГ (${parent.name})`, id); return;
     }
     if (unitId === "new") {
@@ -1519,7 +1665,7 @@ async function pageAdmin(sub, q) {
   $app.querySelectorAll(".js-usave").forEach((b) => b.addEventListener("click", () => {
     const tr = b.closest("[data-uid]"); const uid = tr.dataset.uid; const role = tr.querySelector(".js-role").value;
     if (uid === state.authUser.uid && role !== "admin") { flash("err", "Не можна зняти роль адміністратора із себе."); return render(); }
-    act(() => store.updateUser(uid, { unit_id: role === "dispatcher" ? "" : tr.querySelector(".js-unitsel").value, role }), "Користувача оновлено.");
+    act(() => store.updateUser(uid, { unit_id: role === "dispatcher" || role === "pogsup" ? "" : tr.querySelector(".js-unitsel").value, role }), "Користувача оновлено.");
   }));
   // пошук і фільтри користувачів (запам'ятовуються на час вкладки)
   const uq = $app.querySelector(".js-uq");
@@ -1571,6 +1717,10 @@ async function pageAdmin(sub, q) {
       store.log("unit_key_reset", unitName(id), id);
     }, `Новий ключ підрозділу «${unitName(id)}» встановлено. Передайте його підрозділу особисто.`);
   }));
+  $app.querySelector(".js-supreset")?.addEventListener("click", () => {
+    if (!confirm("Скинути ключ керівництва ПОГ? Керівництво створить новий; доступ до кабінетів ПОГ відновиться, коли ви відкриєте цю вкладку з ключем адміністратора.")) return;
+    act(async () => { await store.resetPogSupKeys(); store.log("pogsup_key_reset", ""); }, "Ключ керівництва ПОГ скинуто.");
+  });
   $app.querySelectorAll(".js-ptransfer").forEach((b) => b.addEventListener("click", () => {
     const tr = b.closest("[data-id]"); const id = tr.dataset.id; const pid = tr.querySelector(".js-pparent").value; const parent = regular.find((x) => x.id === pid);
     if (!parent || pid === pogs.find((x) => x.id === id)?.parent_id) return;
@@ -1671,6 +1821,7 @@ async function render() {
     const [p1, p2] = path.split("/");
     if (p1 === "password") return pagePassword();
     if (isDisp() || (isAdmin() && p1 === "disp")) return await pageDisp(q);
+    if (isPogSup()) return await pagePogSup(q);
     if (p1 === "report") return await pageReport(q);
     if (p1 === "fleet") return await pageFleet(q);
     if (p1 === "archive") return await pageArchive(q);
@@ -1698,7 +1849,7 @@ async function onAuthChanged(user) {
         setUserStats(await store.listUsers().catch(() => []));
         const ctx = sessionStorage.getItem("unitCtx");
         state.unitId = ctx && state.units.some((u) => u.id === ctx) ? ctx : state.me.unit_id;
-      } else if (state.me.role === "dispatcher") {
+      } else if (state.me.role === "dispatcher" || state.me.role === "pogsup") {
         state.unitId = null; state.units = [];
       } else {
         state.unitId = state.me.unit_id;
@@ -1709,15 +1860,15 @@ async function onAuthChanged(user) {
   }
   const pth = route().path;
   if (!user && !["login", "register", "forgot"].includes(pth)) { location.hash = "#/login"; return; }
-  if (user && ["login", "register", "forgot", ""].includes(pth)) { location.hash = state.me && state.me.role === "dispatcher" ? "#/disp" : "#/entry"; return; }
+  if (user && ["login", "register", "forgot", ""].includes(pth)) { location.hash = state.me && state.me.role === "dispatcher" ? "#/disp" : state.me && state.me.role === "pogsup" ? "#/pogsup" : "#/entry"; return; }
   render();
 }
 
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261112c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261112d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261112d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

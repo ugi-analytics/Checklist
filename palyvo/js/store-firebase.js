@@ -162,6 +162,21 @@ export function createStore(config) {
       await b.commit();
     },
     async resetDispKeys() { await deleteDoc(doc(db, "meta", "disp_priv")); await deleteDoc(doc(db, "meta", "disp_pub")); },
+    // керівництво ПОГ: спільний ключ ролі і перегляд кабінетів ПОГ
+    async getPogSupPub() { const s = await getDoc(doc(db, "meta", "pogsup_pub")); return s.exists() ? s.data() : null; },
+    async getPogSupPriv() { const s = await getDoc(doc(db, "meta", "pogsup_priv")); return s.exists() ? s.data() : null; },
+    async createPogSupKeys(keys) {
+      const b = writeBatch(db);
+      b.set(doc(db, "meta", "pogsup_pub"), { ...keys.pub, at: nowIso() });
+      b.set(doc(db, "meta", "pogsup_priv"), { ...keys.priv, at: nowIso() });
+      await b.commit();
+    },
+    async resetPogSupKeys() { await deleteDoc(doc(db, "meta", "pogsup_priv")); await deleteDoc(doc(db, "meta", "pogsup_pub")); },
+    async listPogUnits() { return (await getDocs(query(collection(db, "units"), where("kind", "==", "pog")))).docs.map((d) => ({ id: d.id, ...d.data() })); },
+    async listPogUsers() {
+      const [a, b] = await Promise.all([getDocs(query(collection(db, "users"), where("pog", "==", true))), getDocs(query(collection(db, "users"), where("pog_req", "==", true)))]);
+      const m = new Map(); [...a.docs, ...b.docs].forEach((d) => m.set(d.id, { uid: d.id, ...d.data() })); return [...m.values()];
+    },
     // ПОГ: відкритий ключ (для підрозділу) і зашифрована копія реквізитів підрозділу
     savePogKey: (pogId, data) => setDoc(doc(db, "pogkeys", pogId), { ...data, updated_at: nowIso() }),
     async listPogKeys(parentId) {
