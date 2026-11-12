@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261112d";
+import * as C from "./core.js?v=20261112e";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -115,7 +115,18 @@ export function previewHtml(rows, settings = {}, sources = rows.sources || []) {
     lay.cons.map((x) => th(C.sourceTitle(x))).join("") + (lay.blago ? th("благо") : "") + th("Всього") + th("л") + th("Вид") + "</tr>",
   "<tr class='num'>" + Array.from({ length: lay.total }, (_, i) => `<td>${i + 1}</td>`).join("") + "</tr>"];
   const u = esc(settings.unit || "");
-  rows.forEach((r, i) => {
+  const totRow = (label, rr) => {
+    const t = C.totals(rr);
+    const tc = [C.fmtC(t.startC), "", ...lay.iss.map((x) => C.fmtC(t.issued[x.id] || 0, true)), C.fmtC(t.issuedC),
+      ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
+    h.push(`<tr class='tot'><td colspan=5>${esc(label)}</td>` + tc.map((c) => `<td>${c}</td>`).join("") + "</tr>");
+  };
+  const groups = C.registerGroups(rows, settings);
+  groups.forEach((g) => { g.rows.forEach((r, i) => row(r, i)); if (g.title) totRow(`Всього (${g.title})`, g.rows); });
+  totRow(groups.length > 1 ? "Разом" : "Всього", rows);
+  h.push("</table>");
+  return h.join("");
+  function row(r, i) {
     const v = r.vehicle;
     const startVid = legacy ? esc(C.legacyStartVid(r)) : esc(C.balanceText(r, "start", settings));
     let endVid = legacy ? esc((v.fuel || "") + (v.supplier ? ` (${v.supplier})` : "")) : esc(C.balanceText(r, "end", settings));
@@ -125,10 +136,5 @@ export function previewHtml(rows, settings = {}, sources = rows.sources || []) {
       ...lay.cons.map((x) => C.fmtC(r.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), `<b>${C.fmtC(r.consC)}</b>`,
       C.fmtC(r.endC), endVid];
     h.push("<tr>" + cells.map((c) => `<td>${c}</td>`).join("") + "</tr>");
-  });
-  const t = C.totals(rows);
-  const tc = [C.fmtC(t.startC), "", ...lay.iss.map((x) => C.fmtC(t.issued[x.id] || 0, true)), C.fmtC(t.issuedC),
-    ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
-  h.push("<tr class='tot'><td colspan=5>Всього</td>" + tc.map((c) => `<td>${c}</td>`).join("") + "</tr></table>");
-  return h.join("");
+  }
 }

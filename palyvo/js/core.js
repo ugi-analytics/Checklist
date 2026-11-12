@@ -74,6 +74,22 @@ export function normFuel(f) {
   const m = s.match(/А(\d{2})/); if (m) return "А" + m[1];
   return s;
 }
+/** Групи реєстру за видом пального (налаштування «розділяти авто за видом пального»). */
+export function fuelGroupOf(fuel) {
+  const f = normFuel(fuel);
+  if (/^А\d{2}/.test(f) || /БЕНЗ/.test(f)) return { key: "1", title: "бензин" };
+  if (f === "ДП") return { key: "2", title: "дизельне паливо" };
+  if (f === "ГАЗ") return { key: "3", title: "газ" };
+  return { key: "4", title: f ? f.toLowerCase() : "інше" };
+}
+/** Рядки реєстру, розбиті на групи за пальним: [{title, rows}] (якщо налаштування вимкнене — одна група). */
+export function registerGroups(rows, settings = {}) {
+  if (!settings.reg_by_fuel) return [{ title: "", rows }];
+  const m = new Map();
+  for (const r of rows) { const g = fuelGroupOf(r.vehicle.fuel); if (!m.has(g.key)) m.set(g.key, { title: g.title, rows: [] }); m.get(g.key).rows.push(r); }
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => g);
+}
+
 /** Чи підходить джерело авто за видом пального (джерело без виду — для всіх). */
 export function sourceFits(src, v) {
   const a = normFuel(src.fuel), b = normFuel(v.fuel);
@@ -380,6 +396,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     // джерел не вистачило — списуємо з давніх талонів (їх кількість у описі зменшується)
     for (const k of r.keep) { if (left <= 0) break; const take = Math.min(left, k.left); k.left -= take; left -= take; r.keepConsC = (r.keepConsC || 0) + take; }
     if (left > 0 && anchor) r.consBy[anchor.id] += left;   // не має статися (витрата обмежена наявним)
+    // залишок на кінець, внесений вручну з кількостями («155 А-95 с/к Іваненко + 13 т Завора»): розподіл витрати відштовхується від нього —
+    // що не вказано в залишку, вважається списаним (першочергово — залишки на початок і дрібні видачі)
+    if (!sources.legacy && String(e.end_text || "").trim()) applyManualEnd(r, e, list, sources, vehicle, availBy, pickSrc);
   }
   if (!(sources.legacy && !e.split)) {
     for (const s of list) { r.endBy[s.id] = availBy(s.id) - r.consBy[s.id]; r.endC += r.endBy[s.id]; }
@@ -389,6 +408,51 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   for (const s of list) if (r.issued[s.id] > 0 && !sourceFits(s, vehicle))
     r.warnings.push(`Видано за «${sourceTitle(s)}» (${s.fuel}), а авто на ${vehicle.fuel || "?"} — перевірте джерело.`);
   return r;
+}
+
+/** Розбір опису залишку («202 А-95 с/к Мосійченко + 185 т А-95») на частини: {c, mvo, own, low, part}. МВО без прізвища — від наступної частини. */
+function parseBalanceParts(text, sources) {
+  const mvos = [...new Set(sources.map((x) => String(x.mvo || "").trim()).filter(Boolean))];
+  const parts = String(text || "").split("+").map((part) => {
+    const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/);
+    const low = part.toLowerCase();
+    return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mvo: mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "", own: false };
+  });
+  parts.forEach((p) => { p.own = !!p.mvo; });
+  for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mvo) nxt = parts[k].mvo; else parts[k].mvo = nxt; }
+  for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mvo) prv = parts[k].mvo; else parts[k].mvo = prv; }
+  return parts;
+}
+/** Витрата за джерелами — так, щоб залишок на кінець збігся з внесеним вручну описом. */
+function applyManualEnd(r, e, list, sources, vehicle, availBy, pickSrc) {
+  const parts = parseBalanceParts(e.end_text, sources).filter((p) => p.c !== null);
+  if (!parts.length) return;                                   // опис без кількостей — лише текст
+  const endT = {}; const keepT = []; const unknown = [];
+  for (const p of parts) {
+    const form = textForms(p.low);
+    if (form && form[0] === "талони" && r.keep.length && !(p.own && sources.some((x) => x.mvo === p.mvo && form.includes(x.form)))) { keepT.push(p.c); continue; }
+    const src = p.mvo ? pickSrc({ mvo: p.mvo, hint: p.low }) : (form ? list.find((x) => form.includes(x.form) && sourceFits(x, vehicle)) : null);
+    if (!src || !list.includes(src)) { unknown.push(p.part); continue; }
+    endT[src.id] = (endT[src.id] || 0) + p.c;
+  }
+  // залишок за описом не може бути більшим за наявне в джерелі
+  let consSum = 0;
+  for (const s of list) { const av = availBy(s.id); const end = Math.min(Math.max(endT[s.id] || 0, 0), Math.max(av, 0)); r.consBy[s.id] = av - end; consSum += r.consBy[s.id]; }
+  r.keepConsC = 0;
+  r.keep.forEach((k, i) => { const end = Math.min(keepT[i] ?? 0, k.c); k.left = end; r.keepConsC += k.c - end; consSum += k.c - end; });
+  const diff = r.consC - consSum;
+  if (unknown.length) r.warnings.push(`У описі залишку на кінець не розпізнано джерело: «${unknown.join("», «")}».`);
+  if (diff !== 0) {
+    r.warnings.push(`Залишок на кінець за описом не збігається з розрахунком на ${fmtC(Math.abs(diff))} л — різницю ${diff > 0 ? "списано з джерел, де лишався залишок" : "повернено до залишку"} автоматично. Перевірте опис.`);
+    let left = Math.abs(diff);
+    const order = [...list].sort((a, b) => (diff > 0 ? (availBy(b.id) - r.consBy[b.id]) - (availBy(a.id) - r.consBy[a.id]) : r.consBy[b.id] - r.consBy[a.id]));
+    for (const s of order) {
+      if (left <= 0) break;
+      const room = diff > 0 ? availBy(s.id) - r.consBy[s.id] : r.consBy[s.id];
+      const q = Math.min(left, Math.max(room, 0)); r.consBy[s.id] += diff > 0 ? q : -q; left -= q;
+    }
+  }
+  r.endFromText = true;
 }
 
 /** Розподіл left між джерелами arr пропорційно до ще не списаного наявного; повертає нерозподілений залишок. */

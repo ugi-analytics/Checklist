@@ -1,7 +1,7 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261112d";
-import { litresWords } from "./words.js?v=20261112d";
+import * as C from "./core.js?v=20261112e";
+import { litresWords } from "./words.js?v=20261112e";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -92,7 +92,18 @@ export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSo
   const tableRows = [hdr(r0, 1.3), hdr(r1, legacy ? 2.1 : 3.2), hdr(r2)];
   const boldIdx = new Set([lay.issTotalNo - 1, lay.consTotalNo - 1]);
 
-  rows.forEach((r, i) => {
+  const totRow = (label, rr) => {
+    const t = C.totals(rr);
+    const tv = [C.fmtC(t.startC), "", ...lay.iss.map((x) => C.fmtC(t.issued[x.id] || 0, true)), C.fmtC(t.issuedC),
+      ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
+    tableRows.push(new D.TableRow({ cantSplit: true, children: [c(label, { colSpan: 5, bold: true }), ...tv.map((x) => c(x, { bold: true }))] }));
+  };
+  const groups = C.registerGroups(rows, s);
+  groups.forEach((g) => { g.rows.forEach((r, i) => pushRow(r, i)); if (groups.length > 1 || g.title) totRow(`Всього${g.title ? " (" + g.title + ")" : ""}`, g.rows); });
+  if (groups.length > 1) totRow("Разом", rows);
+  else if (!groups[0].title) totRow("Всього", rows);
+
+  function pushRow(r, i) {
     const v = r.vehicle;
     let startVid, endVid;
     if (legacy) {
@@ -108,13 +119,7 @@ export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSo
       ...lay.cons.map((x) => C.fmtC(r.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(r.consC),
       C.fmtC(r.endC), endVid];
     tableRows.push(new D.TableRow({ cantSplit: true, children: vals.map((t, ci) => c(t, { bold: boldIdx.has(ci) })) }));
-  });
-
-  const t = C.totals(rows);
-  const tv = [C.fmtC(t.startC), "", ...lay.iss.map((x) => C.fmtC(t.issued[x.id] || 0, true)), C.fmtC(t.issuedC),
-    ...lay.cons.map((x) => C.fmtC(t.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(t.consC), C.fmtC(t.endC), ""];
-  const totCells = [c("Всього", { colSpan: 5, bold: true }), ...tv.map((x) => c(x, { bold: true }))];
-  tableRows.push(new D.TableRow({ cantSplit: true, children: totCells }));
+  }
 
   children.push(new D.Table({ rows: tableRows, columnWidths: widths, width: { size: usable, type: D.WidthType.DXA },
     layout: D.TableLayoutType.FIXED, alignment: D.AlignmentType.CENTER,
