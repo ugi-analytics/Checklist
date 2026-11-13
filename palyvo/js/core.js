@@ -608,9 +608,13 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
       out[v.id] = { odo_start: odo, start, iss: {} };
     } else {
       // загальний залишок + розбивка за МВО, якщо на кінець пальне було в кількох МВО
-      const bm = byMvo(r, "end"), mv = Object.keys(bm).filter((k) => bm[k] > 0);
-      // довільний опис залишку на кінець переходить у опис залишку на початок
-      const endText = String(pe.end_text || "").trim() || (mv.length > 1 || r.keep.some((k) => k.left > 0) ? balanceText(r, "end") : "");
+      // опис залишку на кінець (вид пального, форма — с/к, т, АЗС — і МВО) переходить у опис залишку на початок,
+      // щоб у новому місяці не загубилась форма (напр. «76 ДП т» не ставало «с/к»)
+      let endText = String(pe.end_text || "").trim();
+      if (!endText && r.endC > 0) {
+        const t = String(balanceText(r, "end") || "").trim();
+        if (t && t.toLowerCase() !== String(v.fuel || "").trim().toLowerCase()) endText = t;
+      }
       out[v.id] = { odo_start: odo, fuel_start: r.endC ? r.endC / 100 : null, start: {}, iss: {},
         ...(endText ? { start_text: endText } : {}) };
     }
