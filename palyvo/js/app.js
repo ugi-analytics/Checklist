@@ -1,13 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261113d";
-import * as U from "./ui.js?v=20261113d";
-import { litresWords } from "./words.js?v=20261113d";
-import { buildRegister, buildAct } from "./docs.js?v=20261113d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113d";
-import * as X from "./crypto.js?v=20261113d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261113d";
-import { buildXlsx } from "./xlsx.js?v=20261113d";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113d";
+import * as C from "./core.js?v=20261113f";
+import * as U from "./ui.js?v=20261113f";
+import { litresWords } from "./words.js?v=20261113f";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261113f";
+import * as ST from "./stock.js?v=20261113f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113f";
+import * as X from "./crypto.js?v=20261113f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261113f";
+import { buildXlsx } from "./xlsx.js?v=20261113f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -100,7 +101,7 @@ function shell(content, { nav = true } = {}) {
     ${nav && isDisp() ? `<nav class="tiles">${tab("disp", "🧮", "Диспетчер · перевірка розрахунку")}</nav>` : ""}
     ${nav && isPogSup() ? `<nav class="tiles">${tab("pogsup", "👮", "ПОГ області")}</nav>` : ""}
     ${nav && me && me.status === "active" && !isDisp() && !isPogSup() ? `<nav class="tiles">
-      ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
+      ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("stock", "📦", "Одержане пальне <small style=\"opacity:.75;font-weight:600\">(бета версія)</small>")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
       ${isAdmin() ? tab("disp", "🧮", "Режим диспетчера") + tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
   </div></header>
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
@@ -547,6 +548,8 @@ async function readMonth(unit, ym) {
   return m.enc ? { ...m, ...(await X.decJson(unit.dk, m.enc, X.aadMonth(unit.id, ym))) } : m;
 }
 async function writeMonth(unit, ym, data, extra = {}) {
+  // накладні «Додатка 2» живуть у тому ж записі місяця — збереження карток авто їх не затирає
+  if (!("stock" in data)) { const cur = await readMonth(unit, ym).catch(() => null); if (cur && cur.stock) data = { ...data, stock: cur.stock }; }
   await store.saveMonth(unit.id, ym, await X.encJson(unit.dk, data, X.aadMonth(unit.id, ym)), extra);
 }
 async function listMonthsDec(unit) {
@@ -614,12 +617,34 @@ function viewOf(unit, st) {
   return { st, rows, S: unit.settings, acts: C.actList(rows, unit.settings), closed: null };
 }
 async function monthView(unit, ym) { return viewOf(unit, await monthState(unit, ym)); }
+// ------------------------------------------------------------ «Додаток 2»: накладні МВО
+async function carriedStock(unit, ym) {
+  const pym = C.prevYm(ym); const prev = await readMonth(unit, pym); if (!prev) return null;
+  if (prev.closed && prev.frozen && prev.frozen.stock) return ST.carryStock(prev.frozen.stock);
+  if (!prev.stock) return null;
+  const pv = await monthView(unit, pym);
+  return ST.carryStock(ST.calcStock(prev.stock, pv.rows, pv.rows.sources, pv.S, pym));
+}
+/** Звіт «Додаток 2» місяця: {res, stock, carried, frozen}. Закритий місяць — зі знімка. */
+async function stockOf(unit, ym, v) {
+  const fz = v.closed && v.closed.frozen && v.closed.frozen.stock;
+  if (fz) return { res: fz, stock: null, carried: false, frozen: true };
+  let stock = v.st.saved && v.st.saved.stock, carried = false;
+  if (!stock) { stock = await carriedStock(unit, ym); carried = !!(stock && stock.lines.length); }
+  stock = stock || { lines: [] };
+  const res = ST.calcStock(stock, v.rows, v.rows.sources, v.S, ym);
+  res.issTotalNo = C.registerLayout(v.rows, v.rows.sources, v.S).issTotalNo;
+  return { res, stock, carried, frozen: false };
+}
+const stockFile = (ym) => `Додаток_2_Звіт_про_одержане_і_видане_пальне_${ym}.docx`;
 const closedNote = (m) => `🔒 Місяць закрито ${esc(m.closed_at || "")}${m.closed_name ? " · " + esc(m.closed_name) : ""} — дані й документи не змінюються`;
 // закрити місяць: знімок джерел, реквізитів, авто і готових результатів
 async function closeMonth(unit, ym) {
   const v = await monthView(unit, ym);
   const st = v.st;
   const frozen = C.freezeMonth(v.rows, unit.settings, st.sources);
+  const so = await stockOf(unit, ym, v);
+  if (so.res.lines.length) frozen.stock = JSON.parse(JSON.stringify(so.res));
   const snapshot = Object.fromEntries(st.vehicles.map((x) => [x.id, x]));
   // відкрито в базі лише позначку «закрито» (для правил доступу); хто й коли закрив — у зашифрованих даних
   await writeMonth(unit, ym, { entries: st.entries, snapshot, sources: st.sources.map((x) => ({ ...x })), frozen,
@@ -1160,6 +1185,159 @@ async function pagePogSup(q) {
   }
 }
 
+// ============================================================ одержане пальне («Додаток № 2»)
+async function pageStock(q) {
+  const unit = await loadUnit();
+  if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
+  if (!unit.vehicles.length) return go("#/fleet?new=1");
+  const ym = currentYm(q);
+  const v = await monthView(unit, ym);
+  const so = await stockOf(unit, ym, v);
+  const ro = so.frozen;                                   // закритий місяць — лише перегляд
+  const stock = { lines: (so.stock ? so.stock.lines : []).map(ST.normalizeLine) };
+  const SRCS = v.rows.sources;
+  const GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня", "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"];
+  const [py, pm] = C.parseYm(C.prevYm(ym)); const prevTitle = `${GEN[pm - 1]} ${py}`;
+  const hasPrev = !ro && !!(await store.getMonth(unit.id, C.prevYm(ym)));
+  let res = so.res, showAll = false, timer = null;
+  const recalc = () => { res = ST.calcStock(stock, v.rows, SRCS, v.S, ym); res.issTotalNo = so.res.issTotalNo; };
+  const issued = ST.issuedFromRows(v.rows, v.S);
+  const keyOf = (l) => ST.stockKey(l.src, l.fuel);
+  const fuelsOfVehicles = [...new Set(v.rows.map((r) => r.vehicle.fuel).filter(Boolean))];
+  // блоки: джерело + вид пального (з рухом, з накладними або всі — «показати всі джерела»)
+  const blocks = () => {
+    const m = new Map();
+    const add = (src, fuel) => { const k = ST.stockKey(src.id, fuel); if (!m.has(k)) m.set(k, { k, src, fuel }); };
+    for (const l of (ro ? res.lines : stock.lines)) {
+      add(SRCS.find((x) => x.id === l.src) || { id: l.src, fuel: l.fuel, form: l.form, supplier: l.supplier, mvo: l.mvo }, l.fuel);
+    }
+    for (const it of issued.values()) add(it.src, it.fuel);
+    if (showAll && !ro) for (const s of SRCS.filter((x) => x.active !== false)) {
+      for (const f of (s.fuel ? [s.fuel] : fuelsOfVehicles)) add(s, f);
+    }
+    const ord = new Map(SRCS.map((s, i) => [s.id, i]));
+    return [...m.values()].sort((a, b) => ((ord.get(a.src.id) ?? 99) - (ord.get(b.src.id) ?? 99)) || ST.fuelName(a.fuel).localeCompare(ST.fuelName(b.fuel)));
+  };
+  const blockTitle = (b) => {
+    const f = C.sourceFor(b.src, { fuel: b.fuel }, v.S);
+    return `${esc([ST.fuelName(b.fuel), ST.formWord(f.form), f.supplier].filter(Boolean).join(" "))}${f.mvo ? ` <span class="muted">· МВО ${esc(f.mvo)}</span>` : ""}`;
+  };
+  const z = (c) => C.fmtC(c);
+  const head = (b) => {
+    const iss = (issued.get(b.k) || { c: 0 }).c;
+    const miss = res.lines.filter((l) => l.missing && keyOf(l) === b.k).reduce((a, l) => a + l.issC, 0);
+    const ls = res.lines.filter((l) => keyOf(l) === b.k && !l.missing);
+    const end = ls.reduce((a, l) => a + l.endC, 0);
+    return `<span>видано за реєстром: <b>${z(iss)} л</b></span> · <span>залишок на кінець: <b>${z(end)} л</b></span>
+      ${miss ? `<span class="pill err">не покрито накладними ${z(miss)} л</span>` : iss ? `<span class="pill ok">✓ покрито</span>` : ""}`;
+  };
+  const lineRow = (l) => {
+    const r = res.lines.find((x) => x.id === l.id) || { issC: 0, endC: 0 };
+    if (ro) return `<tr><td>${esc(l.doc)}${l.carried ? ` <span class="pill mut">з ${prevTitle}</span>` : ""}</td><td class="num">${z(l.startC)}</td><td class="num">${z(l.recvC)}</td>
+      <td class="num">${z(l.issC)}</td><td class="num"><b>${z(l.endC)}</b></td><td>${l.reserve ? `в наливі / резерв${l.note ? ": " + esc(l.note) : ""}` : ""}</td>${res.mvoCol ? "" : `<td>${esc(l.nominal)}</td>`}<td></td></tr>`;
+    return `<tr data-id="${l.id}"><td><input data-f="doc" value="${esc(l.doc)}" placeholder="в.н. № від дд.мм.рррр, або від кого" style="min-width:230px">
+        ${l.carried ? `<div class="muted" style="font-size:.75rem">↪️ залишок з ${prevTitle}</div>` : ""}</td>
+      <td><input data-f="start" type="number" min="0" step="0.01" value="${l.start || ""}" ${l.carried ? `readonly title="Перенесено з ${prevTitle} — змінюється в тому місяці"` : `placeholder="0"`} style="width:90px"></td>
+      <td><input data-f="recv" type="number" min="0" step="0.01" value="${l.recv || ""}" placeholder="0" style="width:90px"></td>
+      <td class="num js-iss">${z(r.issC)}</td><td class="num"><b class="js-end">${z(r.endC)}</b></td>
+      <td><label style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" data-f="reserve" ${l.reserve ? "checked" : ""}> в наливі / резерв</label>
+        <input data-f="note" value="${esc(l.note)}" placeholder="примітка у графу 14" style="width:150px;${l.reserve ? "" : "display:none"}"></td>
+      ${res.mvoCol ? "" : `<td><input data-f="nominal" value="${esc(l.nominal)}" placeholder="—" style="width:60px"></td>`}
+      <td><button class="btn sm danger js-dl" title="Прибрати накладну">🗑</button></td></tr>`;
+  };
+  const blockHtml = (b) => {
+    const ls = (ro ? res.lines.filter((l) => !l.missing) : stock.lines).filter((l) => keyOf(l) === b.k);
+    return `<div class="panel stk" data-k="${esc(b.k)}"><div class="row" style="justify-content:space-between;align-items:baseline">
+        <h3 style="margin:0">${blockTitle(b)}</h3><div class="js-bh">${head(b)}</div></div>
+      ${ls.length ? `<div class="tblwrap"><table class="list"><thead><tr><th>Накладна (№, дата) або від кого</th><th class="num">На початок, л</th><th class="num">Одержано, л</th>
+        <th class="num">Видано, л</th><th class="num">На кінець, л</th><th>Залишок</th>${res.mvoCol ? "" : "<th>Номінал</th>"}<th></th></tr></thead>
+        <tbody>${ls.map(lineRow).join("")}</tbody></table></div>` : `<p class="muted" style="margin:8px 0">Накладних ще немає.</p>`}
+      ${ro ? "" : `<button class="btn sm js-add" data-k="${esc(b.k)}">➕ Накладна</button>`}</div>`;
+  };
+  const kpiHtml = () => res.groups.map((g) => `<div class="panel" style="flex:1;min-width:250px;margin:0"><h3 style="margin:0 0 6px">${esc(g.title)}</h3>
+      <div class="muted">на початок <b>${z(g.tot.sT + g.tot.sL)}</b> · одержано <b>${z(g.tot.rT + g.tot.rL)}</b> · видано <b>${z(g.tot.iT + g.tot.iL)}</b> · на кінець <b>${z(g.tot.eT + g.tot.eL)}</b> л</div></div>`).join("")
+    || `<p class="muted">Ще немає ні накладних, ні виданого за реєстром.</p>`;
+  const msgsHtml = () => [...res.errors.map((t) => `<div class="flash err" style="margin:6px 0">${esc(t)}</div>`), ...res.warnings.map((t) => `<div class="flash warn" style="margin:6px 0">${esc(t)}</div>`)].join("");
+  const intro = ro ? `<div class="flash ok" style="margin:0">${closedNote(v.closed)}</div>`
+    : so.carried ? `<div class="flash info" style="margin:0">↪️ Накладні з залишком перенесено з ${prevTitle}. Додайте накладні, одержані цього місяця.</div>`
+      : !stock.lines.length ? `<div class="flash info" style="margin:0">📝 Перший місяць: один раз внесіть накладні, з яких ще є залишок (резерви, «в наливі»), — далі вони переноситимуться самі. Потім додайте накладні, одержані цього місяця.</div>`
+        : `<div class="flash ok" style="margin:0">💾 Зміни зберігаються автоматично.</div>`;
+  shell(`<div class="row" style="justify-content:space-between;margin-top:14px">${monthPicker(ym, "#/stock")}<div style="flex:1;min-width:280px">${intro}</div></div>
+    <div class="panel"><h2>📦 Одержане і видане пальне за ${C.monthTitle(ym)}</h2>
+      <p class="muted">Вносьте лише накладні: № і дату (або від кого отримано) та скільки одержано. «Видано» береться з «Введення даних» і розписується на накладні того ж джерела —
+        спершу робочі (від старішої), потім позначені «в наливі / резерв». Залишки переходять на наступний місяць разом із номерами накладних.</p>
+      <div class="row js-kpi" style="gap:10px;align-items:stretch">${kpiHtml()}</div><div class="js-msgs">${msgsHtml()}</div>
+      ${!ro ? `<div class="row" style="margin-top:10px">${hasPrev ? `<button class="btn sm js-prevst">↪️ Підтягнути залишки з ${prevTitle}</button>` : ""}
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="js-all"> показати всі джерела</label></div>` : ""}</div>
+    <div class="js-blocks"></div>
+    <div class="stickybar"><button class="btn primary js-doc2">📥 Звіт «Додаток № 2» (Word)</button>
+      <a class="btn sky" href="#/report?ym=${ym}">🧾 Реєстр і акти</a><span class="muted js-savestate"></span></div>`);
+  bindMonthPicker();
+  const $b = $app.querySelector(".js-blocks");
+  const refresh = () => {
+    recalc();
+    $b.querySelectorAll("tr[data-id]").forEach((tr) => { const r = res.lines.find((x) => x.id === tr.dataset.id); if (!r) return;
+      tr.querySelector(".js-iss").textContent = z(r.issC); tr.querySelector(".js-end").textContent = z(r.endC); });
+    $b.querySelectorAll(".stk").forEach((el) => { const b = blocks().find((x) => x.k === el.dataset.k); if (b) el.querySelector(".js-bh").innerHTML = head(b); });
+    $app.querySelector(".js-kpi").innerHTML = kpiHtml(); $app.querySelector(".js-msgs").innerHTML = msgsHtml();
+  };
+  const save = async () => {
+    timer = null; const ss = $app.querySelector(".js-savestate");
+    try {
+      const cur = await readMonth(unit, ym);
+      if (cur && cur.closed) { if (ss) ss.textContent = "🔒 Місяць закрито — зміни не збережено"; return; }
+      const base = cur ? { entries: cur.entries || {}, snapshot: cur.snapshot || {}, sources: cur.sources || [] }
+        : { entries: v.st.entries, snapshot: Object.fromEntries(v.st.vehicles.map((x) => [x.id, x])), sources: v.st.sources.map((x) => ({ ...x })) };
+      await writeMonth(unit, ym, { ...base, stock: { lines: stock.lines.map(ST.normalizeLine) } });
+      if (ss) ss.textContent = "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
+    } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
+  };
+  const schedule = (ms = 700) => { clearTimeout(timer); timer = setTimeout(save, ms); };
+  state.flushEntry = () => { if (timer) { clearTimeout(timer); timer = null; return save(); } };
+  const paint = () => {
+    recalc();
+    const bs = blocks();
+    $b.innerHTML = bs.length ? bs.map(blockHtml).join("") : `<div class="panel muted">Джерел із рухом немає. Увімкніть «показати всі джерела», щоб додати накладну.</div>`;
+    if (ro) return;
+    $b.querySelectorAll("tr[data-id]").forEach((tr) => {
+      const l = stock.lines.find((x) => x.id === tr.dataset.id);
+      tr.querySelectorAll("[data-f]").forEach((i) => {
+        const on = () => {
+          const f = i.dataset.f;
+          l[f] = i.type === "checkbox" ? i.checked : f === "start" || f === "recv" ? (Number(String(i.value).replace(",", ".")) || 0) : i.value;
+          if (f === "reserve") tr.querySelector("[data-f=note]").style.display = i.checked ? "" : "none";
+          if (f === "reserve" && i.checked && !l.note) { l.note = "в наливі"; tr.querySelector("[data-f=note]").value = l.note; }
+          refresh(); schedule();
+        };
+        i.addEventListener("input", on); i.addEventListener("change", on);
+      });
+      tr.querySelector(".js-dl").addEventListener("click", () => {
+        if (!confirm(l.carried ? "Прибрати накладну з залишком, перенесену з минулого місяця?" : "Прибрати накладну?")) return;
+        stock.lines.splice(stock.lines.indexOf(l), 1); paint(); schedule(200);
+      });
+    });
+    $b.querySelectorAll(".js-add").forEach((btn) => btn.addEventListener("click", () => {
+      const b = blocks().find((x) => x.k === btn.dataset.k);
+      const l = ST.lineFromSource(b.src, b.fuel, { fuel: C.sourceFor(b.src, { fuel: b.fuel }, v.S).fuel });
+      stock.lines.push(l); paint();
+      $b.querySelector(`tr[data-id="${l.id}"] [data-f=doc]`)?.focus();
+    }));
+  };
+  paint();
+  if (so.carried) schedule(300);                      // перенесене одразу зберігаємо в новому місяці
+  $app.querySelector(".js-all")?.addEventListener("change", (e) => { showAll = e.target.checked; paint(); });
+  $app.querySelector(".js-prevst")?.addEventListener("click", async () => {
+    if (!confirm(`Замінити перенесені залишки за накладними на актуальні з кінця ${prevTitle}? Накладні, внесені в цьому місяці, лишаться.`)) return;
+    const c = await carriedStock(unit, ym);
+    if (!c) return alert(`За ${C.monthTitle(C.prevYm(ym))} накладних не внесено.`);
+    stock.lines = [...c.lines, ...stock.lines.filter((l) => !l.carried)]; paint(); schedule(100);
+  });
+  $app.querySelector(".js-doc2").addEventListener("click", async () => {
+    clearTimeout(timer); if (!ro) await save();
+    await download(buildStock(window.docx, v.S, ym, res, res.issTotalNo), stockFile(ym)); store.log("doc_stock", ym, unit.id);
+  });
+}
+
 // ============================================================ звіт і акти
 async function pageReport(q) {
   const unit = await loadUnit();
@@ -1178,6 +1356,14 @@ async function pageReport(q) {
         : `<p class="muted">Немає пального до списання.</p>`}</div>`;
   }).join("");
   const multi = actList.some((a) => a.perMvo);
+  const so = await stockOf(unit, ym, view);
+  const sr = so.res, z = (c) => C.fmtC(c);
+  const stockPanel = `<div class="panel"><h2>📦 Звіт про одержане і видане пальне («Додаток № 2»)</h2>
+    ${sr.lines.length ? `<div class="row" style="gap:10px;align-items:stretch">${sr.groups.map((g) => `<div class="act" style="flex:1;min-width:240px"><h3>${esc(g.title)}</h3>
+        <p class="muted" style="margin:0">на початок <b>${z(g.tot.sT + g.tot.sL)}</b> · одержано <b>${z(g.tot.rT + g.tot.rL)}</b> · видано <b>${z(g.tot.iT + g.tot.iL)}</b> · на кінець <b>${z(g.tot.eT + g.tot.eL)}</b> л</p></div>`).join("")}</div>
+      ${sr.errors.map((t) => `<div class="flash err" style="margin:6px 0">${esc(t)}</div>`).join("")}
+      <div class="row" style="margin-top:10px"><button class="btn primary js-doc2">📥 Завантажити «Додаток № 2» (Word)</button><a class="btn" href="#/stock?ym=${ym}">📦 Накладні</a></div>`
+      : `<p class="muted">Накладні за ${C.monthTitle(ym)} ще не внесено.</p><a class="btn sky" href="#/stock?ym=${ym}">📦 Внести накладні</a>`}</div>`;
   shell(`<div style="margin-top:14px">${monthPicker(ym, "#/report")}</div>
     <div class="panel"><h2>${esc(S.title)} за ${C.monthTitle(ym)}</h2>
       ${closed ? `<div class="flash ok">${closedNote(closed)}${isAdmin() ? ` <button class="btn sm js-reopen" style="margin-left:8px">🔓 Відкрити для змін</button>` : " · змінити може лише адміністратор"}</div>`
@@ -1193,10 +1379,12 @@ async function pageReport(q) {
       <p class="muted">Окремі акти: «Талони + см/к» (талони, смарт-картки) та «АЗС» (АЗС ГУНП талони, АЗС налив)${multi ? " — і окремо на кожну МВО (підписує вся комісія та ця МВО)" : ""}.
         ${rows.sources.legacy ? "Витрата авто розноситься між ними пропорційно до виданого за місяць; якщо нічого не видано — за основним джерелом списання."
           : "Кількість у акті — це витрачене з відповідних джерел (графи «Витрачено»)."}
-        Номер, дати, ціна й сума лишаються порожніми.</p><div class="acts">${acts}</div></div>`);
+        Номер, дати, ціна й сума лишаються порожніми.</p><div class="acts">${acts}</div></div>${stockPanel}`);
   bindMonthPicker();
   $app.querySelector(".js-close")?.addEventListener("click", async () => {
-    if (!confirm(`Закрити ${C.monthTitle(ym)}? Дані й документи місяця зафіксуються; змінити їх зможе лише адміністратор.`)) return;
+    const sw = !sr.lines.length ? "\n\nУвага: накладні («Додаток № 2») за цей місяць не внесено."
+      : sr.errors.length ? `\n\nУвага: у «Додатку № 2» є розбіжності (${sr.errors.length}) — видане не покрите накладними.` : "";
+    if (!confirm(`Закрити ${C.monthTitle(ym)}? Дані й документи місяця зафіксуються; змінити їх зможе лише адміністратор.${sw}`)) return;
     busy(true); try { await closeMonth(unit, ym); flash("ok", "Місяць закрито."); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
     render();
   });
@@ -1207,6 +1395,9 @@ async function pageReport(q) {
   });
   $app.querySelector(".js-reg")?.addEventListener("click", async () => {
     await download(buildRegister(window.docx, S, ym, rows, rows.sources), `Додаток_6_Реєстр_пального_${ym}.docx`); store.log("doc_register", ym, unit.id);
+  });
+  $app.querySelector(".js-doc2")?.addEventListener("click", async () => {
+    await download(buildStock(window.docx, S, ym, sr, sr.issTotalNo), stockFile(ym)); store.log("doc_stock", ym, unit.id);
   });
   $app.querySelectorAll(".js-act").forEach((b) => b.addEventListener("click", async () => {
     const a = actList[Number(b.dataset.i)];
@@ -1225,18 +1416,25 @@ async function pageArchive() {
     const sources = C.monthSources(unit.settings, m.sources);
     const vehicles = C.monthVehicles(unit.vehicles, { entries: m.entries || {}, snapshot: m.snapshot || {} }, sources);
     const v = viewOf(unit, { saved: m, entries: m.entries || {}, vehicles, sources });
-    return { ym: m.ym, rows: v.rows, S: v.S, t: C.totals(v.rows), acts: v.acts.filter((a) => a.lines.length), closed: v.closed };
+    const fz = v.closed && v.closed.frozen && v.closed.frozen.stock;
+    let stk = fz || null;
+    if (!stk && m.stock && m.stock.lines && m.stock.lines.length) {
+      stk = ST.calcStock(m.stock, v.rows, v.rows.sources, v.S, m.ym); stk.issTotalNo = C.registerLayout(v.rows, v.rows.sources, v.S).issTotalNo;
+    }
+    return { ym: m.ym, rows: v.rows, S: v.S, t: C.totals(v.rows), acts: v.acts.filter((a) => a.lines.length), closed: v.closed, stk };
   });
   shell(`<div class="panel"><h2>🗂️ Архів місяців</h2>${recs.length ? `<table class="list"><thead><tr><th>Місяць</th><th class="num">Авто</th>
     <th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Документи</th></tr></thead><tbody>
     ${recs.map((r) => `<tr><td><a href="#/entry?ym=${r.ym}">${C.monthTitle(r.ym)}</a>${r.closed ? ` <span class="pill ok" title="${esc(r.closed.closed_at || "")}">🔒 закрито</span>` : ""}</td><td class="num">${r.rows.length}</td><td class="num">${C.fmtKm(r.t.km)}</td>
       <td class="num">${C.fmtC(r.t.issuedC)}</td><td class="num">${C.fmtC(r.t.consC)}</td><td class="num">${C.fmtC(r.t.endC)}</td>
       <td><button class="btn sm js-doc" data-ym="${r.ym}" data-k="reg">Реєстр</button>
-        ${r.acts.map((a, i) => `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="${i}">Акт «${esc(a.title)}»</button>`).join(" ")}</td></tr>`).join("")}
+        ${r.acts.map((a, i) => `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="${i}">Акт «${esc(a.title)}»</button>`).join(" ")}
+        ${r.stk ? `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="stk">Додаток 2</button>` : ""}</td></tr>`).join("")}
     </tbody></table>` : `<p class="muted">Збережених місяців ще немає.</p>`}</div>`);
   $app.querySelectorAll(".js-doc").forEach((b) => b.addEventListener("click", async () => {
     const r = recs.find((x) => x.ym === b.dataset.ym); const k = b.dataset.k;
     if (k === "reg") await download(buildRegister(window.docx, r.S, r.ym, r.rows, r.rows.sources), `Додаток_6_Реєстр_пального_${r.ym}.docx`);
+    else if (k === "stk") await download(buildStock(window.docx, r.S, r.ym, r.stk, r.stk.issTotalNo), stockFile(r.ym));
     else { const a = r.acts[Number(k)]; await download(buildAct(window.docx, r.S, r.ym, a), actFileName(a, r.ym)); }
   }));
 }
@@ -1292,7 +1490,12 @@ async function pageFleet() {
     <div class="panel"><h2>📄 Реквізити бланків</h2><div class="form-grid">
       ${f("org", "Установа (шапка ліворуч)")}${f("dept", "Підрозділ (другий рядок шапки)")}${f("unit", "Графа 2 «Підрозділ» у реєстрі")}
       ${f("title", "Назва реєстру (без «за … року»)", "w2")}${f("appendix", "Номер додатка")}${f("compiler", "Особа, яка склала реєстр (ПІБ для підпису)")}
-      ${f("compiler2", "Ще підписує реєстр — МВО 2 (за потреби)")}${f("compiler3", "Ще підписує реєстр — МВО 3 (за потреби)")}</div></div>
+      ${f("compiler2", "Ще підписує реєстр — МВО 2 (за потреби)")}${f("compiler3", "Ще підписує реєстр — МВО 3 (за потреби)")}</div>
+      <h3 style="margin-top:14px">📦 Звіт про одержане і видане пальне («Додаток № 2»)</h3><div class="form-grid">
+      ${f("stock_compiler", "«Звіт склав» — ПІБ (якщо порожньо — хто склав реєстр)")}${f("stock_check", "«Звірку з дорожніми листами провів» — посада, звання, ПІБ", "w2")}
+      <label class="f">Графа 5 «Номенклатурний номер»<select data-k="stock_mvo_col">
+        ${[["auto", "автоматично (кілька МВО — МВО, одна — вид)"], ["1", "МВО (графа 6 — вид)"], ["0", "вид: талони / с/к / налив (графа 6 — номінал)"]]
+          .map(([v, t]) => `<option value="${v}" ${String(s.stock_mvo_col ?? "auto") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label></div></div>
     <div class="panel"><h2>🧾 Акт списання (типова форма № З-2)</h2><div class="form-grid">
       ${f("edrpou", "Код за ЄДРПОУ")}${f("act_approver_title", "«Затверджую» — посада")}${f("act_approver", "«Затверджую» — ПІБ")}
       ${f("act_owner", "За ким закріплені ТЗ (у тексті акта)")}${f("act_order", "Ким призначена комісія (наказ)", "w2")}
@@ -1830,6 +2033,7 @@ async function render() {
     if (isDisp() || (isAdmin() && p1 === "disp")) return await pageDisp(q);
     if (isPogSup()) return await pagePogSup(q);
     if (p1 === "report") return await pageReport(q);
+    if (p1 === "stock") return await pageStock(q);
     if (p1 === "fleet") return await pageFleet(q);
     if (p1 === "archive") return await pageArchive(q);
     if (p1 === "admin") return await pageAdmin(p2, q);
@@ -1874,8 +2078,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261113d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261113f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -1,7 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261113d";
-import { litresWords } from "./words.js?v=20261113d";
+import * as C from "./core.js?v=20261113f";
+import { litresWords } from "./words.js?v=20261113f";
+import * as S from "./stock.js?v=20261113f";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -230,4 +231,67 @@ export function buildAct(D, s, ym, act, now = new Date()) {
   ];
   return baseDoc(D, { page: { size: { width: cm(21.0), height: cm(29.7) },
     margin: { top: cm(1), bottom: cm(1), left: cm(2), right: cm(1.5) } } }, children, 12);
+}
+
+// ================================================================= «Додаток № 2» — звіт про одержане і видане пальне
+/** res — S.calcStock(...); issTotalNo — номер графи «Всього видано» реєстру цього місяця. */
+export function buildStock(D, s, ym, res, issTotalNo = 9) {
+  const usable = cm(29.7 - 2.6);
+  const W = [420, 760, 2300, 2500, 1250, 820, 820, 820, 820, 820, 820, 820, 820, 1100];
+  const k = usable / W.reduce((a, b) => a + b, 0);
+  const widths = W.map((w) => Math.floor(w * k));
+  const fs = 9, children = [];
+  const half = Math.round(usable * 0.52);
+  const uline = (t) => new D.Paragraph({ children: [run(D, t, { size: 13, bold: true })], alignment: D.AlignmentType.CENTER,
+    border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: "000000", space: 1 } }, indent: { right: usable - half } });
+  const capt = (t) => para(D, [run(D, t, { size: 10 })], { align: "left", indentLeft: Math.round(half * 0.22) });
+  children.push(new D.Paragraph({ children: [run(D, s.org || "ГУНП в Полтавській області", { size: 13, bold: true }), new D.TextRun({ children: [new D.Tab()] }),
+    run(D, "Додаток № 2", { size: 12, bold: true, italics: true })], tabStops: [{ type: D.TabStopType.RIGHT, position: usable }],
+  border: {}, alignment: D.AlignmentType.LEFT }));
+  children.push(capt("(найменування підприємства)"));
+  children.push(uline(s.dept || s.unit || ""));
+  children.push(capt("(найменування структурного підрозділу)"));
+  children.push(para(D, [run(D, "ЗВІТ", { size: 14, bold: true })], { before: 6 }));
+  children.push(para(D, [run(D, "про одержане і видане пальне", { size: 13, bold: true })]));
+  children.push(para(D, [run(D, `за ${C.monthTitle(ym).replace(" року", " р.")}`, { size: 13, bold: true })], { after: 4 }));
+
+  const c = (t, o = {}) => cell(D, t, { size: fs, ...o });
+  const hdr = (cells, height) => new D.TableRow({ children: cells, tableHeader: true, cantSplit: true,
+    ...(height ? { height: { value: cm(height), rule: D.HeightRule.ATLEAST } } : {}) });
+  const r0 = [c("№\nз/п", { rowSpan: 3 }), c("Найменування підрозділу", { rowSpan: 3, vertical: true }), c("Найменування ПММ", { rowSpan: 3 }),
+    c("Вид. накладна\n(№, дата)", { rowSpan: 3 }), c("Номенклатурний номер", { rowSpan: 3, vertical: true }), c("Номінал талонів, л", { rowSpan: 3, vertical: true }),
+    c("Залишок на початок місяця", { colSpan: 2, bold: true }), c("Одержано за місяць", { colSpan: 2, bold: true }),
+    c("Видано за місяць", { colSpan: 2, bold: true }), c("Залишок на кінець місяця", { colSpan: 2, bold: true })];
+  const r1 = Array.from({ length: 4 }, () => c("кількість", { colSpan: 2 }));
+  const r2 = Array.from({ length: 4 }, () => [c("талони (с/к), л"), c("літри / (кг)")]).flat();
+  const r3 = Array.from({ length: 14 }, (_, i) => c(String(i + 1)));
+  const rows = [hdr(r0, 0.9), hdr(r1), hdr(r2, 0.8), hdr(r3)];
+  const z = (x) => C.fmtC(x);
+  const totRow = (label, t, bold = true) => rows.push(new D.TableRow({ cantSplit: true, children: [c(label, { colSpan: 6, bold }),
+    ...[t.sT, t.sL, t.rT, t.rL, t.iT, t.iL, t.eT, t.eL].map((x) => c(z(x), { bold }))] }));
+  const many = res.groups.length > 1;
+  for (const g of res.groups) {
+    let n = 0;
+    for (const l of g.lines) {
+      const { inv, ved } = S.rowCells(l, s, res.mvoCol, s.unit || "");
+      rows.push(new D.TableRow({ cantSplit: true, children: [String(++n), ...inv].map((t, i) => c(t, { align: i === 0 ? "right" : "center" })) }));
+      rows.push(new D.TableRow({ cantSplit: true, children: [String(++n), ...ved].map((t, i) => c(t, { align: i === 0 ? "right" : "center" })) }));
+    }
+    totRow(many ? `Всього (${g.title})` : "Всього", g.tot);
+  }
+  if (many) totRow("РАЗОМ", res.tot);
+  children.push(new D.Table({ rows, columnWidths: widths, width: { size: usable, type: D.WidthType.DXA }, layout: D.TableLayoutType.FIXED,
+    alignment: D.AlignmentType.CENTER, margins: { top: 20, bottom: 20, left: 40, right: 40 } }));
+
+  const check = String(s.stock_check || "").trim(), comp = String(s.stock_compiler || s.compiler || "").trim();
+  children.push(para(D, [run(D, `Звірку з дорожніми листами підпорядкованого транспорту провів  ______________________  ${check}`, { size: 12 })],
+    { align: "left", before: 10, keepNext: true }));
+  children.push(para(D, [run(D, "Звіт склав:", { size: 12, bold: true })], { align: "left", before: 8, indentLeft: cm(2), keepNext: true }));
+  children.push(para(D, [run(D, `______________________  ${comp}`, { size: 12 })], { align: "left", before: 6, indentLeft: cm(2), keepNext: true }));
+  children.push(para(D, [run(D, "(посада та підпис)", { size: 9 })], { align: "left", indentLeft: cm(3), after: 6, keepNext: true }));
+  for (const t of ["дані графи № 9, 10 звіту підрозділу повинні відповідати даним звіту МВО ЦЗ графі № 11, 12",
+    `дані графи № 11, 12 повинні відповідати графі № ${issTotalNo} реєстру шляхових листів`])
+    children.push(para(D, [runTab(D, "*", t, { size: 9 })], { align: "left", before: 2, indentLeft: cm(1.2), hanging: cm(0.6), keepNext: true }));
+  return baseDoc(D, { page: { size: { orientation: D.PageOrientation.LANDSCAPE, width: cm(21.0), height: cm(29.7) },
+    margin: { top: cm(1), bottom: cm(1), left: cm(1.3), right: cm(1.3) } } }, children, 11);
 }
