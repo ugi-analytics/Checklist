@@ -1,8 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261113f";
-import { litresWords } from "./words.js?v=20261113f";
-import * as S from "./stock.js?v=20261113f";
+import * as C from "./core.js?v=20261113g";
+import { litresWords } from "./words.js?v=20261113g";
+import * as S from "./stock.js?v=20261113g";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -26,9 +26,9 @@ function para(D, children, { align = "center", before = 0, after = 0, indentLeft
   if (keepNext) o.keepNext = true;
   return new D.Paragraph(o);
 }
-function cell(D, text, { size = 9, bold = false, vertical = false, colSpan, rowSpan, align = "center", width } = {}) {
+function cell(D, text, { size = 9, bold = false, vertical = false, colSpan, rowSpan, align = "center", width, keepNext = false } = {}) {
   const lines = String(text ?? "").split("\n");
-  const o = { children: lines.map((l) => para(D, [run(D, l, { size, bold })], { align })),
+  const o = { children: lines.map((l) => para(D, [run(D, l, { size, bold })], { align, keepNext })),
     verticalAlign: D.VerticalAlign.CENTER };
   if (vertical) o.textDirection = D.TextDirection.BOTTOM_TO_TOP_LEFT_TO_RIGHT;
   if (colSpan) o.columnSpan = colSpan;
@@ -267,31 +267,35 @@ export function buildStock(D, s, ym, res, issTotalNo = 9) {
   const r3 = Array.from({ length: 14 }, (_, i) => c(String(i + 1)));
   const rows = [hdr(r0, 0.9), hdr(r1), hdr(r2, 0.8), hdr(r3)];
   const z = (x) => C.fmtC(x);
-  const totRow = (label, t, bold = true) => rows.push(new D.TableRow({ cantSplit: true, children: [c(label, { colSpan: 6, bold }),
-    ...[t.sT, t.sL, t.rT, t.rL, t.iT, t.iL, t.eT, t.eL].map((x) => c(z(x), { bold }))] }));
+  // рядки тіла — «відкладено»: останні рядки таблиці тримаються разом із підписами (підписи не переїжджають на окрему сторінку)
+  const body = [];
+  const totRow = (label, t, bold = true) => body.push((kn) => new D.TableRow({ cantSplit: true, children: [c(label, { colSpan: 6, bold, keepNext: kn }),
+    ...[t.sT, t.sL, t.rT, t.rL, t.iT, t.iL, t.eT, t.eL].map((x) => c(z(x), { bold, keepNext: kn }))] }));
   const many = res.groups.length > 1;
   for (const g of res.groups) {
     let n = 0;
     for (const l of g.lines) {
       const { inv, ved } = S.rowCells(l, s, res.mvoCol, s.unit || "");
-      rows.push(new D.TableRow({ cantSplit: true, children: [String(++n), ...inv].map((t, i) => c(t, { align: i === 0 ? "right" : "center" })) }));
-      rows.push(new D.TableRow({ cantSplit: true, children: [String(++n), ...ved].map((t, i) => c(t, { align: i === 0 ? "right" : "center" })) }));
+      for (const vals of [inv, ved]) { const no = String(++n);
+        body.push((kn) => new D.TableRow({ cantSplit: true, children: [no, ...vals].map((t, i) => c(t, { align: i === 0 ? "right" : "center", keepNext: kn })) })); }
     }
     totRow(many ? `Всього (${g.title})` : "Всього", g.tot);
   }
   if (many) totRow("РАЗОМ", res.tot);
+  const KEEP = 3;
+  body.forEach((f, i) => rows.push(f(i >= body.length - KEEP)));
   children.push(new D.Table({ rows, columnWidths: widths, width: { size: usable, type: D.WidthType.DXA }, layout: D.TableLayoutType.FIXED,
     alignment: D.AlignmentType.CENTER, margins: { top: 20, bottom: 20, left: 40, right: 40 } }));
 
   const check = String(s.stock_check || "").trim(), comp = String(s.stock_compiler || s.compiler || "").trim();
-  children.push(para(D, [run(D, `Звірку з дорожніми листами підпорядкованого транспорту провів  ______________________  ${check}`, { size: 12 })],
-    { align: "left", before: 10, keepNext: true }));
-  children.push(para(D, [run(D, "Звіт склав:", { size: 12, bold: true })], { align: "left", before: 8, indentLeft: cm(2), keepNext: true }));
-  children.push(para(D, [run(D, `______________________  ${comp}`, { size: 12 })], { align: "left", before: 6, indentLeft: cm(2), keepNext: true }));
-  children.push(para(D, [run(D, "(посада та підпис)", { size: 9 })], { align: "left", indentLeft: cm(3), after: 6, keepNext: true }));
-  for (const t of ["дані графи № 9, 10 звіту підрозділу повинні відповідати даним звіту МВО ЦЗ графі № 11, 12",
-    `дані графи № 11, 12 повинні відповідати графі № ${issTotalNo} реєстру шляхових листів`])
-    children.push(para(D, [runTab(D, "*", t, { size: 9 })], { align: "left", before: 2, indentLeft: cm(1.2), hanging: cm(0.6), keepNext: true }));
+  children.push(para(D, [run(D, `Звірку з дорожніми листами підпорядкованого транспорту провів  ____________________  ${check}`, { size: 12 })],
+    { align: "left", before: 8, keepNext: true }));
+  children.push(para(D, [run(D, "Звіт склав:  ", { size: 12, bold: true }), run(D, `____________________  ${comp}`, { size: 12 })],
+    { align: "left", before: 8, indentLeft: cm(2), keepNext: true }));
+  children.push(para(D, [run(D, "(посада та підпис)", { size: 8 })], { align: "left", indentLeft: cm(4.3), after: 2, keepNext: true }));
+  const notes = ["дані графи № 9, 10 звіту підрозділу повинні відповідати даним звіту МВО ЦЗ графі № 11, 12",
+    `дані графи № 11, 12 повинні відповідати графі № ${issTotalNo} реєстру шляхових листів`];
+  notes.forEach((t, i) => children.push(para(D, [runTab(D, "*", t, { size: 8 })], { align: "left", indentLeft: cm(1.2), hanging: cm(0.6), keepNext: i < notes.length - 1 })));
   return baseDoc(D, { page: { size: { orientation: D.PageOrientation.LANDSCAPE, width: cm(21.0), height: cm(29.7) },
     margin: { top: cm(1), bottom: cm(1), left: cm(1.3), right: cm(1.3) } } }, children, 11);
 }
