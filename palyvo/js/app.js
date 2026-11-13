@@ -1,13 +1,13 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261113a";
-import * as U from "./ui.js?v=20261113a";
-import { litresWords } from "./words.js?v=20261113a";
-import { buildRegister, buildAct } from "./docs.js?v=20261113a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113a";
-import * as X from "./crypto.js?v=20261113a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261113a";
-import { buildXlsx } from "./xlsx.js?v=20261113a";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113a";
+import * as C from "./core.js?v=20261113d";
+import * as U from "./ui.js?v=20261113d";
+import { litresWords } from "./words.js?v=20261113d";
+import { buildRegister, buildAct } from "./docs.js?v=20261113d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113d";
+import * as X from "./crypto.js?v=20261113d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261113d";
+import { buildXlsx } from "./xlsx.js?v=20261113d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -570,7 +570,7 @@ async function monthState(unit, ym) {
   if (saved) entries = saved.entries || {};
   else {
     const prev = await readMonth(unit, C.prevYm(ym));
-    const prevSources = C.monthSources(unit.settings, prev && prev.sources);
+    const prevSources = C.monthSources(unit.settings, prev && prev.sources, true);
     entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, sources, prevSources) : {};
     if (prev) carried = C.prevYm(ym);
   }
@@ -753,7 +753,7 @@ async function pageEntry(q) {
   // довільний опис залишку (напр. БКС: «125 А-95 с/к UKRNAFTA Мосійченко + 197 … Левошко») — для авто, де кілька МВО
   const multiMvo = (r) => !simple && new Set([...C.vehicleMvos(r.sources), ...C.vehicleMvos(SRC.filter((x) => x.active))]).size > 1;
   const txt = (name, val, ph, rows = 2) => `<textarea name="${name}" rows="${rows}" placeholder="${esc(ph)}" class="vtxt">${esc(val || "")}</textarea>`;
-  const startTxt = (r, e) => (multiMvo(r) || e.start_text ? `<div class="mvo" style="margin-top:6px"><label title="Що стоїть у графі «вид» залишку на початок у «Додатку 6» — пишіть як потрібно">Вид залишку на початок / МВО (довільно)</label>
+  const startTxt = (r, e) => (true ? `<div class="mvo" style="margin-top:6px"><label title="Що стоїть у графі «вид» залишку на початок у «Додатку 6» — пишіть як потрібно">Вид залишку на початок / МВО (довільно)</label>
       ${txt("start_text", e.start_text, "напр. 125 А-95 с/к UKRNAFTA Мосійченко + 197 А-95 BVS Левошко", 3)}</div>` : "");
   const endTxt = (r, e) => (multiMvo(r) || e.end_text ? `<div class="mvo endt"><label title="Якщо порожньо — рахується автоматично за джерелами">Вид залишку на кінець / МВО (довільно; якщо порожньо — автоматично)</label>
       ${txt("end_text", e.end_text, C.balanceText({ ...r, entry: { ...e, end_text: "" } }, "end", unit.settings))}</div>` : "");
@@ -881,7 +881,8 @@ async function pageEntry(q) {
   $app.querySelector(".js-prev")?.addEventListener("click", async () => {
     if (!confirm("Перезаписати «Пробіг на початок» і «Залишок на початок» значеннями на кінець попереднього місяця?")) return;
     const prev = await readMonth(unit, C.prevYm(ym));
-    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, SRC, C.monthSources(unit.settings, prev.sources));
+    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, SRC, C.monthSources(unit.settings, prev.sources, true));
+    let needRender = false;
     for (const card of cardEls) {
       const e = co[card.dataset.vid]; if (!e) continue;
       card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
@@ -891,9 +892,13 @@ async function pageEntry(q) {
       const stx = card.querySelector("[name=start_text]"); if (stx) stx.value = e.start_text || "";
       if (simple) { const i = card.querySelector("input[name^='start.']"); if (i) i.value = Object.values(e.start || {}).reduce((a, b) => a + b, 0) || ""; }
       card.querySelectorAll("input, textarea").forEach((i) => { if (i.type !== "checkbox") i.classList.toggle("filled", i.value !== ""); });
-      entries[card.dataset.vid] = readCard(card); refreshCard(card); dirtyCards.add(card);
+      entries[card.dataset.vid] = readCard(card);
+      // поля опису залишку на картці могло не бути (одна МВО) — опис форми (с/к, т, АЗС) переносимо напряму
+      if (!stx) { if (e.start_text) { entries[card.dataset.vid].start_text = e.start_text; needRender = true; } else delete entries[card.dataset.vid].start_text; }
+      refreshCard(card); dirtyCards.add(card);
     }
     refreshKpi(); await saveNow();
+    if (needRender) render();
   });
   $app.querySelector(".js-reg").addEventListener("click", async () => {
     clearTimeout(timer); if (dirtyCards.size) await saveNow();
@@ -1869,8 +1874,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261113a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261113d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -334,6 +334,11 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     r.warnings.push(...textWarn);
     const startTo = pickedStart || anchor;
     if (startTo && T > sum) r.startBy[startTo.id] += T - sum;
+    else if (!startTo && T > sum) {
+      // немає жодного джерела цього пального — залишок не губимо, а ведемо як є (вид пального авто)
+      r.keep.push({ label: `${fmtC(T - sum)} ${vehicle.fuel || ""}`.trim(), c: T - sum, left: T - sum, mvo: "", own: true });
+      r.warnings.push(`Немає джерела пального ${vehicle.fuel || ""} для залишку на початок — опишіть його в полі «Вид залишку на початок», напр. «${fmtC(T - sum)} ${vehicle.fuel || ""} т».`);
+    }
     if (anchor && free && !pickedStart && T > 0 && sum === 0 && vehicleMvos(sources).length > 1)
       r.warnings.push(`Залишок на початок не описано (чий і який) — віднесено на «${sourceTitle(anchor)}». Опишіть його в полі «Вид залишку на початок», напр. «${fmtC(T)} с/к Прізвище».`);
     r.startSplit = splitIn.some((x) => x.c > 0) && sum > 0;
@@ -720,7 +725,18 @@ export function shortName(full) {
 }
 
 /** Джерела для місяця: поточні джерела підрозділу + збережені в місяці (щоб старі дані не зникли). */
-export function monthSources(settings = {}, stored = null) {
+export function monthSources(settings = {}, stored = null, asSaved = false) {
+  // asSaved: джерела збереженого місяця як були тоді (для перенесення залишку — щоб зміни в автопарку
+  // не змінювали форму/пальне залишку минулого місяця)
+  if (asSaved && Array.isArray(stored) && stored.length) {
+    const out = stored.map(normalizeSource), have = new Set(out.map((s) => s.id));
+    for (const s of unitSources(settings)) if (!have.has(s.id)) out.push({ ...s, active: false });
+    // стандартні джерела місяця — лише незмінені стандартні (без пального/МВО), інакше — свої
+    out.legacy = out.every((s) => { const l = LEGACY_SOURCES.find((x) => x.id === s.id); return l && !s.fuel && !s.mvo && !s.supplier && s.form === l.form; })
+      && (!Array.isArray(settings.sources) || !settings.sources.length || stored.length === LEGACY_SOURCES.length);
+    out.issuedFirst = !out.legacy && !!settings.cons_issued_first;
+    return out;
+  }
   const cur = unitSources(settings);
   if (Array.isArray(stored) && stored.length) {
     const have = new Set(cur.map((s) => s.id));
