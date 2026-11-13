@@ -1,7 +1,7 @@
 // «Додаток № 2» — звіт про одержане і видане пальне (рух пального в МВО за накладними).
 // МВО вносить накладні (№/дата або від кого, джерело, одержано, «в наливі / резерв»); видане — з реєстру,
 // розписується на накладні того ж джерела: спершу робочі (від старішої), потім ті, що «в наливі / резерв».
-import * as C from "./core.js?v=20261113i";
+import * as C from "./core.js?v=20261113j";
 
 /** Налив (АЗС налив, налив ОВА) і газ — у графах «літри/(кг)»; талони і с/к — у графах «талони (с/к)». */
 export const LIT_FORMS = new Set(["АЗС налив", "Налив ОВА"]);
@@ -90,14 +90,21 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
   const docLines = [], mm2 = new Map();
   for (const l of lines) {
     if (l.missing || !noNumber(l.doc)) { docLines.push(l); continue; }
-    const k = [stockKey(l.src, l.fuel), l.form, l.reserve ? 1 : 0].join("|");
-    if (!mm2.has(k)) { const m = { ...l, id: "m:" + k, docs: [], startC: 0, recvC: 0, issC: 0, endC: 0, merged: true }; mm2.set(k, m); docLines.push(m); }
+    // усі надходження без номера одного виду пального й форми — одним рядком (незалежно від джерела / МВО)
+    const k = [C.normFuel(l.fuel), l.form, l.reserve ? 1 : 0].join("|");
+    if (!mm2.has(k)) { const m = { ...l, id: "m:" + k, docs: [], mvos: [], startC: 0, recvC: 0, issC: 0, endC: 0, merged: true }; mm2.set(k, m); docLines.push(m); }
     const m = mm2.get(k);
+    if (!m.mvos.includes(l.mvo)) m.mvos.push(l.mvo);
+    if (!m.sups) m.sups = []; if (!m.sups.includes(l.supplier)) m.sups.push(l.supplier);
     for (const f of ["startC", "recvC", "issC", "endC"]) m[f] += l[f];
     if (l.doc && !m.docs.includes(l.doc)) m.docs.push(l.doc);
     if (!m.note && l.note) m.note = l.note;
   }
-  for (const m of mm2.values()) m.doc = m.docs.join(", ").slice(0, 120) || "без накладної";
+  for (const m of mm2.values()) {
+    m.doc = m.docs.join(", ").slice(0, 120) || "без накладної";
+    if (m.mvos.length > 1) m.mvo = m.mvos.filter(Boolean).join(", ");
+    if (m.sups.length > 1) m.supplier = "";
+  }
   const gm = new Map();
   for (const l of docLines) { const k = FUEL_ORDER(l.fuel); if (!gm.has(k)) gm.set(k, { fuel: l.fuel, lines: [] }); gm.get(k).lines.push(l); }
   const groups = [...gm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => ({ ...g, title: fuelName(g.fuel), tot: sum(g.lines) }));
