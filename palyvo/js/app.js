@@ -1,14 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261113h";
-import * as U from "./ui.js?v=20261113h";
-import { litresWords } from "./words.js?v=20261113h";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261113h";
-import * as ST from "./stock.js?v=20261113h";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113h";
-import * as X from "./crypto.js?v=20261113h";
-import { qrSvg } from "../vendor/qrcode.js?v=20261113h";
-import { buildXlsx } from "./xlsx.js?v=20261113h";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113h";
+import * as C from "./core.js?v=20261113i";
+import * as U from "./ui.js?v=20261113i";
+import { litresWords } from "./words.js?v=20261113i";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261113i";
+import * as ST from "./stock.js?v=20261113i";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113i";
+import * as X from "./crypto.js?v=20261113i";
+import { qrSvg } from "../vendor/qrcode.js?v=20261113i";
+import { buildXlsx } from "./xlsx.js?v=20261113i";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113i";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1240,10 +1240,13 @@ async function pageStock(q) {
   };
   const lineRow = (l) => {
     const r = res.lines.find((x) => x.id === l.id) || { issC: 0, endC: 0 };
-    if (ro) return `<tr><td>${esc(l.doc)}${l.carried ? ` <span class="pill mut">з ${prevTitle}</span>` : ""}</td><td class="num">${z(l.startC)}</td><td class="num">${z(l.recvC)}</td>
+    if (ro) return `<tr><td>${esc(l.doc)}${l.carried ? ` <span class="pill mut">з ${prevTitle}</span>` : ""}</td><td>${esc(ST.formWord(l.form))}</td><td class="num">${z(l.startC)}</td><td class="num">${z(l.recvC)}</td>
       <td class="num">${z(l.issC)}</td><td class="num"><b>${z(l.endC)}</b></td><td>${l.reserve ? `в наливі / резерв${l.note ? ": " + esc(l.note) : ""}` : ""}</td>${res.mvoCol ? "" : `<td>${esc(l.nominal)}</td>`}<td></td></tr>`;
     return `<tr data-id="${l.id}"><td><input data-f="doc" value="${esc(l.doc)}" placeholder="в.н. № від дд.мм.рррр, або від кого" style="min-width:230px">
         ${l.carried ? `<div class="muted" style="font-size:.75rem">↪️ залишок з ${prevTitle}</div>` : ""}</td>
+      <td><select data-f="form" class="${l.form ? "" : "need"}" title="Що одержано за накладною — від цього залежать графи 5–6 і колонки «талони (с/к)» / «літри»">
+        <option value="" ${l.form ? "" : "selected"}>— оберіть —</option>${ST.LINE_FORMS.filter(([v]) => v === l.form || ["талони", "с/к", "АЗС налив"].includes(v) || SRCS.some((x) => x.form === v))
+          .map(([v, t]) => `<option value="${v}" ${v === l.form ? "selected" : ""}>${t}</option>`).join("")}</select></td>
       <td><input data-f="start" type="number" min="0" step="0.01" value="${l.start || ""}" ${l.carried ? `readonly title="Перенесено з ${prevTitle} — змінюється в тому місяці"` : `placeholder="0"`} style="width:90px"></td>
       <td><input data-f="recv" type="number" min="0" step="0.01" value="${l.recv || ""}" placeholder="0" style="width:90px"></td>
       <td class="num js-iss">${z(r.issC)}</td><td class="num"><b class="js-end">${z(r.endC)}</b></td>
@@ -1256,7 +1259,7 @@ async function pageStock(q) {
     const ls = (ro ? res.lines.filter((l) => !l.missing) : stock.lines).filter((l) => keyOf(l) === b.k);
     return `<div class="panel stk" data-k="${esc(b.k)}"><div class="row" style="justify-content:space-between;align-items:baseline">
         <h3 style="margin:0">${blockTitle(b)}</h3><div class="js-bh">${head(b)}</div></div>
-      ${ls.length ? `<div class="tblwrap"><table class="list"><thead><tr><th>Накладна (№, дата) або від кого</th><th class="num">На початок, л</th><th class="num">Одержано, л</th>
+      ${ls.length ? `<div class="tblwrap"><table class="list"><thead><tr><th>Накладна (№, дата) або від кого</th><th>Вид</th><th class="num">На початок, л</th><th class="num">Одержано, л</th>
         <th class="num">Видано, л</th><th class="num">На кінець, л</th><th>Залишок</th>${res.mvoCol ? "" : "<th>Номінал</th>"}<th></th></tr></thead>
         <tbody>${ls.map(lineRow).join("")}</tbody></table></div>` : `<p class="muted" style="margin:8px 0">Накладних ще немає.</p>`}
       ${ro ? "" : `<button class="btn sm js-add" data-k="${esc(b.k)}">➕ Накладна</button>`}</div>`;
@@ -1313,6 +1316,7 @@ async function pageStock(q) {
           const f = i.dataset.f;
           l[f] = i.type === "checkbox" ? i.checked : f === "start" || f === "recv" ? (Number(String(i.value).replace(",", ".")) || 0) : i.value;
           if (f === "reserve") tr.querySelector("[data-f=note]").style.display = i.checked ? "" : "none";
+          if (f === "form") i.classList.toggle("need", !i.value);
           if (f === "reserve" && i.checked && !l.note) { l.note = "в наливі"; tr.querySelector("[data-f=note]").value = l.note; }
           refresh(); schedule();
         };
@@ -1325,7 +1329,7 @@ async function pageStock(q) {
     });
     $b.querySelectorAll(".js-add").forEach((btn) => btn.addEventListener("click", () => {
       const b = blocks().find((x) => x.k === btn.dataset.k);
-      const l = ST.lineFromSource(b.src, b.fuel, { fuel: C.sourceFor(b.src, { fuel: b.fuel }, v.S).fuel });
+      const l = ST.lineFromSource(b.src, b.fuel, { fuel: C.sourceFor(b.src, { fuel: b.fuel }, v.S).fuel, form: "" });
       stock.lines.push(l); paint();
       $b.querySelector(`tr[data-id="${l.id}"] [data-f=doc]`)?.focus();
     }));
@@ -2086,8 +2090,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261113h")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113h")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261113i")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113i")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

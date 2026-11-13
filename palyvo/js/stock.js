@@ -1,13 +1,17 @@
 // «Додаток № 2» — звіт про одержане і видане пальне (рух пального в МВО за накладними).
 // МВО вносить накладні (№/дата або від кого, джерело, одержано, «в наливі / резерв»); видане — з реєстру,
 // розписується на накладні того ж джерела: спершу робочі (від старішої), потім ті, що «в наливі / резерв».
-import * as C from "./core.js?v=20261113h";
+import * as C from "./core.js?v=20261113i";
 
 /** Налив (АЗС налив, налив ОВА) і газ — у графах «літри/(кг)»; талони і с/к — у графах «талони (с/к)». */
 export const LIT_FORMS = new Set(["АЗС налив", "Налив ОВА"]);
 const FORM_WORD = { "с/к": "с/к", "талони": "талони", "АЗС ГУНП талони": "талони АЗС ГУНП", "АЗС налив": "налив", "Налив ОВА": "налив ОВА" };
 export const formWord = (f) => FORM_WORD[f] || f || "";
 export const stockKey = (srcId, fuel) => `${srcId}|${C.normFuel(fuel)}`;
+/** Вид за накладною (обов'язково при внесенні): графа 5 / 6 і графи «талони (с/к)» чи «літри». */
+export const LINE_FORMS = [["талони", "талони"], ["с/к", "смарт-карта (с/к)"], ["АЗС налив", "налив"], ["АЗС ГУНП талони", "талони АЗС ГУНП"], ["Налив ОВА", "налив ОВА"]];
+/** Без номера накладної (напр. «Петрунь»): у «Додатку 2» такі рядки одного джерела підсумовуються в один. */
+export const noNumber = (doc) => !/\d/.test(String(doc || ""));
 
 const num = (v) => { const x = Number(String(v ?? "").replace(",", ".").replace(/\s/g, "")); return isFinite(x) && x > 0 ? Math.round(x * 100) / 100 : 0; };
 /** Рядок накладної: {id, src, fuel, form, supplier, mvo, doc, start, recv, reserve, note, nominal, carried}. */
@@ -55,7 +59,9 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
   const iss = issuedFromRows(rows, settings);
   for (const [k, it] of iss) {
     const pool = lines.filter((l) => stockKey(l.src, l.fuel) === k)
-      .sort((a, b) => (a.reserve - b.reserve) || ((docDate(a.doc) || 99999999) - (docDate(b.doc) || 99999999)) || (a.i - b.i));
+      // спершу робочі, потім «в наливі / резерв»; у межах — від старішої дати (без номера/дати — першими),
+      // тож залишок лишається на накладних, одержаних пізніше
+      .sort((a, b) => (a.reserve - b.reserve) || (docDate(a.doc) - docDate(b.doc)) || (a.i - b.i));
     let left = it.c;
     for (const l of pool) { const take = Math.min(left, l.startC + l.recvC); l.issC += take; left -= take; if (!left) break; }
     if (left > 0) {
@@ -69,6 +75,7 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
   const [yy, mm] = ym ? C.parseYm(ym) : [0, 0];
   for (const l of lines) {
     l.endC = l.startC + l.recvC - l.issC;
+    if (!l.missing && !l.form) errors.push(`Накладна «${l.doc || "без номера"}»: не вказано вид — талони, смарт-карта (с/к) чи налив.`);
     if (yy && l.recvC && docDate(l.doc) > yy * 10000 + mm * 100 + 31) warnings.push(`Накладна «${l.doc}»: дата пізніша за звітний місяць.`);
     if (yy && l.recvC && docDate(l.doc) && docDate(l.doc) < (yy - 1) * 10000 + mm * 100) warnings.push(`Накладна «${l.doc}»: одержано цього місяця, а дата — понад рік тому. Перевірте рік.`);
   }
@@ -79,8 +86,20 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
     for (const l of ls) { const p = l.lit ? "L" : "T"; t["s" + p] += l.startC; t["r" + p] += l.recvC; t["i" + p] += l.issC; t["e" + p] += l.endC; }
     return t;
   };
+  // для документа: накладні без номера одного джерела (і виду, і позначки «резерв») — одним рядком
+  const docLines = [], mm2 = new Map();
+  for (const l of lines) {
+    if (l.missing || !noNumber(l.doc)) { docLines.push(l); continue; }
+    const k = [stockKey(l.src, l.fuel), l.form, l.reserve ? 1 : 0].join("|");
+    if (!mm2.has(k)) { const m = { ...l, id: "m:" + k, docs: [], startC: 0, recvC: 0, issC: 0, endC: 0, merged: true }; mm2.set(k, m); docLines.push(m); }
+    const m = mm2.get(k);
+    for (const f of ["startC", "recvC", "issC", "endC"]) m[f] += l[f];
+    if (l.doc && !m.docs.includes(l.doc)) m.docs.push(l.doc);
+    if (!m.note && l.note) m.note = l.note;
+  }
+  for (const m of mm2.values()) m.doc = m.docs.join(", ").slice(0, 120) || "без накладної";
   const gm = new Map();
-  for (const l of lines) { const k = FUEL_ORDER(l.fuel); if (!gm.has(k)) gm.set(k, { fuel: l.fuel, lines: [] }); gm.get(k).lines.push(l); }
+  for (const l of docLines) { const k = FUEL_ORDER(l.fuel); if (!gm.has(k)) gm.set(k, { fuel: l.fuel, lines: [] }); gm.get(k).lines.push(l); }
   const groups = [...gm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => ({ ...g, title: fuelName(g.fuel), tot: sum(g.lines) }));
   // у групі: спершу за джерелом (вид, форма, постачальник, МВО), далі — за датою накладної
   const srcOrd = new Map(sources.map((s, i) => [s.id, i]));
@@ -99,7 +118,9 @@ export function rowCells(l, settings, mvoCol, unitShort) {
   const c6 = mvoCol ? fw : l.nominal;
   const z = (c) => C.fmtC(c);
   const T = !l.lit;
-  const end = [T ? z(l.endC) : (l.note || ""), T ? (l.note || "") : [z(l.endC), l.note].filter(Boolean).join(" ")];
+  // примітка («резерв», «в наливі») — лише в графі виду накладної: талони/с/к → 13, налив → 14
+  const endTxt = [z(l.endC), l.reserve ? l.note : ""].filter(Boolean).join(" ");
+  const end = [T ? endTxt : "", T ? "" : endTxt];
   const inv = [unitShort, name, l.doc, c5, c6, T ? z(l.startC) : "", T ? "" : z(l.startC), T ? z(l.recvC) : "", T ? "" : z(l.recvC), "", "", ...end];
   const ved = [unitShort, name, "відомість №", "", mvoCol ? fw : "", "", "", "", "", T ? z(l.issC) : "", T ? "" : z(l.issC), "", ""];
   return { inv, ved };

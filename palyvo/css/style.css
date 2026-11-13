@@ -346,3 +346,4 @@ select.ssrc { width:100%; font-size:.86rem; padding:6px 8px; }
   .who { flex: 1 1 100%; padding: 10px 12px 8px; gap: 10px; } .who-av { width: 36px; height: 36px; border-radius: 11px; }
   .who-av svg { width: 18px; height: 18px; } .who-top b { font-size: .9rem; } .who-unit { max-width: 100%; }
 }
+select.need { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248,113,113,.25); }
