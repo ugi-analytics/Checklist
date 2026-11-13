@@ -1,7 +1,7 @@
 // «Додаток № 2» — звіт про одержане і видане пальне (рух пального в МВО за накладними).
 // МВО вносить накладні (№/дата або від кого, джерело, одержано, «в наливі / резерв»); видане — з реєстру,
 // розписується на накладні того ж джерела: спершу робочі (від старішої), потім ті, що «в наливі / резерв».
-import * as C from "./core.js?v=20261113j";
+import * as C from "./core.js?v=20261113k";
 
 /** Налив (АЗС налив, налив ОВА) і газ — у графах «літри/(кг)»; талони і с/к — у графах «талони (с/к)». */
 export const LIT_FORMS = new Set(["АЗС налив", "Налив ОВА"]);
@@ -83,27 +83,32 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
   const mvoCol = mc === "1" ? true : mc === "0" ? false : C.vehicleMvos(sources.filter((s) => s.active !== false)).length > 1;
   const sum = (ls) => {
     const t = { sT: 0, sL: 0, rT: 0, rL: 0, iT: 0, iL: 0, eT: 0, eL: 0 };
-    for (const l of ls) { const p = l.lit ? "L" : "T"; t["s" + p] += l.startC; t["r" + p] += l.recvC; t["i" + p] += l.issC; t["e" + p] += l.endC; }
+    for (const l of ls) for (const [p, x] of l.merged ? [["T", l.T], ["L", l.L]] : [[l.lit ? "L" : "T", l]]) {
+      if (!x) continue; t["s" + p] += x.startC; t["r" + p] += x.recvC; t["i" + p] += x.issC; t["e" + p] += x.endC;
+    }
     return t;
   };
   // для документа: накладні без номера одного джерела (і виду, і позначки «резерв») — одним рядком
   const docLines = [], mm2 = new Map();
   for (const l of lines) {
     if (l.missing || !noNumber(l.doc)) { docLines.push(l); continue; }
-    // усі надходження без номера одного виду пального й форми — одним рядком (незалежно від джерела / МВО)
-    const k = [C.normFuel(l.fuel), l.form, l.reserve ? 1 : 0].join("|");
-    if (!mm2.has(k)) { const m = { ...l, id: "m:" + k, docs: [], mvos: [], startC: 0, recvC: 0, issC: 0, endC: 0, merged: true }; mm2.set(k, m); docLines.push(m); }
-    const m = mm2.get(k);
-    if (!m.mvos.includes(l.mvo)) m.mvos.push(l.mvo);
-    if (!m.sups) m.sups = []; if (!m.sups.includes(l.supplier)) m.sups.push(l.supplier);
-    for (const f of ["startC", "recvC", "issC", "endC"]) m[f] += l[f];
-    if (l.doc && !m.docs.includes(l.doc)) m.docs.push(l.doc);
+    // усі надходження без номера (з усіх джерел, усіх форм) — одним рядком у межах виду пального;
+    // талони/с/к і налив у цьому рядку — кожне у своїх графах
+    const k = [C.normFuel(l.fuel), l.reserve ? 1 : 0].join("|");
+    if (!mm2.has(k)) {
+      const m = { ...l, id: "m:" + k, docs: [], mvos: [], sups: [], forms: [], merged: true, T: null, L: null, startC: 0, recvC: 0, issC: 0, endC: 0 };
+      mm2.set(k, m); docLines.push(m);
+    }
+    const m = mm2.get(k), p = l.lit ? "L" : "T";
+    if (!m[p]) m[p] = { startC: 0, recvC: 0, issC: 0, endC: 0 };
+    for (const f of ["startC", "recvC", "issC", "endC"]) { m[p][f] += l[f]; m[f] += l[f]; }
+    for (const [arr, x] of [[m.docs, l.doc], [m.mvos, l.mvo], [m.sups, l.supplier], [m.forms, l.form]]) if (x && !arr.includes(x)) arr.push(x);
     if (!m.note && l.note) m.note = l.note;
   }
   for (const m of mm2.values()) {
     m.doc = m.docs.join(", ").slice(0, 120) || "без накладної";
-    if (m.mvos.length > 1) m.mvo = m.mvos.filter(Boolean).join(", ");
-    if (m.sups.length > 1) m.supplier = "";
+    m.mvo = m.mvos.join(", "); m.supplier = m.sups.length === 1 ? m.sups[0] : ""; m.form = m.forms[0] || "";
+    m.lit = !m.T; // лише налив — графи «літри»
   }
   const gm = new Map();
   for (const l of docLines) { const k = FUEL_ORDER(l.fuel); if (!gm.has(k)) gm.set(k, { fuel: l.fuel, lines: [] }); gm.get(k).lines.push(l); }
@@ -119,6 +124,15 @@ export function carryStock(res) {
 }
 /** Значення 14 граф для рядка накладної і рядка «відомість». */
 export function rowCells(l, settings, mvoCol, unitShort) {
+  if (l.merged) {
+    const fw = l.forms.map(formWord).join(", ");
+    const name = [fuelName(l.fuel), fw, l.supplier].filter(Boolean).join(" ");
+    const z = (x, f) => (x ? C.fmtC(x[f]) : "");
+    const endT = (x) => (x ? [C.fmtC(x.endC), l.reserve ? l.note : ""].filter(Boolean).join(" ") : "");
+    const c5 = mvoCol ? l.mvos.map((m) => `МВО-${m}`).join(", ") : fw, c6 = mvoCol ? fw : "";
+    return { inv: [unitShort, name, l.doc, c5, c6, z(l.T, "startC"), z(l.L, "startC"), z(l.T, "recvC"), z(l.L, "recvC"), "", "", endT(l.T), endT(l.L)],
+      ved: [unitShort, name, "відомість №", "", mvoCol ? fw : "", "", "", "", "", z(l.T, "issC"), z(l.L, "issC"), "", ""] };
+  }
   const name = [fuelName(l.fuel), formWord(l.form), l.supplier].filter(Boolean).join(" ");
   const fw = formWord(l.form);
   const c5 = mvoCol ? (l.mvo ? `МВО-${l.mvo}` : "") : fw;
