@@ -1,14 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261113g";
-import * as U from "./ui.js?v=20261113g";
-import { litresWords } from "./words.js?v=20261113g";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261113g";
-import * as ST from "./stock.js?v=20261113g";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113g";
-import * as X from "./crypto.js?v=20261113g";
-import { qrSvg } from "../vendor/qrcode.js?v=20261113g";
-import { buildXlsx } from "./xlsx.js?v=20261113g";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113g";
+import * as C from "./core.js?v=20261113h";
+import * as U from "./ui.js?v=20261113h";
+import { litresWords } from "./words.js?v=20261113h";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261113h";
+import * as ST from "./stock.js?v=20261113h";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113h";
+import * as X from "./crypto.js?v=20261113h";
+import { qrSvg } from "../vendor/qrcode.js?v=20261113h";
+import { buildXlsx } from "./xlsx.js?v=20261113h";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113h";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -77,7 +77,12 @@ function shell(content, { nav = true } = {}) {
   const me = state.me; const p = route().path;
   const unit = state.units.find((u) => u.id === state.unitId);
   const unitChip = "";  // назва підрозділу — у віконці користувача праворуч угорі
-  const whoUnit = unit && me && me.status === "active" ? `<div class="who-unit">${esc(unit.name)}</div>` : "<br>";
+  const whoUnit = unit && me && me.status === "active" && !isDisp() && !isPogSup() ? `<div class="who-unit">${esc(unit.name)}</div>` : "";
+  const role = isAdmin() ? "адміністратор" : isDisp() ? "диспетчер" : isPogSup() ? "керівництво ПОГ" : "";
+  const IC = {
+    user: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>`,
+    key: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="9" r="5"/><path d="M11.5 12.5 4 20m2-2 2 2"/></svg>`,
+    out: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="M10 12h10m-3-3 3 3-3 3"/></svg>` };
   const switcher = isAdmin() && state.units.length > 1 ? `<select class="js-unit-switch" title="Працювати з підрозділом">
       ${state.units.map((u) => `<option value="${u.id}" ${u.id === state.unitId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>` : "";
   const tab = (h, icon, label, extra = "") => `<a href="#/${h}" class="tile ${p === h || p.startsWith(h + "/") || (h === "entry" && !p) ? "on" : ""}">
@@ -92,8 +97,10 @@ function shell(content, { nav = true } = {}) {
         <span class="online ${navigator.onLine ? "" : "off"}"><i></i><b>${navigator.onLine ? "ON-LINE" : "OFF-LINE"}</b></span></div>
         <small>Управління головної інспекції ГУНП в Полтавській області</small></div>
       <div class="sp"></div>
-      ${state.authUser ? `<div class="who"><b>${esc(me?.full_name || state.authUser.email)}</b>${isAdmin() ? " · адміністратор" : isDisp() ? " · диспетчер" : isPogSup() ? " · керівництво ПОГ" : ""}${isDisp() || isPogSup() ? "<br>" : whoUnit}${stats}
-        ${me && me.status === "active" ? `<a href="#/password">змінити пароль</a> · ` : ""}<a href="#" class="js-logout">вийти</a></div>` : ""}
+      ${state.authUser ? `<div class="who"><div class="who-av">${IC.user}</div><div class="who-main">
+        <div class="who-top"><b>${esc(me?.full_name || state.authUser.email)}</b>${role ? `<span class="who-role">${role}</span>` : ""}</div>
+        ${whoUnit}${stats}
+        <div class="who-links">${me && me.status === "active" ? `<a href="#/password">${IC.key} Змінити пароль</a><span class="who-sep"></span>` : ""}<a href="#" class="js-logout">${IC.out} Вийти</a></div></div></div>` : ""}
     </div>
     <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
       <div class="chips">${unitChip}${switcher}
@@ -2005,8 +2012,9 @@ function statsHtml() {
   const s = state.userStats; if (!s) return "";
   const uname = (id) => state.units.find((u) => u.id === id)?.name || "";
   const list = s.online.map((o) => `<li><b>${esc(o.name)}</b>${uname(o.unit) ? `<span>${esc(uname(o.unit))}</span>` : ""}</li>`).join("");
-  return `<span title="Активних користувачів">👥 ${s.active}</span>${s.pending ? ` · <a href="#/admin/requests">заявок: ${s.pending}</a>` : ""}
-    · <span class="on">🟢 ${s.online.length} онлайн</span><div class="pop"><div class="ph">Зараз на сайті</div><ul>${list}</ul></div>`;
+  const ppl = `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><circle cx="12" cy="8" r="3.4"/><circle cx="5.5" cy="9.5" r="2.6"/><circle cx="18.5" cy="9.5" r="2.6"/><path d="M5.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6z"/><path d="M0.5 19c0-2.6 1.8-4.4 4.4-4.6-.9 1.3-1.4 2.9-1.4 4.6zM23.5 19c0-2.6-1.8-4.4-4.4-4.6.9 1.3 1.4 2.9 1.4 4.6z"/></svg>`;
+  return `<span class="ppl" title="Активних користувачів">${ppl}<b>${s.active}</b></span>${s.pending ? `<span class="dot">•</span><a href="#/admin/requests">заявок: ${s.pending}</a>` : ""}
+    <span class="dot">•</span><span class="on"><i></i>${s.online.length} онлайн</span><div class="pop"><div class="ph">Зараз на сайті</div><ul>${list}</ul></div>`;
 }
 
 // ============================================================ маршрутизатор
@@ -2078,8 +2086,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261113g")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113g")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261113h")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113h")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
