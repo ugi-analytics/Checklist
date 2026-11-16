@@ -1,7 +1,7 @@
 // «Додаток № 2» — звіт про одержане і видане пальне (рух пального в МВО за накладними).
 // МВО вносить накладні (№/дата або від кого, джерело, одержано, «в наливі / резерв»); видане — з реєстру,
 // розписується на накладні того ж джерела: спершу робочі (від старішої), потім ті, що «в наливі / резерв».
-import * as C from "./core.js?v=20261116a";
+import * as C from "./core.js?v=20261116b";
 
 /** Налив (АЗС налив, налив ОВА) і газ — у графах «літри/(кг)»; талони і с/к — у графах «талони (с/к)». */
 export const LIT_FORMS = new Set(["АЗС налив", "Налив ОВА"]);
@@ -71,7 +71,7 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
     const known = all.find((l) => stockKey(l.src, l.fuel) === k && l.form);
     const form = (known && known.form) || f.form;
     lines.push({ ...lineFromSource(it.src, it.fuel, { fuel: f.fuel, form, doc: "Петрунь" }), i: lines.length, startC: 0, recvC: it.c, issC: it.c,
-      lit: LIT_FORMS.has(form) || C.normFuel(f.fuel) === "ГАЗ", pass: true });
+      lit: false, pass: true });   // «Петрунь» — одним числом (талони, с/к і налив разом) у графах «талони (с/к)», як у бланку УГІ
   }
   for (const [k, it] of iss) {
     if (passKeys.has(k)) continue;
