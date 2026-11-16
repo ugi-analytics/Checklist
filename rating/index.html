@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#16345c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Влучання">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="favicon-32.png">
 <title>Рейтинг тилових міст за влучаннями</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <style>
@@ -104,6 +112,17 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .tabs button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
 .leaflet-container { font: inherit; }
 .js-only { display: none; }
+.install { display: none; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 6000; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.18); padding: 12px 14px; gap: 12px; align-items: center; font-size: 14px; }
+.install.show { display: flex; }
+.install img { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+.install .tx { flex: 1; line-height: 1.35; }
+.install .tx b { display: block; }
+.install button { font: inherit; font-size: 14px; border: 0; border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+.install .go { background: var(--accent); color: #fff; font-weight: 600; }
+.install .no { background: transparent; color: var(--text-secondary); padding: 8px 6px; }
+@media (max-width: 700px) { #map { height: 62vh; } .viz-root { padding: 14px 10px 90px; } header h1 { font-size: 21px; } header .sub { font-size: 12.5px; } .kpis { gap: 8px; margin: 14px 0 10px; } .kpi { padding: 10px 12px; } .kpi .val { font-size: 23px; } .kpi .lab, .kpi .note { font-size: 12px; } .card { padding: 14px 12px; margin-bottom: 10px; } .card .desc { font-size: 12.5px; } .filters input { min-width: 0; flex: 1; } }
+@media (display-mode: standalone) { .viz-root { padding-top: max(16px, env(safe-area-inset-top)); } }
 .mode-print, .mode-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .mode-print .card { break-inside: avoid; }
 .mode-print .grid2 > .card:first-child { break-inside: auto; }
@@ -194,6 +213,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 </div>
 <div class="foot" id="foot">Показано топ-15 міст. Повний рейтинг, динаміка по тижнях і жертви — у PDF-файлі звіту.</div>
 <div class="tip" id="tip"></div>
+<div class="install" id="install"><img src="icon-192.png" alt=""><div class="tx" id="instTx"><b>Встановити як додаток</b>Значок на екрані, відкривається на весь екран і працює без інтернету.</div><button class="go" id="instGo">Встановити</button><button class="no" id="instNo" aria-label="Закрити">✕</button></div>
 </div>
 
 <script>
@@ -546,6 +566,26 @@ const GEO = null;
   // ---------- init
   drawBars(); drawMap(); drawChips(); drawLines(); drawCas(); drawLog();
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (barView === 'chart') drawBars(); drawLines(); }, 150); });
+})();
+</script>
+<script>
+(function () {
+  if (!/^https:/.test(location.protocol)) return;          // лише на сайті, не з диска
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  let dismissed = false; try { dismissed = localStorage.getItem('rv_inst_no') === '1'; } catch (e) {}
+  if (standalone || dismissed) return;
+  const box = document.getElementById('install'), go = document.getElementById('instGo'), tx = document.getElementById('instTx');
+  document.getElementById('instNo').onclick = () => { box.classList.remove('show'); try { localStorage.setItem('rv_inst_no', '1'); } catch (e) {} };
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (ios) {
+    tx.innerHTML = '<b>Встановити як додаток</b>У Safari натисніть «Поділитися» (квадрат зі стрілкою вгору), потім «На початковий екран».';
+    go.style.display = 'none'; box.classList.add('show'); return;
+  }
+  let ev = null;
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); ev = e; box.classList.add('show'); });
+  go.onclick = async () => { if (!ev) return; ev.prompt(); try { await ev.userChoice; } catch (e) {} ev = null; box.classList.remove('show'); };
+  addEventListener('appinstalled', () => box.classList.remove('show'));
 })();
 </script>
 </body>
