@@ -1,14 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261113k";
-import * as U from "./ui.js?v=20261113k";
-import { litresWords } from "./words.js?v=20261113k";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261113k";
-import * as ST from "./stock.js?v=20261113k";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261113k";
-import * as X from "./crypto.js?v=20261113k";
-import { qrSvg } from "../vendor/qrcode.js?v=20261113k";
-import { buildXlsx } from "./xlsx.js?v=20261113k";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261113k";
+import * as C from "./core.js?v=20261116a";
+import * as U from "./ui.js?v=20261116a";
+import { litresWords } from "./words.js?v=20261116a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261116a";
+import * as ST from "./stock.js?v=20261116a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261116a";
+import * as X from "./crypto.js?v=20261116a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261116a";
+import { buildXlsx } from "./xlsx.js?v=20261116a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261116a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1232,6 +1232,8 @@ async function pageStock(q) {
   const z = (c) => C.fmtC(c);
   const head = (b) => {
     const iss = (issued.get(b.k) || { c: 0 }).c;
+    if (res.lines.some((l) => l.pass && keyOf(l) === b.k) || (!iss && stock.lines.some((l) => keyOf(l) === b.k && (ST.isPass(l.doc) || ST.isPass(l.mvo)))))
+      return `<span>видано за реєстром: <b>${z(iss)} л</b></span> <span class="pill ok">Петрунь: одержано = видано, однією відомістю — накладні не потрібні</span>`;
     const miss = res.lines.filter((l) => l.missing && keyOf(l) === b.k).reduce((a, l) => a + l.issC, 0);
     const ls = res.lines.filter((l) => keyOf(l) === b.k && !l.missing);
     const end = ls.reduce((a, l) => a + l.endC, 0);
@@ -2090,8 +2092,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261113k")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261113k")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261116a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261116a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

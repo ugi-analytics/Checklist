@@ -1,7 +1,7 @@
 // «Додаток № 2» — звіт про одержане і видане пальне (рух пального в МВО за накладними).
 // МВО вносить накладні (№/дата або від кого, джерело, одержано, «в наливі / резерв»); видане — з реєстру,
 // розписується на накладні того ж джерела: спершу робочі (від старішої), потім ті, що «в наливі / резерв».
-import * as C from "./core.js?v=20261113k";
+import * as C from "./core.js?v=20261116a";
 
 /** Налив (АЗС налив, налив ОВА) і газ — у графах «літри/(кг)»; талони і с/к — у графах «талони (с/к)». */
 export const LIT_FORMS = new Set(["АЗС налив", "Налив ОВА"]);
@@ -12,6 +12,8 @@ export const stockKey = (srcId, fuel) => `${srcId}|${C.normFuel(fuel)}`;
 export const LINE_FORMS = [["талони", "талони"], ["с/к", "смарт-карта (с/к)"], ["АЗС налив", "налив"], ["АЗС ГУНП талони", "талони АЗС ГУНП"], ["Налив ОВА", "налив ОВА"]];
 /** Без номера накладної (напр. «Петрунь»): у «Додатку 2» такі рядки одного джерела підсумовуються в один. */
 export const noNumber = (doc) => !/\d/.test(String(doc || ""));
+/** Виняток «Петрунь» (див. calcStock). */
+export const isPass = (t) => /петрун/i.test(String(t || ""));
 
 const num = (v) => { const x = Number(String(v ?? "").replace(",", ".").replace(/\s/g, "")); return isFinite(x) && x > 0 ? Math.round(x * 100) / 100 : 0; };
 /** Рядок накладної: {id, src, fuel, form, supplier, mvo, doc, start, recv, reserve, note, nominal, carried}. */
@@ -53,11 +55,26 @@ export const fuelName = (f) => (C.normFuel(f).startsWith("А") ? `Бензин $
  * Повертає {lines, groups:[{fuel, title, lines, tot}], tot, errors, warnings, mvoCol}.
  */
 export function calcStock(stock, rows, sources, settings = {}, ym = "") {
-  const lines = (stock && stock.lines || []).map(normalizeLine).map((l, i) => ({ ...l, i, startC: Math.round(l.start * 100),
+  const all = (stock && stock.lines || []).map(normalizeLine).map((l, i) => ({ ...l, i, startC: Math.round(l.start * 100),
     recvC: Math.round(l.recv * 100), issC: 0, lit: LIT_FORMS.has(l.form) || C.normFuel(l.fuel) === "ГАЗ" }));
   const errors = [], warnings = [];
   const iss = issuedFromRows(rows, settings);
+  // Виняток «Петрунь»: пальне від нього не ведеться за накладними — скільки видано, стільки й одержано,
+  // усе одним рядком і однією відомістю. Джерело «петрунівське», якщо МВО — Петрунь або накладна «від Петруня».
+  const passKeys = new Set();
+  for (const [k, it] of iss) if (isPass(it.src.mvo)) passKeys.add(k);
+  for (const l of all) if (isPass(l.mvo) || isPass(l.doc)) passKeys.add(stockKey(l.src, l.fuel));
+  const lines = all.filter((l) => !passKeys.has(stockKey(l.src, l.fuel)));
+  for (const k of passKeys) {
+    const it = iss.get(k); if (!it || !it.c) continue;
+    const f = C.sourceFor(it.src, { fuel: it.fuel }, settings);
+    const known = all.find((l) => stockKey(l.src, l.fuel) === k && l.form);
+    const form = (known && known.form) || f.form;
+    lines.push({ ...lineFromSource(it.src, it.fuel, { fuel: f.fuel, form, doc: "Петрунь" }), i: lines.length, startC: 0, recvC: it.c, issC: it.c,
+      lit: LIT_FORMS.has(form) || C.normFuel(f.fuel) === "ГАЗ", pass: true });
+  }
   for (const [k, it] of iss) {
+    if (passKeys.has(k)) continue;
     const pool = lines.filter((l) => stockKey(l.src, l.fuel) === k)
       // спершу робочі, потім «в наливі / резерв»; у межах — від старішої дати (без номера/дати — першими),
       // тож залишок лишається на накладних, одержаних пізніше
@@ -75,7 +92,7 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
   const [yy, mm] = ym ? C.parseYm(ym) : [0, 0];
   for (const l of lines) {
     l.endC = l.startC + l.recvC - l.issC;
-    if (!l.missing && !l.form) errors.push(`Накладна «${l.doc || "без номера"}»: не вказано вид — талони, смарт-карта (с/к) чи налив.`);
+    if (!l.missing && !l.pass && !l.form) errors.push(`Накладна «${l.doc || "без номера"}»: не вказано вид — талони, смарт-карта (с/к) чи налив.`);
     if (yy && l.recvC && docDate(l.doc) > yy * 10000 + mm * 100 + 31) warnings.push(`Накладна «${l.doc}»: дата пізніша за звітний місяць.`);
     if (yy && l.recvC && docDate(l.doc) && docDate(l.doc) < (yy - 1) * 10000 + mm * 100) warnings.push(`Накладна «${l.doc}»: одержано цього місяця, а дата — понад рік тому. Перевірте рік.`);
   }
@@ -94,7 +111,7 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
     if (l.missing || !noNumber(l.doc)) { docLines.push(l); continue; }
     // усі надходження без номера (з усіх джерел, усіх форм) — одним рядком у межах виду пального;
     // талони/с/к і налив у цьому рядку — кожне у своїх графах
-    const k = [C.normFuel(l.fuel), l.reserve ? 1 : 0].join("|");
+    const k = [C.normFuel(l.fuel), l.reserve ? 1 : 0, l.pass ? "P" : ""].join("|");
     if (!mm2.has(k)) {
       const m = { ...l, id: "m:" + k, docs: [], mvos: [], sups: [], forms: [], merged: true, T: null, L: null, startC: 0, recvC: 0, issC: 0, endC: 0 };
       mm2.set(k, m); docLines.push(m);
@@ -106,7 +123,7 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
     if (!m.note && l.note) m.note = l.note;
   }
   for (const m of mm2.values()) {
-    m.doc = m.docs.join(", ").slice(0, 120) || "без накладної";
+    m.doc = m.pass ? "Петрунь" : m.docs.join(", ").slice(0, 120) || "без накладної";
     m.mvo = m.mvos.join(", "); m.supplier = m.sups.length === 1 ? m.sups[0] : ""; m.form = m.forms[0] || "";
     m.lit = !m.T; // лише налив — графи «літри»
   }
@@ -120,7 +137,10 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
 }
 /** Перенесення на наступний місяць: накладні з залишком на кінець > 0 стають залишком на початок. */
 export function carryStock(res) {
-  return { lines: res.lines.filter((l) => l.endC > 0 && !l.missing).map((l) => normalizeLine({ ...l, start: l.endC / 100, recv: 0, carried: true })) };
+  const out = res.lines.filter((l) => l.endC > 0 && !l.missing && !l.pass).map((l) => normalizeLine({ ...l, start: l.endC / 100, recv: 0, carried: true }));
+  // «Петрунь» — лише позначка джерела (без кількостей), щоб і в новому місяці рахувалось «одержано = видано»
+  for (const l of res.lines.filter((x) => x.pass)) out.push(normalizeLine({ src: l.src, fuel: l.fuel, form: l.form, supplier: l.supplier, mvo: l.mvo, doc: "Петрунь" }));
+  return { lines: out };
 }
 /** Значення 14 граф для рядка накладної і рядка «відомість». */
 export function rowCells(l, settings, mvoCol, unitShort) {
