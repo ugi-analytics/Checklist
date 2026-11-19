@@ -1,14 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261116b";
-import * as U from "./ui.js?v=20261116b";
-import { litresWords } from "./words.js?v=20261116b";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261116b";
-import * as ST from "./stock.js?v=20261116b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261116b";
-import * as X from "./crypto.js?v=20261116b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261116b";
-import { buildXlsx } from "./xlsx.js?v=20261116b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261116b";
+import * as C from "./core.js?v=20261119a";
+import * as U from "./ui.js?v=20261119a";
+import { litresWords } from "./words.js?v=20261119a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261119a";
+import * as ST from "./stock.js?v=20261119a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261119a";
+import * as X from "./crypto.js?v=20261119a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261119a";
+import { buildXlsx } from "./xlsx.js?v=20261119a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261119a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -83,8 +83,13 @@ function shell(content, { nav = true } = {}) {
     user: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>`,
     key: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="9" r="5"/><path d="M11.5 12.5 4 20m2-2 2 2"/></svg>`,
     out: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="M10 12h10m-3-3 3 3-3 3"/></svg>` };
-  const switcher = isAdmin() && state.units.length > 1 ? `<select class="js-unit-switch" title="Працювати з підрозділом">
-      ${state.units.map((u) => `<option value="${u.id}" ${u.id === state.unitId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select>` : "";
+  const curU = state.units.find((u) => u.id === state.unitId);
+  const switcher = isAdmin() && state.units.length > 1 ? `<div class="usw js-usw">
+      <button type="button" class="usw-btn js-usw-btn" title="Працювати з підрозділом"><span>${esc(curU ? curU.name : "Оберіть підрозділ")}</span><span class="usw-ch">▾</span></button>
+      <div class="usw-pop" hidden><input class="usw-q" type="search" placeholder="🔍 Пошук підрозділу…" autocomplete="off">
+        <div class="usw-list">${[...state.units].sort((a, b) => a.name.localeCompare(b.name, "uk")).map((u) =>
+          `<button type="button" class="usw-it ${u.id === state.unitId ? "on" : ""}" data-id="${u.id}">${esc(u.name)}</button>`).join("")}</div>
+        <div class="usw-none muted" hidden>Нічого не знайдено</div></div></div>` : "";
   const tab = (h, icon, label, extra = "") => `<a href="#/${h}" class="tile ${p === h || p.startsWith(h + "/") || (h === "entry" && !p) ? "on" : ""}">
     <span class="ti">${icon}</span><span class="tl">${label}${extra}</span><span class="chev">›</span></a>`;
   const pending = isAdmin() && state.pendingCount ? `<span class="badge">${state.pendingCount}</span>` : "";
@@ -114,9 +119,34 @@ function shell(content, { nav = true } = {}) {
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
   state.flash = null;
   $app.querySelector(".js-logout")?.addEventListener("click", async (e) => { e.preventDefault(); forgetSessionKeys(); await store.signOut(); go("#/login"); });
-  $app.querySelector(".js-unit-switch")?.addEventListener("change", (e) => {
-    state.unitId = e.target.value; sessionStorage.setItem("unitCtx", state.unitId); render();
-  });
+  const usw = $app.querySelector(".js-usw");
+  if (usw) {
+    const pop = usw.querySelector(".usw-pop"), q = usw.querySelector(".usw-q"), items = [...usw.querySelectorAll(".usw-it")];
+    const norm = (t) => String(t).toLowerCase().replace(/['’`ʼ]/g, "").replace(/\s+/g, " ");
+    const filter = () => {
+      const w = norm(q.value).trim().split(" ").filter(Boolean); let n = 0, first = true;
+      for (const it of items) { const ok = w.every((x) => norm(it.textContent).includes(x)); it.hidden = !ok; it.classList.toggle("hl", ok && first); if (ok) { n++; first = false; } }
+      usw.querySelector(".usw-none").hidden = n > 0;
+    };
+    const pick = (id) => { pop.hidden = true; if (!id || id === state.unitId) return; state.unitId = id; sessionStorage.setItem("unitCtx", id); render(); };
+    const close = (e) => { if (!usw.contains(e.target)) { pop.hidden = true; document.removeEventListener("mousedown", close); } };
+    usw.querySelector(".js-usw-btn").addEventListener("click", () => {
+      pop.hidden = !pop.hidden;
+      if (!pop.hidden) { q.value = ""; filter(); q.focus(); usw.querySelector(".usw-it.on")?.scrollIntoView({ block: "nearest" }); document.addEventListener("mousedown", close); }
+    });
+    q.addEventListener("input", filter);
+    q.addEventListener("keydown", (e) => {
+      const vis = items.filter((i) => !i.hidden), cur = vis.findIndex((i) => i.classList.contains("hl"));
+      if (e.key === "Escape") pop.hidden = true;
+      else if (e.key === "Enter") { e.preventDefault(); pick((vis[cur] || vis[0])?.dataset.id); }
+      else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault(); if (!vis.length) return;
+        const nx = vis[(cur + (e.key === "ArrowDown" ? 1 : -1) + vis.length) % vis.length];
+        items.forEach((i) => i.classList.remove("hl")); nx.classList.add("hl"); nx.scrollIntoView({ block: "nearest" });
+      }
+    });
+    items.forEach((it) => it.addEventListener("click", () => pick(it.dataset.id)));
+  }
 }
 function authCard(inner, width = 460) { return `<div class="auth" style="max-width:${width}px"><div class="panel">${inner}</div></div>`; }
 
@@ -2092,8 +2122,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261116b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261116b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261119a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261119a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -347,3 +347,19 @@ select.ssrc { width:100%; font-size:.86rem; padding:6px 8px; }
   .who-av svg { width: 18px; height: 18px; } .who-top b { font-size: .9rem; } .who-unit { max-width: 100%; }
 }
 select.need { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248,113,113,.25); }
+/* вибір підрозділу з пошуком (адміністратор) */
+.usw { position: relative; z-index: 45; min-width: 280px; max-width: 420px; }
+.usw-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: rgba(2,6,23,.6); color: #f8fafc;
+  border: 1px solid rgba(148,163,184,.3); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: .95rem; cursor: pointer; text-align: left; }
+.usw-btn span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usw-btn:hover { border-color: rgba(96,165,250,.6); }
+.usw-pop { position: absolute; top: calc(100% + 6px); left: 0; width: max(100%, 340px); background: #0b1225; border: 1px solid rgba(96,165,250,.5);
+  border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.55), 0 0 18px rgba(59,130,246,.25); padding: 8px; }
+.usw-q { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+.usw-list { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; }
+.usw-it { background: none; border: 0; color: #e2e8f0; text-align: left; padding: 7px 10px; border-radius: 8px; font: inherit; font-size: .9rem; cursor: pointer; }
+.usw-it:hover, .usw-it.hl { background: rgba(59,130,246,.22); color: #fff; }
+.usw-it.on { color: #7dd3fc; font-weight: 700; }
+.usw-it[hidden] { display: none; }
+.usw-none { padding: 8px 10px; font-size: .85rem; }
+@media (max-width: 760px) { .usw { min-width: 0; width: 100%; max-width: none; } .usw-pop { width: 100%; } }
