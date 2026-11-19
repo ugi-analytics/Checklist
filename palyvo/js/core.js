@@ -35,11 +35,15 @@ export function sourceTitle(src) {
   if (src.label && String(src.label).trim()) return String(src.label).trim();
   return [src.fuel, src.form, src.supplier, src.mvo].map((x) => String(x || "").trim()).filter(Boolean).join(" ") || "Джерело";
 }
+/** Субвенція / благодійна допомога: окремий акт із назвою джерела. Без явної галочки — BVS або «субвенц…», «благо…». */
+export const autoSubv = (src) => /^bvs$/i.test(String(src.supplier || "").trim()) || /субвенц|благо/i.test(`${src.supplier || ""} ${src.label || ""}`);
+export const isSubv = (src) => (src.subv === undefined || src.subv === null ? autoSubv(src) : !!src.subv);
+const subvGroup = (src) => "sv:" + sourceTitle(src);
 /** Реквізити джерела для конкретного авто (порожні поля стандартних джерел — з картки авто). */
 export function sourceFor(src, v = {}, settings = {}) {
   const custom = Array.isArray(settings.sources) && settings.sources.length;   // свої джерела: МВО — лише з джерела
   return { fuel: src.fuel || v.fuel || "", supplier: src.supplier || "",
-    mvo: src.mvo || (custom ? "" : v.mvo_text || settings.compiler) || "", form: src.form || "", group: FORM_GROUP[src.form] || "tsmk" };
+    mvo: src.mvo || (custom ? "" : v.mvo_text || settings.compiler) || "", form: src.form || "", group: custom && isSubv(src) ? subvGroup(src) : FORM_GROUP[src.form] || "tsmk" };
 }
 /** Підпис джерела для «Вид пального на залишку»: «А-95 с/к UKRNAFTA Мосійченко». */
 export function sourceLabelFor(src, v = {}, settings = {}) {
@@ -707,12 +711,21 @@ function legacyActSplit(r) {
 /** Перелік актів місяця: група (талони+с/к / АЗС) × МВО — на кожну МВО окремий акт (підписує вся комісія і ця МВО). */
 export function actList(rows, settings = {}) {
   const out = [];
-  for (const g of Object.keys(ACT_GROUPS)) {
+  // субвенція / благо — окремий акт на кожне таке джерело (назва — від джерела)
+  const sv = new Map();
+  for (const r of rows) if (!r.legacy) for (const s of r.sources || []) {
+    const g = sourceFor(s, r.vehicle, settings).group;
+    if (g.startsWith("sv:") && !sv.has(g)) sv.set(g, sourceTitle(s));
+  }
+  const groups = [...Object.keys(ACT_GROUPS).map((g) => [g, ACT_GROUPS[g].title, ACT_GROUPS[g].file]),
+    ...[...sv.entries()].map(([g, t]) => [g, `Субвенція: ${t}`, "Субвенція_" + t.replace(/[^\p{L}\d]+/gu, "_")])];
+  for (const [g, title, file] of groups) {
     const lines = actGroups(rows, g, settings);
+    if (g.startsWith("sv:") && !lines.length) continue;
     const mvos = [...new Set(lines.map((l) => String(l.mvo || "").trim()))];
-    if (mvos.length <= 1) { out.push({ group: g, mvo: mvos[0] || null, mvos: mvos.filter(Boolean), lines, title: ACT_GROUPS[g].title }); continue; }
+    if (mvos.length <= 1) { out.push({ group: g, mvo: mvos[0] || null, mvos: mvos.filter(Boolean), lines, title, file, subv: g.startsWith("sv:") }); continue; }
     for (const mv of mvos) out.push({ group: g, mvo: mv, mvos: [mv].filter(Boolean), lines: lines.filter((l) => String(l.mvo || "").trim() === mv),
-      title: `${ACT_GROUPS[g].title} · МВО ${mv || "—"}`, perMvo: true });
+      title: `${title} · МВО ${mv || "—"}`, file, perMvo: true, subv: g.startsWith("sv:") });
   }
   return out;
 }

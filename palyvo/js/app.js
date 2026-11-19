@@ -1,14 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261119b";
-import * as U from "./ui.js?v=20261119b";
-import { litresWords } from "./words.js?v=20261119b";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261119b";
-import * as ST from "./stock.js?v=20261119b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261119b";
-import * as X from "./crypto.js?v=20261119b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261119b";
-import { buildXlsx } from "./xlsx.js?v=20261119b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261119b";
+import * as C from "./core.js?v=20261119c";
+import * as U from "./ui.js?v=20261119c";
+import { litresWords } from "./words.js?v=20261119c";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261119c";
+import * as ST from "./stock.js?v=20261119c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261119c";
+import * as X from "./crypto.js?v=20261119c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261119c";
+import { buildXlsx } from "./xlsx.js?v=20261119c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261119c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1448,7 +1448,7 @@ async function pageReport(q) {
     store.log("doc_act", `${a.group}${a.mvo ? " " + a.mvo : ""} ${ym}`, unit.id);
   }));
 }
-const actFileName = (a, ym) => `Акт_списання_${C.ACT_GROUPS[a.group].file}${a.perMvo && a.mvo ? "_" + String(a.mvo).replace(/[^\p{L}\d]+/gu, "_") : ""}_${ym}.docx`;
+const actFileName = (a, ym) => `Акт_списання_${a.file || (C.ACT_GROUPS[a.group] || {}).file || "Акт"}${a.perMvo && a.mvo ? "_" + String(a.mvo).replace(/[^\p{L}\d]+/gu, "_") : ""}_${ym}.docx`;
 
 // ============================================================ архів
 async function pageArchive() {
@@ -1520,9 +1520,10 @@ async function pageFleet() {
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="Під рядком «Всього» — окремі рядки: залишок на початок, видано, витрачено й залишок на кінець за кожним видом (с/к, талони…) і МВО"><input type="checkbox" class="js-breakdown" ${s.reg_breakdown ? "checked" : ""}> «Додаток 6»: під «Всього» — розбивка залишків і руху за видом та МВО</label>
       <div class="js-srcbox">
         <div class="tblwrap"><table class="edit" id="srcs"><thead><tr><th>Вид пального</th><th>Форма</th><th>Постачальник</th><th>МВО</th>
-          <th style="min-width:220px">Назва колонки в реєстрі</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+          <th style="min-width:220px">Назва колонки в реєстрі</th><th title="Субвенція / благодійна допомога — окремий акт списання з назвою джерела">Субвенція</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
         <button class="btn sm js-addsrc" style="margin-top:10px">➕ Додати джерело</button>
         <p class="muted" style="margin-top:8px">Порожній «Вид пального» — джерело для всіх авто. Порожня «Назва колонки» складається сама: «А-95 с/к UKRNAFTA Мосійченко».
+          «Субвенція» — пальне з цього джерела списується окремим актом із назвою джерела (для BVS і назв зі словами «субвенція», «благо» галочка ставиться сама).
           Акти списання: с/к і талони — акт «Талони + см/к», АЗС ГУНП талони й АЗС налив — акт «АЗС»; якщо МВО кілька — окремий акт на кожну.</p></div>
       <h3 style="margin-top:14px">«Додаток 6»</h3>
       <div class="row" style="gap:18px">
@@ -1633,8 +1634,14 @@ async function pageFleet() {
       <td><input data-f="supplier" list="suppliers" value="${esc(x.supplier)}" placeholder="необов'язково" style="width:120px"></td>
       <td><input data-f="mvo" value="${esc(x.mvo)}" placeholder="з картки авто" style="width:140px"></td>
       <td><input data-f="label" value="${esc(C.LEGACY_SOURCES.some((l) => l.id === x.id && l.label === x.label) ? "" : x.label)}" placeholder="${esc(C.sourceTitle({ ...x, label: "" }))}"></td>
+      <td class="c"><input data-f="subv" type="checkbox" ${C.isSubv(x) ? "checked" : ""} title="Окремий акт списання (субвенція / благо)"></td>
       <td class="c"><input data-f="active" type="checkbox" ${x.active === false ? "" : "checked"}></td>
       <td><button class="btn sm danger js-del" title="Прибрати джерело">🗑</button></td>`;
+    const sv = tr.querySelector("[data-f=subv]");
+    sv.addEventListener("change", () => { tr.dataset.svt = "1"; });
+    tr.querySelectorAll("[data-f=supplier],[data-f=label]").forEach((i) => i.addEventListener("input", () => {
+      if (!tr.dataset.svt && x.subv === undefined) sv.checked = C.autoSubv({ supplier: tr.querySelector("[data-f=supplier]").value, label: tr.querySelector("[data-f=label]").value });
+    }));
     tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Прибрати джерело? Дані минулих місяців збережуться.")) { tr.remove(); refreshSrcSelects(); } });
     tr.querySelectorAll("input,select").forEach((i) => i.addEventListener("input", () => {
       tr.querySelector("[data-f=label]").placeholder = C.sourceTitle({ ...readSrc(tr), label: "" }); refreshSrcSelects(); }));
@@ -2172,8 +2179,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261119b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261119b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261119c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261119c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
