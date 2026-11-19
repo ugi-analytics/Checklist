@@ -1,14 +1,14 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261119a";
-import * as U from "./ui.js?v=20261119a";
-import { litresWords } from "./words.js?v=20261119a";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261119a";
-import * as ST from "./stock.js?v=20261119a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261119a";
-import * as X from "./crypto.js?v=20261119a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261119a";
-import { buildXlsx } from "./xlsx.js?v=20261119a";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261119a";
+import * as C from "./core.js?v=20261119b";
+import * as U from "./ui.js?v=20261119b";
+import { litresWords } from "./words.js?v=20261119b";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261119b";
+import * as ST from "./stock.js?v=20261119b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261119b";
+import * as X from "./crypto.js?v=20261119b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261119b";
+import { buildXlsx } from "./xlsx.js?v=20261119b";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261119b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1719,6 +1719,44 @@ async function pageFleet() {
 }
 
 // ============================================================ адміністрування
+// ------------------------------------------------------------ випадаючий список із пошуком (на місці <select>)
+function searchSelect(sel) {
+  if (!sel || sel.dataset.ss) return; sel.dataset.ss = "1";
+  const box = document.createElement("div"); box.className = "usw usw-inline";
+  const opts = [...sel.options].map((o) => ({ v: o.value, t: o.textContent }));
+  const label = () => (opts.find((o) => o.v === sel.value) || { t: "—" }).t;
+  box.innerHTML = `<button type="button" class="usw-btn"><span></span><span class="usw-ch">▾</span></button>
+    <div class="usw-pop" hidden><input class="usw-q" type="search" placeholder="🔍 Пошук підрозділу…" autocomplete="off"><div class="usw-list">${opts.map((o) =>
+      `<button type="button" class="usw-it" data-v="${esc(o.v)}">${esc(o.t)}</button>`).join("")}</div><div class="usw-none muted" hidden>Нічого не знайдено</div></div>`;
+  sel.hidden = true; sel.after(box);
+  const btn = box.querySelector(".usw-btn"), pop = box.querySelector(".usw-pop"), q = box.querySelector(".usw-q"), items = [...box.querySelectorAll(".usw-it")];
+  const sync = () => { btn.firstElementChild.textContent = label(); items.forEach((i) => i.classList.toggle("on", i.dataset.v === sel.value)); };
+  const norm = (t) => String(t).toLowerCase().replace(/['’`ʼ]/g, "").replace(/\s+/g, " ");
+  const filter = () => {
+    const w = norm(q.value).trim().split(" ").filter(Boolean); let n = 0;
+    for (const it of items) { const ok = w.every((x) => norm(it.textContent).includes(x)); it.hidden = !ok; it.classList.toggle("hl", ok && !n); if (ok) n++; }
+    box.querySelector(".usw-none").hidden = n > 0;
+  };
+  const close = (e) => { if (!box.contains(e.target)) { pop.hidden = true; document.removeEventListener("mousedown", close); } };
+  const pick = (v) => { pop.hidden = true; if (v == null) return; if (v !== sel.value) { sel.value = v; sync(); sel.dispatchEvent(new Event("change", { bubbles: true })); } };
+  btn.addEventListener("click", () => {
+    pop.hidden = !pop.hidden;
+    if (!pop.hidden) { q.value = ""; filter(); q.focus(); box.querySelector(".usw-it.on")?.scrollIntoView({ block: "nearest" }); document.addEventListener("mousedown", close); }
+  });
+  q.addEventListener("input", filter);
+  q.addEventListener("keydown", (e) => {
+    const vis = items.filter((i) => !i.hidden), cur = vis.findIndex((i) => i.classList.contains("hl"));
+    if (e.key === "Escape") pop.hidden = true;
+    else if (e.key === "Enter") { e.preventDefault(); pick((vis[cur] || vis[0])?.dataset.v); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); if (!vis.length) return;
+      const nx = vis[(cur + (e.key === "ArrowDown" ? 1 : -1) + vis.length) % vis.length];
+      items.forEach((i) => i.classList.remove("hl")); nx.classList.add("hl"); nx.scrollIntoView({ block: "nearest" });
+    }
+  });
+  items.forEach((it) => it.addEventListener("click", () => pick(it.dataset.v)));
+  sync();
+}
 async function pageAdmin(sub, q) {
   if (!isAdmin()) return go("#/entry");
   const tab = sub || "requests";
@@ -1779,6 +1817,8 @@ async function pageAdmin(sub, q) {
   } else if (tab === "units") {
     body = `<div class="panel"><h2>Підрозділи</h2><div class="row" style="margin-bottom:14px">
       <label class="f">Новий підрозділ<input class="js-newunit" placeholder="напр. Кременчуцьке РУП ГУНП" style="min-width:320px"></label><button class="btn sky js-ucreate">➕ Створити</button></div>
+      <div class="row" style="margin-bottom:10px"><input class="js-ufind" type="search" placeholder="🔍 Пошук підрозділу…" style="min-width:320px" autocomplete="off">
+        <span class="muted js-ufound"></span></div>
       ${state.adminPriv ? "" : adminKeyForm("Відкрийте ключ адміністратора, щоб встановлювати новий ключ підрозділу, який його забув.")}
       <table class="list"><thead><tr><th>Назва</th><th class="num">Користувачів</th><th class="num">Авто</th><th>Шифрування</th><th>Дії</th></tr></thead><tbody>
       ${regular.map((u) => `<tr data-id="${u.id}"><td><div class="row" style="gap:6px"><input class="js-uname" value="${esc(u.name)}" style="min-width:300px"><button class="btn sm js-urename">Перейменувати</button></div></td>
@@ -1875,6 +1915,15 @@ async function pageAdmin(sub, q) {
   bindAdminKeyForm();
   const act = async (fn, okMsg) => { busy(true); try { await fn(); if (okMsg) flash("ok", okMsg); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); render(); } };
 
+  $app.querySelectorAll(".js-unitsel, .js-pparent").forEach(searchSelect);
+  const uf = $app.querySelector(".js-ufind");
+  if (uf) uf.addEventListener("input", () => {
+    const nm = (t) => String(t).toLowerCase().replace(/['’`ʼ]/g, "");
+    const w = nm(uf.value).trim().split(/\s+/).filter(Boolean); let n = 0;
+    const rows = [...$app.querySelectorAll("table.list tbody tr[data-id]")].filter((tr) => tr.querySelector(".js-uname"));
+    for (const tr of rows) { const ok = w.every((x) => nm(tr.querySelector(".js-uname").value).includes(x)); tr.hidden = !ok; if (ok) n++; }
+    $app.querySelector(".js-ufound").textContent = w.length ? `знайдено: ${n} з ${rows.length}` : "";
+  });
   $app.querySelectorAll(".js-unitsel").forEach((s) => s.addEventListener("change", () => {
     const nn = s.closest("[data-uid]").querySelector(".js-newname"); if (nn) nn.style.display = s.value === "new" ? "" : "none";
   }));
@@ -1926,6 +1975,7 @@ async function pageAdmin(sub, q) {
     const ctl = { q: uq, role: $app.querySelector(".js-urole"), unit: $app.querySelector(".js-uunit"), st: $app.querySelector(".js-ust") };
     let saved = {}; try { saved = JSON.parse(sessionStorage.getItem("ufilter") || "{}"); } catch { /* */ }
     for (const k in ctl) ctl[k].value = saved[k] || "";
+    searchSelect(ctl.unit);
     const apply = () => {
       const t = ctl.q.value.trim().toLowerCase(); let n = 0, all = 0;
       $app.querySelectorAll("tr[data-uid]").forEach((tr) => {
@@ -2122,8 +2172,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261119a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261119a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261119b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261119b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
