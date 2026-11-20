@@ -1,14 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261119c";
-import * as U from "./ui.js?v=20261119c";
-import { litresWords } from "./words.js?v=20261119c";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261119c";
-import * as ST from "./stock.js?v=20261119c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261119c";
-import * as X from "./crypto.js?v=20261119c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261119c";
-import { buildXlsx } from "./xlsx.js?v=20261119c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261119c";
+import * as C from "./core.js?v=20261120a";
+import * as U from "./ui.js?v=20261120a";
+import { litresWords } from "./words.js?v=20261120a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261120a";
+import { buildCzRegister } from "./cz.js?v=20261120a";
+import * as ST from "./stock.js?v=20261120a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261120a";
+import * as X from "./crypto.js?v=20261120a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261120a";
+import { buildXlsx } from "./xlsx.js?v=20261120a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261120a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -51,7 +52,9 @@ function pwProblem(pw) {
 const isAdmin = () => state.me && state.me.role === "admin" && state.me.status === "active";
 // ukr.net — листи Firebase часто не доходять (жорсткий антиспам-фільтр)
 const BAD_MAIL = /@ukr\.net$/i;
-const isDisp = () => state.me && state.me.role === "dispatcher" && state.me.status === "active";
+// диспетчер може мати ще й кабінет підрозділу (unit_id) — тоді «#/disp» — режим диспетчера, решта сторінок — кабінет
+const dispUnit = () => !!(state.me && state.me.role === "dispatcher" && state.me.unit_id);
+const isDisp = () => state.me && state.me.role === "dispatcher" && state.me.status === "active" && !(dispUnit() && state.dmode === "unit");
 const isPogSup = () => state.me && state.me.role === "pogsup" && state.me.status === "active";
 const ROLE_UA = { user: "користувач", admin: "адміністратор", dispatcher: "диспетчер", pogsup: "керівництво ПОГ" };
 const years = () => { const y = new Date().getFullYear(); const a = []; for (let i = 2024; i <= y + 1; i++) a.push(i); return a; };
@@ -78,7 +81,7 @@ function shell(content, { nav = true } = {}) {
   const unit = state.units.find((u) => u.id === state.unitId);
   const unitChip = "";  // назва підрозділу — у віконці користувача праворуч угорі
   const whoUnit = unit && me && me.status === "active" && !isDisp() && !isPogSup() ? `<div class="who-unit">${esc(unit.name)}</div>` : "";
-  const role = isAdmin() ? "адміністратор" : isDisp() ? "диспетчер" : isPogSup() ? "керівництво ПОГ" : "";
+  const role = isAdmin() ? "адміністратор" : isDisp() ? "диспетчер" : dispUnit() ? "диспетчер · кабінет" : isPogSup() ? "керівництво ПОГ" : "";
   const IC = {
     user: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>`,
     key: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="9" r="5"/><path d="M11.5 12.5 4 20m2-2 2 2"/></svg>`,
@@ -110,11 +113,11 @@ function shell(content, { nav = true } = {}) {
     <div class="title-row"><h1 class="display"><span>Списання пального</span> <span>для <em>МВО</em></span></h1>
       <div class="chips">${unitChip}${switcher}
       ${DEMO ? `<span class="chip" style="border-color:#f87171;color:#fecaca">ДЕМО-РЕЖИМ · дані не зберігаються</span>` : ""}</div></div>
-    ${nav && isDisp() ? `<nav class="tiles">${tab("disp", "🧮", "Диспетчер · перевірка розрахунку")}</nav>` : ""}
+    ${nav && isDisp() ? `<nav class="tiles">${tab("disp", "🧮", "Диспетчер · перевірка розрахунку")}${dispUnit() ? tab("entry", "🏢", "Кабінет підрозділу") : ""}</nav>` : ""}
     ${nav && isPogSup() ? `<nav class="tiles">${tab("pogsup", "👮", "ПОГ області")}</nav>` : ""}
     ${nav && me && me.status === "active" && !isDisp() && !isPogSup() ? `<nav class="tiles">
       ${tab("entry", "💧", "Введення даних")}${tab("report", "📋", "Звіт і акти")}${tab("stock", "📦", "Одержане пальне <small style=\"opacity:.75;font-weight:600\">(бета версія)</small>")}${tab("fleet", "🚙", "Автопарк і реквізити")}${tab("archive", "📁", "Архів")}
-      ${isAdmin() ? tab("disp", "🧮", "Режим диспетчера") + tab("admin", "🛡️", "Адміністрування", pending) : ""}</nav>` : ""}
+      ${isAdmin() ? tab("disp", "🧮", "Режим диспетчера") + tab("admin", "🛡️", "Адміністрування", pending) : dispUnit() ? tab("disp", "🧮", "Режим диспетчера") : ""}</nav>` : ""}
   </div></header>
   <main class="wrap">${state.flash ? `<div class="flash ${state.flash[0]}">${esc(state.flash[1])}</div>` : ""}${content}</main>`;
   state.flash = null;
@@ -510,7 +513,7 @@ async function getUnitKey(u) {
 }
 async function decUnit(u, dk) {
   const data = u.enc ? await X.decJson(dk, u.enc, X.aadUnit(u.id)) : { settings: u.settings || {}, vehicles: [] };
-  u.settings = { ...C.DEFAULT_SETTINGS, ...(data.settings || {}) };
+  u.settings = { ...C.DEFAULT_SETTINGS, ...(data.settings || {}), profile: u.profile || "" };
   u.vehicles = (data.vehicles || []).map(C.normalizeVehicle);
   u.dk = dk;
   return u;
@@ -767,6 +770,14 @@ function pageUnitKey(mode, u) {
 }
 
 // ============================================================ введення даних
+// реєстр «Додаток 6»: звичайний — Word; кабінет у режимі ЦЗ — Excel (як реєстр ЦЗ)
+async function downloadRegister(unit, settings, ym, rows, sources) {
+  if (unit.profile === "cz") {
+    downloadBytes(buildCzRegister({ ...settings, profile: "cz" }, ym, rows, sources), `Додаток_6_Реєстр_ЦЗ_${ym}.xlsx`,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  } else await download(buildRegister(window.docx, settings, ym, rows, sources), `Додаток_6_Реєстр_пального_${ym}.docx`);
+}
+const regLabel = (unit) => (unit.profile === "cz" ? "(Excel)" : "(Word)");
 async function pageEntry(q) {
   const unit = await loadUnit();
   if (!unit) return shell(`<div class="panel">Підрозділ не знайдено.</div>`);
@@ -844,6 +855,8 @@ async function pageEntry(q) {
         <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>${startSrc(r, e)}${startTxt(r, e)}`}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
+        ${unit.profile === "cz" ? `<div class="f3" style="margin-top:6px"><div><label title="Пальне, передане з іншого ТЗ (додається до виданого); якщо з цього авто передали — з мінусом">Передано з ТЗ на ТЗ, л</label>
+          <input type="number" inputmode="decimal" step="0.01" name="xfer" placeholder="0 (з мінусом — передано з цього авто)" value="${e.xfer ?? ""}"></div></div>` : ""}
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
           <div class="manual"><label style="display:flex;gap:6px;align-items:center;margin:0;color:#cbd5e1"><input type="checkbox" name="manual" ${e.manual ? "checked" : ""}> ввести витрату вручну</label>
             <input type="number" inputmode="decimal" min="0" step="0.01" name="consumed_manual" placeholder="витрачено, л" value="${e.consumed_manual ?? ""}" ${e.manual ? "" : 'style="display:none"'}>
@@ -859,7 +872,7 @@ async function pageEntry(q) {
     <div id="kpi"></div>
     ${hasPrev ? `<button class="btn sm js-prev">↪️ Підтягнути пробіг і залишок на початок з ${C.monthTitle(C.prevYm(ym))}</button>` : ""}
     <div style="margin-top:14px">${cards}</div>
-    <div class="stickybar"><button class="btn primary js-reg">📥 Реєстр «Додаток 6» (Word)</button>
+    <div class="stickybar"><button class="btn primary js-reg">📥 Реєстр «Додаток 6» ${regLabel(unit)}</button>
       <a class="btn sky" href="#/report?ym=${ym}">🧾 Акти списання та перегляд</a>
       <span class="muted js-savestate">Дані зберігаються автоматично після кожної зміни.</span></div>`);
   bindMonthPicker();
@@ -965,7 +978,7 @@ async function pageEntry(q) {
   $app.querySelector(".js-reg").addEventListener("click", async () => {
     clearTimeout(timer); if (dirtyCards.size) await saveNow();
     const rows = st.vehicles.map(calc);
-    await download(buildRegister(window.docx, unit.settings, ym, rows, SRC), `Додаток_6_Реєстр_пального_${ym}.docx`);
+    await downloadRegister(unit, unit.settings, ym, rows, SRC);
     store.log("doc_register", ym, unit.id);
   });
   window.onbeforeunload = () => (dirtyCards.size ? "Є незбережені зміни" : undefined);
@@ -1417,7 +1430,7 @@ async function pageReport(q) {
         <p class="muted">* дані графи № ${lay.issTotalNo} повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.<br>
           * дані графи № ${lay.consTotalNo} повинні відповідати кількості пального в акті списання.<br>
           Підпис особи, яка склала реєстр: ${esc([S.compiler, S.compiler2, S.compiler3].filter((x) => String(x || "").trim()).join(", ") || "— (вкажіть у «Автопарк і реквізити»)")}</p>
-        <button class="btn primary js-reg">📥 Завантажити реєстр «Додаток 6» (Word)</button>` : `<p class="muted">Немає даних за цей місяць.</p>`}</div>
+        <button class="btn primary js-reg">📥 Завантажити реєстр «Додаток 6» ${regLabel(unit)}</button>` : `<p class="muted">Немає даних за цей місяць.</p>`}</div>
     <div class="panel"><h2>🧾 Акти списання пального</h2>
       <p class="muted">Окремі акти: «Талони + см/к» (талони, смарт-картки) та «АЗС» (АЗС ГУНП талони, АЗС налив)${multi ? " — і окремо на кожну МВО (підписує вся комісія та ця МВО)" : ""}.
         ${rows.sources.legacy ? "Витрата авто розноситься між ними пропорційно до виданого за місяць; якщо нічого не видано — за основним джерелом списання."
@@ -1437,7 +1450,7 @@ async function pageReport(q) {
     render();
   });
   $app.querySelector(".js-reg")?.addEventListener("click", async () => {
-    await download(buildRegister(window.docx, S, ym, rows, rows.sources), `Додаток_6_Реєстр_пального_${ym}.docx`); store.log("doc_register", ym, unit.id);
+    await downloadRegister(unit, S, ym, rows, rows.sources); store.log("doc_register", ym, unit.id);
   });
   $app.querySelector(".js-doc2")?.addEventListener("click", async () => {
     await download(buildStock(window.docx, S, ym, sr, sr.issTotalNo), stockFile(ym)); store.log("doc_stock", ym, unit.id);
@@ -1476,7 +1489,7 @@ async function pageArchive() {
     </tbody></table>` : `<p class="muted">Збережених місяців ще немає.</p>`}</div>`);
   $app.querySelectorAll(".js-doc").forEach((b) => b.addEventListener("click", async () => {
     const r = recs.find((x) => x.ym === b.dataset.ym); const k = b.dataset.k;
-    if (k === "reg") await download(buildRegister(window.docx, r.S, r.ym, r.rows, r.rows.sources), `Додаток_6_Реєстр_пального_${r.ym}.docx`);
+    if (k === "reg") await downloadRegister(unit, r.S, r.ym, r.rows, r.rows.sources);
     else if (k === "stk") await download(buildStock(window.docx, r.S, r.ym, r.stk, r.stk.issTotalNo), stockFile(r.ym));
     else { const a = r.acts[Number(k)]; await download(buildAct(window.docx, r.S, r.ym, a), actFileName(a, r.ym)); }
   }));
@@ -1489,6 +1502,7 @@ async function pageFleet() {
   const onboarding = !unit.vehicles.length;
   const s = unit.settings;
   const pog = unit.kind === "pog";
+  const cz = unit.profile === "cz";
   const f = (k, label, cls = "") => `<label class="f ${cls}">${label}<input data-k="${k}" value="${esc(s[k] ?? "")}"></label>`;
   shell(`${onboarding ? `<div class="panel" style="border-color:rgba(250,204,21,.5);background:linear-gradient(120deg,rgba(8,145,178,.25),rgba(55,48,163,.25))">
       <h2 class="display">👋 Вітаємо! ${pog ? "Додайте свій службовий автомобіль" : "Створіть автопарк свого підрозділу"}</h2>
@@ -1504,23 +1518,24 @@ async function pageFleet() {
     <div class="panel"><h2>${pog ? "🚗 Мій автомобіль" : "🚗 Автопарк підрозділу"}</h2>
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
-      <div class="tblwrap"><table class="edit" id="veh"><thead><tr><th style="min-width:200px">Марка, ДНЗ</th><th>Норма, л/100 км</th>
+      <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км</th>
         <th>Норма пробігу, км/міс</th><th>Вид пального</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
-      <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist></div>
+      <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist>
+      ${cz ? `<datalist id="czsvc">${[...new Set(["ЦЗ", "Керівництво", "УПД", "УКЗ", "УЛМТЗ", "ТЦ", "УІАП", "ВК", "ВПЗ", "УОАЗОР", "ЗК", "СОЗДМТТО", "УФЗБО", ...unit.vehicles.map((v) => v.service).filter(Boolean)])].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>` : ""}</div>
     <div class="panel"><h2>⛽ Джерела пального</h2>
       <p class="muted">Звідки підрозділ отримує пальне: кожне джерело — окрема колонка «Видано» й «Витрачено» в «Додатку 6» і окремий залишок у баку.
         Невеликим підрозділам досить стандартних джерел. Якщо пальне видають кілька МВО, різні АЗС чи постачальники — увімкніть свої джерела.</p>
       <div class="row" style="gap:18px;margin-bottom:10px">
         <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="std" ${(s.sources && s.sources.length) || (pog && !s.sources) ? "" : "checked"}> Стандартні (АЗС ГУНП талони, Талони, см/к, АЗС налив)</label>
-        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${(s.sources && s.sources.length) || (pog && !s.sources) ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>
+        <label style="display:flex;gap:8px;align-items:center"><input type="radio" name="srcmode" value="custom" ${(s.sources && s.sources.length) || (pog && !s.sources) ? "checked" : ""}> Свої джерела (кілька МВО, АЗС, постачальників)</label></div>${cz ? `<button class="btn sm sky js-czsrc" style="margin:6px 0 4px" title="Талони, т/н, налив, налив/з, см/к, Ярошенко/Кузнівенко, ОВА — як колонки реєстру ЦЗ">🏢 Джерела як у реєстрі ЦЗ</button>` : ""}
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="У картці авто біля залишку на початок з'явиться вибір джерела — витрата із залишку піде в колонку цього джерела"><input type="checkbox" class="js-spick" ${s.start_pick ? "checked" : ""}> вказувати, з якого джерела залишок на початок</label>
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="У «Додатку 6»: спершу бензинові авто й рядок «Всього», потім дизельні й «Всього», в кінці «Разом»"><input type="checkbox" class="js-byfuel" ${s.reg_by_fuel ? "checked" : ""}> «Додаток 6»: розділяти авто за видом пального (бензин / дизель) з підсумками</label>
       <label style="display:flex;gap:8px;align-items:center;margin-bottom:10px" title="Під рядком «Всього» — окремі рядки: залишок на початок, видано, витрачено й залишок на кінець за кожним видом (с/к, талони…) і МВО"><input type="checkbox" class="js-breakdown" ${s.reg_breakdown ? "checked" : ""}> «Додаток 6»: під «Всього» — розбивка залишків і руху за видом та МВО</label>
       <div class="js-srcbox">
         <div class="tblwrap"><table class="edit" id="srcs"><thead><tr><th>Вид пального</th><th>Форма</th><th>Постачальник</th><th>МВО</th>
-          <th style="min-width:220px">Назва колонки в реєстрі</th><th title="Субвенція / благодійна допомога — окремий акт списання з назвою джерела">Субвенція</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+          <th style="min-width:220px">Назва колонки в реєстрі</th>${cz ? `<th title="У який акт списання ЦЗ іде пальне з цього джерела">Акт (ЦЗ)</th>` : `<th title="Субвенція / благодійна допомога — окремий акт списання з назвою джерела">Субвенція</th>`}<th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
         <button class="btn sm js-addsrc" style="margin-top:10px">➕ Додати джерело</button>
         <p class="muted" style="margin-top:8px">Порожній «Вид пального» — джерело для всіх авто. Порожня «Назва колонки» складається сама: «А-95 с/к UKRNAFTA Мосійченко».
           «Субвенція» — пальне з цього джерела списується окремим актом із назвою джерела (для BVS і назв зі словами «субвенція», «благо» галочка ставиться сама).
@@ -1581,7 +1596,8 @@ async function pageFleet() {
   const vbody = $app.querySelector("#veh tbody"), mbody = $app.querySelector("#mem tbody");
   const addVeh = (v) => {
     const tr = document.createElement("tr"); tr.dataset.id = v.id || C.newId();
-    tr.innerHTML = `<td><input data-f="name" value="${esc(v.name)}" placeholder="Марка модель номер"></td>
+    tr.innerHTML = `${cz ? `<td><input data-f="service" list="czsvc" value="${esc(v.service || "")}" placeholder="ЦЗ" style="width:110px"></td>` : ""}<td><input data-f="name" value="${esc(v.name)}" placeholder="${cz ? "Марка" : "Марка модель номер"}"></td>
+      ${cz ? `<td><input data-f="plate" value="${esc(v.plate || "")}" placeholder="1714" style="width:110px"></td>` : ""}
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
       <td><input data-f="month_norm_km" type="number" step="10" min="0" value="${v.month_norm_km ?? 2640}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
@@ -1634,14 +1650,17 @@ async function pageFleet() {
       <td><input data-f="supplier" list="suppliers" value="${esc(x.supplier)}" placeholder="необов'язково" style="width:120px"></td>
       <td><input data-f="mvo" value="${esc(x.mvo)}" placeholder="з картки авто" style="width:140px"></td>
       <td><input data-f="label" value="${esc(C.LEGACY_SOURCES.some((l) => l.id === x.id && l.label === x.label) ? "" : x.label)}" placeholder="${esc(C.sourceTitle({ ...x, label: "" }))}"></td>
-      <td class="c"><input data-f="subv" type="checkbox" ${C.isSubv(x) ? "checked" : ""} title="Окремий акт списання (субвенція / благо)"></td>
+      ${cz ? `<td><select data-f="cz_act">${Object.entries(C.CZ_ACTS).map(([k, t]) => `<option value="${k}" ${C.czActOf(x) === k ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></td>`
+        : `<td class="c"><input data-f="subv" type="checkbox" ${C.isSubv(x) ? "checked" : ""} title="Окремий акт списання (субвенція / благо)"></td>`}
       <td class="c"><input data-f="active" type="checkbox" ${x.active === false ? "" : "checked"}></td>
       <td><button class="btn sm danger js-del" title="Прибрати джерело">🗑</button></td>`;
     const sv = tr.querySelector("[data-f=subv]");
-    sv.addEventListener("change", () => { tr.dataset.svt = "1"; });
-    tr.querySelectorAll("[data-f=supplier],[data-f=label]").forEach((i) => i.addEventListener("input", () => {
-      if (!tr.dataset.svt && x.subv === undefined) sv.checked = C.autoSubv({ supplier: tr.querySelector("[data-f=supplier]").value, label: tr.querySelector("[data-f=label]").value });
-    }));
+    if (sv) {
+      sv.addEventListener("change", () => { tr.dataset.svt = "1"; });
+      tr.querySelectorAll("[data-f=supplier],[data-f=label]").forEach((i) => i.addEventListener("input", () => {
+        if (!tr.dataset.svt && x.subv === undefined) sv.checked = C.autoSubv({ supplier: tr.querySelector("[data-f=supplier]").value, label: tr.querySelector("[data-f=label]").value });
+      }));
+    }
     tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Прибрати джерело? Дані минулих місяців збережуться.")) { tr.remove(); refreshSrcSelects(); } });
     tr.querySelectorAll("input,select").forEach((i) => i.addEventListener("input", () => {
       tr.querySelector("[data-f=label]").placeholder = C.sourceTitle({ ...readSrc(tr), label: "" }); refreshSrcSelects(); }));
@@ -1665,6 +1684,15 @@ async function pageFleet() {
   const toggleBox = () => { $app.querySelector(".js-srcbox").style.display = custom() ? "" : "none"; $app.querySelector("#veh").classList.toggle("custom", custom()); refreshSrcSelects(); };
   $app.querySelectorAll("input[name=srcmode]").forEach((r) => r.addEventListener("change", toggleBox));
   $app.querySelector(".js-addsrc").addEventListener("click", () => { addSrc({ form: "с/к" }); refreshSrcSelects(); });
+  $app.querySelector(".js-czsrc")?.addEventListener("click", () => {
+    if (sbody.querySelectorAll("tr").length && !confirm("Замінити джерела на набір реєстру ЦЗ (талони, т/н, налив, налив/з, см/к, Ярошенко/Кузнівенко, ОВА)? МВО допишіть самі.")) return;
+    const cm = $app.querySelector("input[name=srcmode][value=custom]"); if (cm && !cm.checked) { cm.checked = true; cm.dispatchEvent(new Event("change", { bubbles: true })); }
+    sbody.innerHTML = "";
+    for (const [form, label, mvo, a] of [["талони", "талони", "", "ts"], ["талони", "т/н", "", "ts"], ["АЗС налив", "налив", "", "nal"], ["АЗС налив", "налив/з", "", "nalz"],
+      ["с/к", "см/к", "", "ts"], ["с/к", "Ярошенко/Кузнівенко", "Ярошенко", "ts"], ["с/к", "Ярошенко/Кузнівенко", "Кузнівенко", "ts"], ["Налив ОВА", "ОВА", "", "ova"]])
+      addSrc(C.normalizeSource({ form, label, mvo, cz_act: a, fuel: "" }));
+    refreshSrcSelects();
+  });
 
   unit.vehicles.forEach(addVeh); if (!unit.vehicles.length) addVeh({});
   if (pog && vbody.querySelectorAll("tr").length >= 1) $app.querySelector(".js-addveh").style.display = "none";   // ПОГ — один автомобіль
@@ -1809,7 +1837,9 @@ async function pageAdmin(sub, q) {
         <td>${esc(u.email)}</td>
         <td>${pogs.some((x) => x.id === u.unit_id) ? `<span class="pill info">👮 ПОГ</span> ${esc(unitName(u.unit_id))}<br><span class="muted">переведення — на вкладці «ПОГ»</span>`
           : `<div class="row" style="gap:6px"><select class="js-unitsel">${unitOptions(u.unit_id)}</select>
-          <select class="js-role">${Object.entries(ROLE_UA).map(([k, l]) => `<option value="${k}" ${u.role === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <select class="js-role">${[...Object.entries(ROLE_UA), ["dispunit", "диспетчер + кабінет підрозділу"]].map(([k, l]) => {
+            const on = k === "dispunit" ? u.role === "dispatcher" && !!u.unit_id : u.role === k && !(k === "dispatcher" && u.unit_id);
+            return `<option value="${k}" ${on ? "selected" : ""}>${l}</option>`; }).join("")}</select>
           <button class="btn sm js-usave">Зберегти</button></div>`}</td>
         <td>${u.status === "active" ? `<span class="pill ok">активний</span>` : u.status === "blocked" ? `<span class="pill err">заблокований</span>` : `<span class="pill mut">${esc(u.status)}</span>`}</td>
         <td class="muted">${esc(u.last_login || "—")}</td>
@@ -1832,6 +1862,7 @@ async function pageAdmin(sub, q) {
         <td class="num">${usersIn(u.id)}</td><td class="num">${u.n_vehicles ?? 0}</td>
         <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
         <td><button class="btn sm js-open">Відкрити як підрозділ →</button> ${usersIn(u.id) ? "" : `<button class="btn sm danger js-unitdel">🗑 Видалити</button>`}
+          <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-left:8px" title="Особливий режим ЦЗ: служби авто, «передано з ТЗ на ТЗ», реєстр у Excel, свої акти"><input type="checkbox" class="js-cz" ${u.profile === "cz" ? "checked" : ""}> режим ЦЗ</label>
           ${u.crypto && state.adminPriv ? `<button class="btn sm js-rkshow">🔑 Новий ключ підрозділу</button>
           <form class="js-rk row" hidden autocomplete="off" style="margin-top:8px"><input name="n1" type="password" placeholder="новий ключ (від 10 символів)" required minlength="10">
             <input name="n2" type="password" placeholder="повторіть" required minlength="10"><button class="btn sm primary">Встановити</button></form>` : ""}</td></tr>`).join("")}
@@ -1879,9 +1910,27 @@ async function pageAdmin(sub, q) {
       if (!m) return { u, n: unit.vehicles.filter((v) => v.active).length, done: 0, err: 0, t: null, exp };
       const rows = view.rows;
       const sts = rows.map((r) => C.statusOf(r, r.entry || {}));
-      return { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows),
+      const res = { u, n: rows.length, done: sts.filter((s) => s === "ok" || s === "warn").length, err: sts.filter((s) => s === "err").length, t: C.totals(rows),
         updated: m.updated_at, exp, closed: !!view.closed };
+      // режим ЦЗ: авто служб апарату (УПД, УКЗ, Керівництво…) — окремими умовними рядками за службою
+      if (u.profile === "cz") {
+        const svcOf = (v) => String((v && v.service) || "").trim() || "ЦЗ";
+        const groups = new Map();
+        rows.forEach((r, i) => { const k = svcOf(r.vehicle); if (!groups.has(k)) groups.set(k, []); groups.get(k).push([r, sts[i]]); });
+        if (groups.size > 1 || !groups.has("ЦЗ")) {
+          const own = groups.get("ЦЗ") || [];
+          const pack = (arr) => ({ n: arr.length, done: arr.filter(([, x]) => x === "ok" || x === "warn").length, err: arr.filter(([, x]) => x === "err").length, t: C.totals(arr.map(([r]) => r)) });
+          const ids = (arr) => new Set(arr.map(([r]) => r.vehicle.id));
+          const expOf = (arr) => { const k = ids(arr); return exp ? { ...exp, vehicles: exp.vehicles.filter((v) => k.has(v.id)) } : exp; };
+          const out = [{ ...res, ...pack(own), exp: expOf(own) }];
+          for (const [k, arr] of [...groups.entries()].filter(([k]) => k !== "ЦЗ").sort((a, b) => a[0].localeCompare(b[0], "uk")))
+            out.push({ u: { id: `${u.id}:${k}`, name: k, kind: "svc" }, svcOf: u.name, ...pack(arr), updated: m.updated_at, exp: expOf(arr) && { ...expOf(arr), unit: k }, closed: !!view.closed });
+          return out;
+        }
+      }
+      return res;
     }));
+    rowsSum = rowsSum.flat();
     // ПОГ — у залік підрозділу, де проходять службу (і окремим списком нижче)
     const allRows = rowsSum;
     const byId = Object.fromEntries(allRows.map((r) => [r.u.id, r]));
@@ -1903,7 +1952,7 @@ async function pageAdmin(sub, q) {
       <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів${pogRows.length ? ` (з урахуванням ${pogRows.length} ПОГ)` : ""} ·
         видано <b>${C.fmtC(sum("issuedC"))} л</b> · витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок у баках <b>${C.fmtC(sum("endC"))} л</b></p>
       <table class="list"><thead><tr><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
-      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
+      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.svcOf ? ` <span class="muted" title="Умовний підрозділ: авто служби, які веде ${esc(r.svcOf)}">· веде ${esc(r.svcOf)}</span>` : ""}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
         : r.done ? `<span class="pill warn">${r.done}/${r.n}</span>` : `<span class="pill err">0/${r.n}</span>`}${r.err ? ` <span class="pill err">помилок: ${r.err}</span>` : ""}</td>
         <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
         <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table>
@@ -1923,6 +1972,11 @@ async function pageAdmin(sub, q) {
   const act = async (fn, okMsg) => { busy(true); try { await fn(); if (okMsg) flash("ok", okMsg); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); render(); } };
 
   $app.querySelectorAll(".js-unitsel, .js-pparent").forEach(searchSelect);
+  $app.querySelectorAll(".js-cz").forEach((c) => c.addEventListener("change", () => {
+    const id = c.closest("[data-id]").dataset.id;
+    act(async () => { await store.updateUnit(id, { profile: c.checked ? "cz" : "" }); store.log("unit_profile", `${unitName(id)}: ${c.checked ? "режим ЦЗ" : "звичайний"}`); },
+      c.checked ? "Увімкнено режим ЦЗ." : "Режим ЦЗ вимкнено.");
+  }));
   const uf = $app.querySelector(".js-ufind");
   if (uf) uf.addEventListener("input", () => {
     const nm = (t) => String(t).toLowerCase().replace(/['’`ʼ]/g, "");
@@ -1974,6 +2028,8 @@ async function pageAdmin(sub, q) {
   $app.querySelectorAll(".js-usave").forEach((b) => b.addEventListener("click", () => {
     const tr = b.closest("[data-uid]"); const uid = tr.dataset.uid; const role = tr.querySelector(".js-role").value;
     if (uid === state.authUser.uid && role !== "admin") { flash("err", "Не можна зняти роль адміністратора із себе."); return render(); }
+    // «диспетчер + кабінет підрозділу» — роль диспетчера і доступ до кабінету вибраного підрозділу
+    if (role === "dispunit") return act(() => store.updateUser(uid, { unit_id: tr.querySelector(".js-unitsel").value, role: "dispatcher" }), "Користувача оновлено: диспетчер + кабінет підрозділу.");
     act(() => store.updateUser(uid, { unit_id: role === "dispatcher" || role === "pogsup" ? "" : tr.querySelector(".js-unitsel").value, role }), "Користувача оновлено.");
   }));
   // пошук і фільтри користувачів (запам'ятовуються на час вкладки)
@@ -2130,6 +2186,7 @@ async function render() {
   busy(true);
   try {
     const [p1, p2] = path.split("/");
+    if (dispUnit() && p1 !== "password") state.dmode = p1 === "disp" ? "disp" : "unit";
     if (p1 === "password") return pagePassword();
     if (isDisp() || (isAdmin() && p1 === "disp")) return await pageDisp(q);
     if (isPogSup()) return await pagePogSup(q);
@@ -2161,7 +2218,7 @@ async function onAuthChanged(user) {
         setUserStats(await store.listUsers().catch(() => []));
         const ctx = sessionStorage.getItem("unitCtx");
         state.unitId = ctx && state.units.some((u) => u.id === ctx) ? ctx : state.me.unit_id;
-      } else if (state.me.role === "dispatcher" || state.me.role === "pogsup") {
+      } else if ((state.me.role === "dispatcher" && !state.me.unit_id) || state.me.role === "pogsup") {
         state.unitId = null; state.units = [];
       } else {
         state.unitId = state.me.unit_id;
@@ -2179,8 +2236,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261119c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261119c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261120a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261120a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

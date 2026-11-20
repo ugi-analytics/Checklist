@@ -1,0 +1,152 @@
+rules_version = '2';
+// Правила доступу порталу «Списання пального для МВО» (версія з шифруванням і двофакторним входом).
+// • Без входу ніхто не бачить жодних даних (крім позначки, що портал налаштовано).
+// • До даних допускається лише підтверджений користувач, який увійшов ІЗ КОДОМ ІЗ ТЕЛЕФОНА (TOTP).
+// • Новий користувач може створити лише СВІЙ профіль зі статусом «очікує» — без підрозділу і без ролі адміністратора.
+// • Підтверджений користувач бачить і змінює лише свій підрозділ; дані підрозділу й місяців приймаються тільки зашифрованими.
+// • Адміністратор бачить усе, підтверджує заявки, керує підрозділами й користувачами.
+// • Диспетчер бачить лише зашифрований довідник авто всіх підрозділів (fleet/*) — не дані за місяці і не реквізити; змінювати нічого не може.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function setupPath() { return /databases/$(database)/documents/meta/setup; }
+    function me() { return get(userPath(request.auth.uid)).data; }
+    function hasProfile() { return signedIn() && exists(userPath(request.auth.uid)); }
+    // вхід виконано з другим фактором (код із застосунку-автентифікатора)
+    function mfa() { return signedIn() && request.auth.token.firebase.get('sign_in_second_factor', '') == 'totp'; }
+    function isActive() { return mfa() && hasProfile() && me().status == 'active'; }
+    function isAdmin() { return isActive() && me().role == 'admin'; }
+    // диспетчер не має доступу до даних підрозділів — лише до довідника авто (fleet/*)
+    // диспетчер теж може мати кабінет підрозділу (unit_id) — «диспетчер + кабінет підрозділу»
+    function inUnit(unitId) { return isActive() && me().role in ['user', 'admin', 'dispatcher'] && me().unit_id == unitId; }
+    // керівництво ПОГ: лише перегляд кабінетів ПОГ (units з kind == 'pog')
+    function isPogSup() { return isActive() && me().role == 'pogsup'; }
+    function isPogUnit(unitId) { return get(/databases/$(database)/documents/units/$(unitId)).data.get('kind', '') == 'pog'; }
+    function isDisp() { return isActive() && me().role == 'dispatcher'; }
+    // перше налаштування: адміністратор (з підтвердженим e-mail) створюється разом із позначкою meta/setup в одній транзакції
+    function bootstrapping() {
+      return signedIn() && !exists(setupPath()) && existsAfter(setupPath())
+        && request.auth.token.email == 'sbavinov1993@gmail.com'
+        && request.auth.token.email_verified == true
+        && getAfter(userPath(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /meta/setup {
+      allow read: if true;
+      allow create: if bootstrapping();
+      allow update, delete: if false;
+    }
+    // відкритий ключ адміністратора: ним підрозділи загортають запасну копію свого ключа
+    match /meta/admin_pub {
+      allow read: if isActive();
+      // створює адміністратор (під час першого запуску або пізніше, якщо портал налаштовано без шифрування); змінити не можна
+      allow create: if bootstrapping() || isAdmin();
+      allow update, delete: if false;
+    }
+    // закритий ключ адміністратора (зашифрований ключем адміністратора) — лише для адміністратора
+    match /meta/admin_priv {
+      allow read, update: if isAdmin();
+      allow create: if bootstrapping() || isAdmin();
+      allow delete: if false;
+    }
+
+    // ключ диспетчера: відкритий — для всіх підтверджених (ним підрозділи шифрують довідник авто),
+    // закритий (загорнутий фразою диспетчера) — лише диспетчеру; створює перший диспетчер, скидає адміністратор
+    match /meta/pogsup_pub {
+      allow read: if isActive();
+      allow create: if isPogSup() || isAdmin();
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+    match /meta/pogsup_priv {
+      allow read: if isPogSup();
+      allow create: if isPogSup() || isAdmin();
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+    match /meta/disp_pub {
+      allow read: if isActive();
+      allow create: if isDisp() || isAdmin();
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+    match /meta/disp_priv {
+      allow read: if isDisp();
+      allow create: if isDisp() || isAdmin();
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+    // довідник авто підрозділу для диспетчера (лише зашифрований: назва авто, норма, пальне — без даних за місяці)
+    match /fleet/{unitId} {
+      allow read: if isDisp() || isAdmin() || inUnit(unitId);
+      allow create, update: if (isAdmin() || inUnit(unitId))
+        && request.resource.data.keys().hasOnly(['enc', 'k', 'kid', 'h', 'unit_name', 'n', 'updated_at']);
+      allow delete: if isAdmin();
+    }
+
+    // ПОГ: відкритий ключ — його читають працівники батьківського підрозділу (той, що призначив адміністратор)
+    function pogParent(pogId) { return get(/databases/$(database)/documents/units/$(pogId)).data.get('parent_id', ''); }
+    match /pogkeys/{pogId} {
+      allow read: if isAdmin() || inUnit(pogId)
+        || (isActive() && me().role in ['user', 'admin'] && resource.data.parent_id == me().unit_id);
+      allow create, update: if (isAdmin() || inUnit(pogId))
+        && request.resource.data.keys().hasOnly(['parent_id', 'spki', 'kid', 'updated_at'])
+        && request.resource.data.parent_id == pogParent(pogId);
+      allow delete: if isAdmin();
+    }
+    // копія реквізитів і комісії підрозділу для ПОГ (зашифрована ключем ПОГ): пише підрозділ ПОГ або адміністратор, читає ПОГ
+    match /pogseed/{pogId} {
+      allow read: if isAdmin() || inUnit(pogId);
+      allow create, update: if request.resource.data.keys().hasOnly(['enc', 'k', 'kid', 'h', 'parent_id', 'updated_at'])
+        && request.resource.data.parent_id == pogParent(pogId)
+        && (isAdmin() || (isActive() && me().role in ['user', 'admin'] && me().unit_id == pogParent(pogId)));
+      allow delete: if isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin()
+        || (isPogSup() && (resource.data.get('pog', false) == true || resource.data.get('pog_req', false) == true)));
+      allow create: if signedIn() && request.auth.uid == uid && (
+        (request.resource.data.status == 'pending' && request.resource.data.role == 'user'
+          && !('unit_id' in request.resource.data))
+        || (bootstrapping() && request.resource.data.status == 'active'));
+      // сам користувач може оновити лише час входу, позначку «на сайті» та контакти; роль/статус/підрозділ — тільки адміністратор
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last_login', 'last_seen', 'full_name', 'position', 'phone']));
+      allow delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    match /units/{unitId} {
+      allow read: if isAdmin() || inUnit(unitId) || (isPogSup() && resource.data.get('kind', '') == 'pog');
+      allow create: if isAdmin() || bootstrapping();
+      allow update: if isAdmin()
+        || (inUnit(unitId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['enc', 'crypto', 'n_vehicles', 'settings', 'vehicles', 'seed_req', 'pogkey', 'supwrap'])
+            // pogkey — пара ключів ПОГ (закритий — лише зашифрований ключем даних ПОГ)
+            // підрозділ не може записати відкритий автопарк чи реквізити — лише зашифрований блок enc
+            && !('vehicles' in request.resource.data) && !('settings' in request.resource.data)
+            // запасну копію ключа для адміністратора, раз створену, змінити не можна
+            && (!('crypto' in resource.data) || request.resource.data.crypto.admin == resource.data.crypto.admin));
+      allow delete: if isAdmin();
+
+      // місяць: лише зашифровані дані + позначка «закрито» (без вмісту); закритий місяць змінює лише адміністратор
+      match /months/{ym} {
+        allow read: if isAdmin() || inUnit(unitId) || (isPogSup() && isPogUnit(unitId));
+        allow create: if (isAdmin() || inUnit(unitId))
+          && request.resource.data.keys().hasOnly(['enc', 'updated_at', 'updated_by', 'closed']);
+        allow update: if request.resource.data.keys().hasOnly(['enc', 'updated_at', 'updated_by', 'closed'])
+          && (isAdmin() || (inUnit(unitId) && resource.data.get('closed', false) != true));
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /audit/{id} {
+      allow create: if isActive() && request.resource.data.uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}

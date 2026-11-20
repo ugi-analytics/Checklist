@@ -35,6 +35,15 @@ export function sourceTitle(src) {
   if (src.label && String(src.label).trim()) return String(src.label).trim();
   return [src.fuel, src.form, src.supplier, src.mvo].map((x) => String(x || "").trim()).filter(Boolean).join(" ") || "Джерело";
 }
+/** Режим ЦЗ (лише для кабінету з profile = "cz"): чотири види актів, у кожному — окремо за МВО. */
+export const CZ_ACTS = { ts: "С/к, талони", nal: "Налив", nalz: "Налив/з (загальний фонд)", ova: "ОВА" };
+export const czActOf = (src) => {
+  if (src.cz_act && CZ_ACTS[src.cz_act]) return src.cz_act;
+  if (src.form === "Налив ОВА" || /ова/i.test(`${src.label || ""} ${src.supplier || ""}`)) return "ova";
+  if (/налив\s*\/\s*з|н\/з|загальн/i.test(`${src.label || ""} ${src.supplier || ""}`)) return "nalz";
+  if (src.form === "АЗС налив") return "nal";
+  return "ts";
+};
 /** Субвенція / благодійна допомога: окремий акт із назвою джерела. Без явної галочки — BVS або «субвенц…», «благо…». */
 export const autoSubv = (src) => /^bvs$/i.test(String(src.supplier || "").trim()) || /субвенц|благо/i.test(`${src.supplier || ""} ${src.label || ""}`);
 export const isSubv = (src) => (src.subv === undefined || src.subv === null ? autoSubv(src) : !!src.subv);
@@ -43,7 +52,7 @@ const subvGroup = (src) => "sv:" + sourceTitle(src);
 export function sourceFor(src, v = {}, settings = {}) {
   const custom = Array.isArray(settings.sources) && settings.sources.length;   // свої джерела: МВО — лише з джерела
   return { fuel: src.fuel || v.fuel || "", supplier: src.supplier || "",
-    mvo: src.mvo || (custom ? "" : v.mvo_text || settings.compiler) || "", form: src.form || "", group: custom && isSubv(src) ? subvGroup(src) : FORM_GROUP[src.form] || "tsmk" };
+    mvo: src.mvo || (custom ? "" : v.mvo_text || settings.compiler) || "", form: src.form || "", group: settings.profile === "cz" ? "cz:" + czActOf(src) : custom && isSubv(src) ? subvGroup(src) : FORM_GROUP[src.form] || "tsmk" };
 }
 /** Підпис джерела для «Вид пального на залишку»: «А-95 с/к UKRNAFTA Мосійченко». */
 export function sourceLabelFor(src, v = {}, settings = {}) {
@@ -349,6 +358,14 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   }
   for (const s of list) r.startC += r.startBy[s.id];
   for (const k of r.keep) r.startC += k.c;
+  // «передано з ТЗ на ТЗ» (режим ЦЗ): додається до виданого (у т.ч. від'ємне — передано з цього авто);
+  // у розподілі витрати — як частина залишку (на джерело, де залишок, або на основне)
+  r.xferC = toC(e.xfer) || 0;
+  if (r.xferC) {
+    const tgt = [...list].sort((a, b) => r.startBy[b.id] - r.startBy[a.id])[0] || anchor;
+    if (tgt) { r.startBy[tgt.id] += r.xferC; r.xferTo = tgt.id; } else r.keep.push({ label: "передано з ТЗ на ТЗ", c: r.xferC, left: r.xferC, mvo: "", own: true });
+    r.issuedC += r.xferC;
+  }
   r.empty = [e.odo_start, e.odo_end, e.consumed_manual].every((x) => isBlank(x) || Number(x) === 0) && r.startC === 0 && r.issuedC === 0;
   // --- пробіг і витрата за нормою
   const s0 = e.odo_start, s1 = e.odo_end;
@@ -643,6 +660,7 @@ export function cleanEntry(raw = {}) {
   out.consumed_manual = num2(raw.consumed_manual);
   if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
   if (raw.start_src) out.start_src = String(raw.start_src);
+  if (!isBlank(raw.xfer)) { const x = Number(String(raw.xfer).replace(",", ".").replace(/\s/g, "")); if (isFinite(x) && x !== 0) out.xfer = Math.round(x * 100) / 100; }      // «передано з ТЗ на ТЗ» (режим ЦЗ), може бути від'ємним
   for (const t of ["start_text", "end_text"]) { const x = String(raw[t] || "").trim().slice(0, 300); if (x) out[t] = x; }
   for (const m of ["start", "iss", "cons", "start_mvo"]) {
     out[m] = {};
@@ -717,11 +735,11 @@ export function actList(rows, settings = {}) {
     const g = sourceFor(s, r.vehicle, settings).group;
     if (g.startsWith("sv:") && !sv.has(g)) sv.set(g, sourceTitle(s));
   }
-  const groups = [...Object.keys(ACT_GROUPS).map((g) => [g, ACT_GROUPS[g].title, ACT_GROUPS[g].file]),
+  const groups = settings.profile === "cz" ? Object.entries(CZ_ACTS).map(([k, t]) => ["cz:" + k, t, t.replace(/[^\p{L}\d]+/gu, "_")]) : [...Object.keys(ACT_GROUPS).map((g) => [g, ACT_GROUPS[g].title, ACT_GROUPS[g].file]),
     ...[...sv.entries()].map(([g, t]) => [g, `Субвенція: ${t}`, "Субвенція_" + t.replace(/[^\p{L}\d]+/gu, "_")])];
   for (const [g, title, file] of groups) {
     const lines = actGroups(rows, g, settings);
-    if (g.startsWith("sv:") && !lines.length) continue;
+    if ((g.startsWith("sv:") || g.startsWith("cz:")) && !lines.length) continue;
     const mvos = [...new Set(lines.map((l) => String(l.mvo || "").trim()))];
     if (mvos.length <= 1) { out.push({ group: g, mvo: mvos[0] || null, mvos: mvos.filter(Boolean), lines, title, file, subv: g.startsWith("sv:") }); continue; }
     for (const mv of mvos) out.push({ group: g, mvo: mv, mvos: [mv].filter(Boolean), lines: lines.filter((l) => String(l.mvo || "").trim() === mv),
