@@ -1,7 +1,7 @@
 // Режим ЦЗ: реєстр (Додаток 6) у Excel — як у реєстрі ЦЗ (служба, марка, номер, джерела за назвами колонок,
 // «передано з ТЗ на ТЗ», формули «всього» і залишку, порожня «Примітка»).
-import * as C from "./core.js?v=20261120c";
-import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261120c";
+import * as C from "./core.js?v=20261120d";
+import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261120d";
 
 const LOC = ["січні", "лютому", "березні", "квітні", "травні", "червні", "липні", "серпні", "вересні", "жовтні", "листопаді", "грудні"];
 const SHORT = { "талони": "т", "т/н": "т/н", "налив": "н", "налив/з": "н/з", "см/к": "см/к", "ова": "ова" };
@@ -98,15 +98,15 @@ export function buildCzRegister(s, ym, rows, sources) {
 
   // ширини — як у реєстрі ЦЗ (друкується на A4 альбомно)
   // ширини й висоти — з реєстру ЦЗ (друкується на A4 альбомно, масштаб ~42 %); рядки авто — автовисота (довгі назви переносяться)
-  const W_I = [13, 14.7, 11.2, 18.8, 11, 14.3], W_C = [12.4, 12, 12.8, 11.3, 12.3, 10.1];
-  const widths = [7.1, 15.4, 24.3, 16.7, 11.7, 24.9, 14, ...cols.map((_, i) => W_I[i] || 12.5), 11.4, 12.7, ...cols.map((_, i) => W_C[i] || 12), 13.6, 15.7, 16.4];
-  const heights = { 0: 23, 1: 25.8, 2: 25.8, 3: 25.8, 4: 25.8, [H]: 204.6, [H + 1]: 54, [H + 2]: 23.4 };
-  // висота рядка авто: скільки рядків займе найдовший перенос (шрифт 18 жирний ≈ 1,85 одиниці ширини на символ)
-  const lines = (t, w) => String(t || "").split(/\n/).reduce((a, part) => a + Math.max(1, Math.ceil(part.length / Math.max(1, Math.floor(w / 1.85)))), 0);
+  // ширини під A4 альбомно (≈ 160 одиниць ширини → друк майже в натуральну величину, шрифт 10–11)
+  const widths = [4.5, 10.5, 15, 9, 7.5, 7.5, 6.5, ...cols.map(() => 6.5), 6.8, 7, ...cols.map(() => 6.5), 7.5, 7.5, 9];
+  const heights = { 0: 18, 1: 12, 2: 18, 3: 12, 4: 20, [H]: 30, [H + 1]: 54, [H + 2]: 14 };
+  // висота рядка авто: скільки рядків займе найдовший перенос (шрифт 11 жирний ≈ 1,15 одиниці ширини на символ)
+  const lines = (t, w) => String(t || "").split(/\n/).reduce((a, part) => a + Math.max(1, Math.ceil(part.length / Math.max(1, Math.floor(w / 1.15)))), 0);
   rows.forEach((row, i) => {
     const k = r0 + i, v = row.vehicle;
     const n = Math.max(lines(v.service || "ЦЗ", widths[1]), lines(nameOf(v), widths[2]), lines(czForm(row, "start"), widths[6]), lines(czForm(row, "end"), widths[cE + 1]));
-    heights[k] = Math.max(23.4, n * 22.8);
+    heights[k] = Math.max(16, n * 14.5);
   });
   return buildSheet({ name: "Реєстр", cells, merges, widths, landscape: true, repeatRows: [H, H + 2], heights, freeze: [4, H + 3] });
 }

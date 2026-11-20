@@ -32,7 +32,8 @@ export const ref = (c, r) => col(c) + (r + 1);
 
 // стилі: шрифт Times New Roman; індекси використовуються в cell.s
 // розміри — як у реєстрі ЦЗ, який друкується на A4 альбомно (масштаб «вмістити по ширині»)
-const FONTS = [["18", true, false], ["20", true, false], ["14", false, true], ["16", true, false], ["18", true, false], ["18", true, false]];
+// розміри шрифту під друк A4 альбомно майже без зменшення (масштаб «по ширині» ≈ 85–100 %)
+const FONTS = [["11", true, false], ["13", true, false], ["8", false, true], ["10", true, false], ["11", true, false], ["12", true, false]];
 //         [font, border, h-align, v-align, wrap]
 export const ST = { def: 0, title: 1, cap: 2, head: 3, txt: 4, num: 5, ctr: 6, totN: 7, totT: 8, plain: 9, num2: 10, sign: 11, titleL: 12, num1: 13, totN2: 14 };
 //         [font, border, h-align, v-align, wrap, numFmtId]   164 = «0.0#» (залишок на початок), 2 = «0.00» (витрачено, залишок)
@@ -72,7 +73,7 @@ export function buildSheet(sheet) {
   const merges = (sheet.merges || []).length ? `<mergeCells count="${sheet.merges.length}">${sheet.merges.map((m) => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : "";
   const ws = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="60">${sheet.freeze ? `<pane xSplit="${sheet.freeze[0]}" ySplit="${sheet.freeze[1]}" topLeftCell="${ref(sheet.freeze[0], sheet.freeze[1])}" activePane="bottomRight" state="frozen"/>` : ""}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="23.4"/>
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="100">${sheet.freeze ? `<pane xSplit="${sheet.freeze[0]}" ySplit="${sheet.freeze[1]}" topLeftCell="${ref(sheet.freeze[0], sheet.freeze[1])}" activePane="bottomRight" state="frozen"/>` : ""}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>
 ${cols ? `<cols>${cols}</cols>` : ""}<sheetData>${rowXml}</sheetData>${merges}
 <printOptions horizontalCentered="1"/><pageMargins left="0.236" right="0.236" top="0.748" bottom="0.748" header="0.315" footer="0.315"/>
 <pageSetup paperSize="9" orientation="${sheet.landscape ? "landscape" : "portrait"}" fitToWidth="1" fitToHeight="0"/></worksheet>`;
