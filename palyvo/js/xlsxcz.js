@@ -31,11 +31,13 @@ export const col = (n) => { let s = ""; n++; while (n) { const m = (n - 1) % 26;
 export const ref = (c, r) => col(c) + (r + 1);
 
 // стилі: шрифт Times New Roman; індекси використовуються в cell.s
-const FONTS = [["11", false, false], ["14", true, false], ["9", false, true], ["10", true, false], ["11", true, false], ["12", false, false]];
+// розміри — як у реєстрі ЦЗ, який друкується на A4 альбомно (масштаб «вмістити по ширині»)
+const FONTS = [["18", true, false], ["20", true, false], ["14", false, true], ["16", true, false], ["18", true, false], ["18", true, false]];
 //         [font, border, h-align, v-align, wrap]
-export const ST = { def: 0, title: 1, cap: 2, head: 3, txt: 4, num: 5, ctr: 6, totN: 7, totT: 8, plain: 9, num2: 10, sign: 11 };
-const XF = [[0, 0, "", "", 0], [1, 0, "left", "center", 0], [2, 0, "center", "top", 0], [3, 1, "center", "center", 1], [0, 1, "left", "center", 1],
-  [0, 1, "right", "center", 0], [0, 1, "center", "center", 1], [4, 1, "right", "center", 0], [4, 1, "left", "center", 0], [0, 0, "left", "top", 1], [0, 1, "right", "center", 0], [5, 0, "left", "center", 0]];
+export const ST = { def: 0, title: 1, cap: 2, head: 3, txt: 4, num: 5, ctr: 6, totN: 7, totT: 8, plain: 9, num2: 10, sign: 11, titleL: 12 };
+const XF = [[0, 0, "", "", 0], [1, 0, "center", "center", 0], [2, 0, "center", "top", 0], [3, 1, "center", "center", 1], [0, 1, "center", "center", 1],
+  [0, 1, "center", "center", 0], [0, 1, "center", "center", 1], [4, 1, "center", "center", 0], [4, 1, "center", "center", 0], [0, 0, "left", "top", 1], [0, 1, "center", "center", 0],
+  [5, 0, "left", "center", 0], [1, 0, "left", "center", 0]];
 function styles() {
   const fonts = FONTS.map(([sz, b, i]) => `<font>${b ? "<b/>" : ""}${i ? "<i/>" : ""}<sz val="${sz}"/><name val="Times New Roman"/><family val="1"/><charset val="204"/></font>`).join("");
   const xfs = XF.map(([f, b, h, v, w]) => `<xf numFmtId="0" fontId="${f}" fillId="0" borderId="${b}" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment${h ? ` horizontal="${h}"` : ""}${v ? ` vertical="${v}"` : ""}${w ? ` wrapText="1"` : ""}/></xf>`).join("");
@@ -69,9 +71,9 @@ export function buildSheet(sheet) {
   const merges = (sheet.merges || []).length ? `<mergeCells count="${sheet.merges.length}">${sheet.merges.map((m) => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : "";
   const ws = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="80"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="60">${sheet.freeze ? `<pane xSplit="${sheet.freeze[0]}" ySplit="${sheet.freeze[1]}" topLeftCell="${ref(sheet.freeze[0], sheet.freeze[1])}" activePane="bottomRight" state="frozen"/>` : ""}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="23.4" customHeight="1"/>
 ${cols ? `<cols>${cols}</cols>` : ""}<sheetData>${rowXml}</sheetData>${merges}
-<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
+<printOptions horizontalCentered="1"/><pageMargins left="0.236" right="0.236" top="0.748" bottom="0.748" header="0.315" footer="0.315"/>
 <pageSetup paperSize="9" orientation="${sheet.landscape ? "landscape" : "portrait"}" fitToWidth="1" fitToHeight="0"/></worksheet>`;
   const name = x(sheet.name || "Лист1");
   const pt = sheet.repeatRows ? `<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">'${name}'!$${sheet.repeatRows[0] + 1}:$${sheet.repeatRows[1] + 1}</definedName></definedNames>` : "";

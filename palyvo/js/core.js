@@ -431,7 +431,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     };
     const rest = list.filter((x) => !main || x.id !== main.id);
     const pools = [...(main ? [[main]] : []), rest.filter((x) => sourceFits(x, vehicle)), rest.filter((x) => !sourceFits(x, vehicle))];
-    const phases = sources.issuedFirst ? ["iss", "start"] : ["start", "iss"];
+    // правило підрозділу («спочатку видане») можна змінити для окремого авто: iss_first = "1" / "0"
+    const issFirst = vehicle.iss_first === "1" ? true : vehicle.iss_first === "0" ? false : sources.issuedFirst;
+    const phases = issFirst ? ["iss", "start"] : ["start", "iss"];
     // дрібні видачі (до 10 л) списуються першочергово й повністю — щоб не лишати на залишку «0,18 л»
     const smallFirst = (pool) => {
       for (const x of pool.filter((y) => remOf(y, "iss") > 0 && remOf(y, "iss") <= SMALL_ISSUE_C).sort((a, b) => remOf(a, "iss") - remOf(b, "iss"))) {

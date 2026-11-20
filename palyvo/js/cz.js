@@ -1,7 +1,7 @@
 // Режим ЦЗ: реєстр (Додаток 6) у Excel — як у реєстрі ЦЗ (служба, марка, номер, джерела за назвами колонок,
 // «передано з ТЗ на ТЗ», формули «всього» і залишку, порожня «Примітка»).
-import * as C from "./core.js?v=20261120a";
-import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261120a";
+import * as C from "./core.js?v=20261120b";
+import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261120b";
 
 const LOC = ["січні", "лютому", "березні", "квітні", "травні", "червні", "липні", "серпні", "вересні", "жовтні", "листопаді", "грудні"];
 const SHORT = { "талони": "т", "т/н": "т/н", "налив": "н", "налив/з": "н/з", "см/к": "см/к", "ова": "ова" };
@@ -72,16 +72,16 @@ export function buildCzRegister(s, ym, rows, sources) {
     put(r, 4, row.km || 0, ST.num); put(r, 5, n2(row.startC), ST.num); put(r, 6, czForm(row, "start"), ST.ctr);
     cols.forEach((c, j) => { const q = c.ids.reduce((a, id) => a + (row.issued[id] || 0), 0); put(r, cI + j, q ? n2(q) : "", ST.num); });
     put(r, cIx, row.xferC ? n2(row.xferC) : "", ST.num);
-    put(r, cIt, n2(row.issuedC), ST.num, `SUM(${col(cI)}${R}:${col(cIx)}${R})`);
+    put(r, cIt, n2(row.issuedC), ST.num, `ROUND(SUM(${col(cI)}${R}:${col(cIx)}${R}),2)`);
     cols.forEach((c, j) => { const q = c.ids.reduce((a, id) => a + (row.consBy[id] || 0), 0); put(r, cC + j, q ? n2(q) : "", ST.num); });
-    put(r, cCt, n2(row.consC), ST.num, `SUM(${col(cC)}${R}:${col(cCt - 1)}${R})`);
-    put(r, cE, n2(row.endC), ST.num, `${col(5)}${R}+${col(cIt)}${R}-${col(cCt)}${R}`);
+    put(r, cCt, n2(row.consC), ST.num, `ROUND(SUM(${col(cC)}${R}:${col(cCt - 1)}${R}),2)`);
+    put(r, cE, n2(row.endC), ST.num, `ROUND(${col(5)}${R}+${col(cIt)}${R}-${col(cCt)}${R},2)`);
     put(r, cE + 1, czForm(row, "end"), ST.ctr);
     r++;
   });
   // ВСЬОГО
   put(r, 0, "", ST.totT); put(r, 1, "ВСЬОГО", ST.totT); for (const c of [2, 3, 4, 6, cE + 1]) put(r, c, "", ST.totT);
-  const sumC = (c, val) => put(r, c, val, ST.totN, `SUM(${col(c)}${r0 + 1}:${col(c)}${r})`);
+  const sumC = (c, val) => put(r, c, val, ST.totN, `ROUND(SUM(${col(c)}${r0 + 1}:${col(c)}${r}),2)`);
   sumC(5, n2(rows.reduce((a, x) => a + x.startC, 0)));
   for (let c = cI; c <= cE; c++) sumC(c, undefined);
   r += 1;
@@ -93,6 +93,9 @@ export function buildCzRegister(s, ym, rows, sources) {
   put(r, 7, String(s.compiler || "").trim(), ST.sign); r++;
   put(r, 5, "(посада та підпис)", ST.cap); mg(r, 5, r, 7);
 
-  const widths = [5, 14, 22, 13, 10, 10, 9, ...cols.map(() => 11), 11, 10, ...cols.map(() => 11), 10, 10, 14];
-  return buildSheet({ name: "Реєстр", cells, merges, widths, landscape: true, repeatRows: [H, H + 2], heights: { [H]: 30, [H + 1]: 58, 4: 22 } });
+  // ширини — як у реєстрі ЦЗ (друкується на A4 альбомно)
+  const widths = [7.1, 15.4, 24.3, 16.7, 11.7, 14, 14, ...cols.map(() => 13), 12.7, 12.7, ...cols.map(() => 12.4), 13.6, 15.7, 16.4];
+  const heights = { 0: 25.8, 1: 22, 2: 25.8, 3: 22, 4: 30, [H]: 70, [H + 1]: 80, [H + 2]: 23.4 };
+  for (let k = r0; k < r0 + rows.length; k++) heights[k] = 30;
+  return buildSheet({ name: "Реєстр", cells, merges, widths, landscape: true, repeatRows: [H, H + 2], heights, freeze: [4, H + 3] });
 }
