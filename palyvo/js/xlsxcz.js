@@ -34,16 +34,17 @@ export const ref = (c, r) => col(c) + (r + 1);
 // розміри — як у реєстрі ЦЗ, який друкується на A4 альбомно (масштаб «вмістити по ширині»)
 const FONTS = [["18", true, false], ["20", true, false], ["14", false, true], ["16", true, false], ["18", true, false], ["18", true, false]];
 //         [font, border, h-align, v-align, wrap]
-export const ST = { def: 0, title: 1, cap: 2, head: 3, txt: 4, num: 5, ctr: 6, totN: 7, totT: 8, plain: 9, num2: 10, sign: 11, titleL: 12 };
+export const ST = { def: 0, title: 1, cap: 2, head: 3, txt: 4, num: 5, ctr: 6, totN: 7, totT: 8, plain: 9, num2: 10, sign: 11, titleL: 12, num1: 13, totN2: 14 };
+//         [font, border, h-align, v-align, wrap, numFmtId]   164 = «0.0#» (залишок на початок), 2 = «0.00» (витрачено, залишок)
 const XF = [[0, 0, "", "", 0], [1, 0, "center", "center", 0], [2, 0, "center", "top", 0], [3, 1, "center", "center", 1], [0, 1, "center", "center", 1],
-  [0, 1, "center", "center", 0], [0, 1, "center", "center", 1], [4, 1, "center", "center", 0], [4, 1, "center", "center", 0], [0, 0, "left", "top", 1], [0, 1, "center", "center", 0],
-  [5, 0, "left", "center", 0], [1, 0, "left", "center", 0]];
+  [0, 1, "center", "center", 0], [0, 1, "center", "center", 1], [4, 1, "center", "center", 0], [4, 1, "center", "center", 0], [0, 0, "left", "top", 1], [0, 1, "center", "center", 0, 2],
+  [5, 0, "left", "center", 0], [1, 0, "left", "center", 0], [0, 1, "center", "center", 0, 164], [4, 1, "center", "center", 0, 2]];
 function styles() {
   const fonts = FONTS.map(([sz, b, i]) => `<font>${b ? "<b/>" : ""}${i ? "<i/>" : ""}<sz val="${sz}"/><name val="Times New Roman"/><family val="1"/><charset val="204"/></font>`).join("");
-  const xfs = XF.map(([f, b, h, v, w]) => `<xf numFmtId="0" fontId="${f}" fillId="0" borderId="${b}" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment${h ? ` horizontal="${h}"` : ""}${v ? ` vertical="${v}"` : ""}${w ? ` wrapText="1"` : ""}/></xf>`).join("");
+  const xfs = XF.map(([f, b, h, v, w, nf = 0]) => `<xf numFmtId="${nf}" fontId="${f}" fillId="0" borderId="${b}" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"${nf ? ` applyNumberFormat="1"` : ""}><alignment${h ? ` horizontal="${h}"` : ""}${v ? ` vertical="${v}"` : ""}${w ? ` wrapText="1"` : ""}/></xf>`).join("");
   const thin = `<left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/>`;
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="${FONTS.length}">${fonts}</fonts>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="0.0#"/></numFmts><fonts count="${FONTS.length}">${fonts}</fonts>
 <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border>${thin}</border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${XF.length}">${xfs}</cellXfs>
@@ -71,7 +72,7 @@ export function buildSheet(sheet) {
   const merges = (sheet.merges || []).length ? `<mergeCells count="${sheet.merges.length}">${sheet.merges.map((m) => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : "";
   const ws = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="60">${sheet.freeze ? `<pane xSplit="${sheet.freeze[0]}" ySplit="${sheet.freeze[1]}" topLeftCell="${ref(sheet.freeze[0], sheet.freeze[1])}" activePane="bottomRight" state="frozen"/>` : ""}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="23.4" customHeight="1"/>
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0" zoomScale="60">${sheet.freeze ? `<pane xSplit="${sheet.freeze[0]}" ySplit="${sheet.freeze[1]}" topLeftCell="${ref(sheet.freeze[0], sheet.freeze[1])}" activePane="bottomRight" state="frozen"/>` : ""}</sheetView></sheetViews><sheetFormatPr defaultRowHeight="23.4"/>
 ${cols ? `<cols>${cols}</cols>` : ""}<sheetData>${rowXml}</sheetData>${merges}
 <printOptions horizontalCentered="1"/><pageMargins left="0.236" right="0.236" top="0.748" bottom="0.748" header="0.315" footer="0.315"/>
 <pageSetup paperSize="9" orientation="${sheet.landscape ? "landscape" : "portrait"}" fitToWidth="1" fitToHeight="0"/></worksheet>`;

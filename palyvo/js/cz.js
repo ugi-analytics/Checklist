@@ -1,7 +1,7 @@
 // Режим ЦЗ: реєстр (Додаток 6) у Excel — як у реєстрі ЦЗ (служба, марка, номер, джерела за назвами колонок,
 // «передано з ТЗ на ТЗ», формули «всього» і залишку, порожня «Примітка»).
-import * as C from "./core.js?v=20261120b";
-import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261120b";
+import * as C from "./core.js?v=20261120c";
+import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261120c";
 
 const LOC = ["січні", "лютому", "березні", "квітні", "травні", "червні", "липні", "серпні", "вересні", "жовтні", "листопаді", "грудні"];
 const SHORT = { "талони": "т", "т/н": "т/н", "налив": "н", "налив/з": "н/з", "см/к": "см/к", "ова": "ова" };
@@ -38,7 +38,10 @@ export function buildCzRegister(s, ym, rows, sources) {
   const [y, m] = C.parseYm(ym);
   const mon = C.MONTHS_UA[m - 1].toLowerCase();
   // колонки джерел — за назвою (кілька джерел з однаковою назвою, напр. «Ярошенко/Кузнівенко», — в одній колонці)
-  const used = sources.filter((x) => x.active !== false || rows.some((r) => (r.issued[x.id] || 0) || (r.consBy[x.id] || 0)));
+  // колонки: базові (як у реєстрі ЦЗ) + інші джерела, лише якщо цього місяця з них щось видано чи витрачено (напр. ОВА)
+  const BASE = ["талони", "т/н", "налив", "налив/з", "см/к", "ярошенко/кузнівенко"];
+  const hasData = (x) => rows.some((r) => (r.issued[x.id] || 0) || (r.consBy[x.id] || 0));
+  const used = sources.filter((x) => hasData(x) || (x.active !== false && BASE.includes(czCol(x).toLowerCase())));
   const cols = [];
   for (const x of used) { const k = czCol(x); let c = cols.find((y2) => y2.k === k); if (!c) cols.push(c = { k, ids: [] }); c.ids.push(x.id); }
   const nI = cols.length + 2, nC = cols.length + 1;                   // + «передано», «всього» / + «всього»
@@ -69,19 +72,19 @@ export function buildCzRegister(s, ym, rows, sources) {
   rows.forEach((row, i) => {
     const v = row.vehicle, R = r + 1;
     put(r, 0, i + 1, ST.ctr); put(r, 1, v.service || "ЦЗ", ST.txt); put(r, 2, nameOf(v), ST.txt); put(r, 3, plateOf(v), ST.ctr);
-    put(r, 4, row.km || 0, ST.num); put(r, 5, n2(row.startC), ST.num); put(r, 6, czForm(row, "start"), ST.ctr);
+    put(r, 4, row.km || 0, ST.num); put(r, 5, n2(row.startC), ST.num1); put(r, 6, czForm(row, "start"), ST.ctr);
     cols.forEach((c, j) => { const q = c.ids.reduce((a, id) => a + (row.issued[id] || 0), 0); put(r, cI + j, q ? n2(q) : "", ST.num); });
     put(r, cIx, row.xferC ? n2(row.xferC) : "", ST.num);
     put(r, cIt, n2(row.issuedC), ST.num, `ROUND(SUM(${col(cI)}${R}:${col(cIx)}${R}),2)`);
-    cols.forEach((c, j) => { const q = c.ids.reduce((a, id) => a + (row.consBy[id] || 0), 0); put(r, cC + j, q ? n2(q) : "", ST.num); });
-    put(r, cCt, n2(row.consC), ST.num, `ROUND(SUM(${col(cC)}${R}:${col(cCt - 1)}${R}),2)`);
-    put(r, cE, n2(row.endC), ST.num, `ROUND(${col(5)}${R}+${col(cIt)}${R}-${col(cCt)}${R},2)`);
+    cols.forEach((c, j) => { const q = c.ids.reduce((a, id) => a + (row.consBy[id] || 0), 0); put(r, cC + j, q ? n2(q) : "", ST.num2); });
+    put(r, cCt, n2(row.consC), ST.num2, `ROUND(SUM(${col(cC)}${R}:${col(cCt - 1)}${R}),2)`);
+    put(r, cE, n2(row.endC), ST.num2, `ROUND(${col(5)}${R}+${col(cIt)}${R}-${col(cCt)}${R},2)`);
     put(r, cE + 1, czForm(row, "end"), ST.ctr);
     r++;
   });
   // ВСЬОГО
   put(r, 0, "", ST.totT); put(r, 1, "ВСЬОГО", ST.totT); for (const c of [2, 3, 4, 6, cE + 1]) put(r, c, "", ST.totT);
-  const sumC = (c, val) => put(r, c, val, ST.totN, `ROUND(SUM(${col(c)}${r0 + 1}:${col(c)}${r}),2)`);
+  const sumC = (c, val) => put(r, c, val, c >= cC || c === 5 ? ST.totN2 : ST.totN, `ROUND(SUM(${col(c)}${r0 + 1}:${col(c)}${r}),2)`);
   sumC(5, n2(rows.reduce((a, x) => a + x.startC, 0)));
   for (let c = cI; c <= cE; c++) sumC(c, undefined);
   r += 1;
@@ -94,8 +97,16 @@ export function buildCzRegister(s, ym, rows, sources) {
   put(r, 5, "(посада та підпис)", ST.cap); mg(r, 5, r, 7);
 
   // ширини — як у реєстрі ЦЗ (друкується на A4 альбомно)
-  const widths = [7.1, 15.4, 24.3, 16.7, 11.7, 14, 14, ...cols.map(() => 13), 12.7, 12.7, ...cols.map(() => 12.4), 13.6, 15.7, 16.4];
-  const heights = { 0: 25.8, 1: 22, 2: 25.8, 3: 22, 4: 30, [H]: 70, [H + 1]: 80, [H + 2]: 23.4 };
-  for (let k = r0; k < r0 + rows.length; k++) heights[k] = 30;
+  // ширини й висоти — з реєстру ЦЗ (друкується на A4 альбомно, масштаб ~42 %); рядки авто — автовисота (довгі назви переносяться)
+  const W_I = [13, 14.7, 11.2, 18.8, 11, 14.3], W_C = [12.4, 12, 12.8, 11.3, 12.3, 10.1];
+  const widths = [7.1, 15.4, 24.3, 16.7, 11.7, 24.9, 14, ...cols.map((_, i) => W_I[i] || 12.5), 11.4, 12.7, ...cols.map((_, i) => W_C[i] || 12), 13.6, 15.7, 16.4];
+  const heights = { 0: 23, 1: 25.8, 2: 25.8, 3: 25.8, 4: 25.8, [H]: 204.6, [H + 1]: 54, [H + 2]: 23.4 };
+  // висота рядка авто: скільки рядків займе найдовший перенос (шрифт 18 жирний ≈ 1,85 одиниці ширини на символ)
+  const lines = (t, w) => String(t || "").split(/\n/).reduce((a, part) => a + Math.max(1, Math.ceil(part.length / Math.max(1, Math.floor(w / 1.85)))), 0);
+  rows.forEach((row, i) => {
+    const k = r0 + i, v = row.vehicle;
+    const n = Math.max(lines(v.service || "ЦЗ", widths[1]), lines(nameOf(v), widths[2]), lines(czForm(row, "start"), widths[6]), lines(czForm(row, "end"), widths[cE + 1]));
+    heights[k] = Math.max(23.4, n * 22.8);
+  });
   return buildSheet({ name: "Реєстр", cells, merges, widths, landscape: true, repeatRows: [H, H + 2], heights, freeze: [4, H + 3] });
 }

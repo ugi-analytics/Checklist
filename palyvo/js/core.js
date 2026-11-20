@@ -432,7 +432,8 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     const rest = list.filter((x) => !main || x.id !== main.id);
     const pools = [...(main ? [[main]] : []), rest.filter((x) => sourceFits(x, vehicle)), rest.filter((x) => !sourceFits(x, vehicle))];
     // правило підрозділу («спочатку видане») можна змінити для окремого авто: iss_first = "1" / "0"
-    const issFirst = vehicle.iss_first === "1" ? true : vehicle.iss_first === "0" ? false : sources.issuedFirst;
+    const ov = e.iss_first || vehicle.iss_first;
+    const issFirst = ov === "1" ? true : ov === "0" ? false : sources.issuedFirst;
     const phases = issFirst ? ["iss", "start"] : ["start", "iss"];
     // дрібні видачі (до 10 л) списуються першочергово й повністю — щоб не лишати на залишку «0,18 л»
     const smallFirst = (pool) => {
@@ -646,6 +647,7 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
       out[v.id] = { odo_start: odo, fuel_start: r.endC ? r.endC / 100 : null, start: {}, iss: {},
         ...(endText ? { start_text: endText } : {}) };
     }
+    if (pe.iss_first) out[v.id].iss_first = pe.iss_first;      // порядок списання для авто — переходить на новий місяць
   }
   return out;
 }
@@ -662,6 +664,7 @@ export function cleanEntry(raw = {}) {
   out.consumed_manual = num2(raw.consumed_manual);
   if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
   if (raw.start_src) out.start_src = String(raw.start_src);
+  if (raw.iss_first === "1" || raw.iss_first === "0") out.iss_first = raw.iss_first;   // порядок списання для цього авто (інакше, ніж у підрозділі)
   if (!isBlank(raw.xfer)) { const x = Number(String(raw.xfer).replace(",", ".").replace(/\s/g, "")); if (isFinite(x) && x !== 0) out.xfer = Math.round(x * 100) / 100; }      // «передано з ТЗ на ТЗ» (режим ЦЗ), може бути від'ємним
   for (const t of ["start_text", "end_text"]) { const x = String(raw[t] || "").trim().slice(0, 300); if (x) out[t] = x; }
   for (const m of ["start", "iss", "cons", "start_mvo"]) {

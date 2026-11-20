@@ -366,4 +366,3 @@ select.need { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248,1
 .usw-inline { min-width: 260px; max-width: 360px; z-index: 30; } .usw-inline .usw-btn { padding: 7px 10px; font-size: .9rem; }
 .usw-inline:focus-within, .usw-inline:has(.usw-pop:not([hidden])) { z-index: 60; }
 tr[hidden] { display: none; }
-#veh:not(.custom) .col-isf { display:none; }

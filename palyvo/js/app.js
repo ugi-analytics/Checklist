@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261120b";
-import * as U from "./ui.js?v=20261120b";
-import { litresWords } from "./words.js?v=20261120b";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261120b";
-import { buildCzRegister } from "./cz.js?v=20261120b";
-import * as ST from "./stock.js?v=20261120b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261120b";
-import * as X from "./crypto.js?v=20261120b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261120b";
-import { buildXlsx } from "./xlsx.js?v=20261120b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261120b";
+import * as C from "./core.js?v=20261120c";
+import * as U from "./ui.js?v=20261120c";
+import { litresWords } from "./words.js?v=20261120c";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261120c";
+import { buildCzRegister } from "./cz.js?v=20261120c";
+import * as ST from "./stock.js?v=20261120c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261120c";
+import * as X from "./crypto.js?v=20261120c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261120c";
+import { buildXlsx } from "./xlsx.js?v=20261120c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261120c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -860,6 +860,8 @@ async function pageEntry(q) {
         <div class="notes"><div class="fr-note js-note">${U.noteHtml(v, r, e)}</div>
           <div class="manual"><label style="display:flex;gap:6px;align-items:center;margin:0;color:#cbd5e1"><input type="checkbox" name="manual" ${e.manual ? "checked" : ""}> ввести витрату вручну</label>
             <input type="number" inputmode="decimal" min="0" step="0.01" name="consumed_manual" placeholder="витрачено, л" value="${e.consumed_manual ?? ""}" ${e.manual ? "" : 'style="display:none"'}>
+            ${simple || SRC.legacy ? "" : (() => { const def = SRC.issuedFirst ? "1" : "0"; const on = (e.iss_first || v.iss_first || def) === "1";
+              return `<label style="display:flex;gap:6px;align-items:center;margin:0;color:#cbd5e1" title="Для цього авто: спершу списувати видане за місяць, потім залишок (у підрозділі за замовчуванням — ${def === "1" ? "спочатку видане" : "спочатку залишок"})"><input type="checkbox" name="iss_first" data-def="${def}" ${on ? "checked" : ""}> спочатку видане${(e.iss_first && e.iss_first !== def) ? ` <span class="pill info" style="font-size:.7rem">інакше, ніж у підрозділі</span>` : ""}</label>`; })()}
             ${simple || r.sources.length < 2 ? "" : `<label style="display:flex;gap:6px;align-items:center;margin:0;color:#cbd5e1" title="Вказати, скільки витрачено з кожного джерела (МВО)"><input type="checkbox" name="split" ${e.split ? "checked" : ""}> розподілити витрату вручну</label>`}</div></div></div>
       <div class="js-tank">${U.tankHtml(r, s)}</div></div>
       <div class="js-msgs">${U.msgsHtml(r)}</div></div>`;
@@ -882,7 +884,8 @@ async function pageEntry(q) {
   const readCard = (card) => {
     const e = { start: {}, iss: {}, cons: {}, start_mvo: {} };
     card.querySelectorAll("input[name], textarea[name], select[name]").forEach((i) => {
-      const val = i.type === "checkbox" ? i.checked : i.value;
+      let val = i.type === "checkbox" ? i.checked : i.value;
+      if (i.name === "iss_first") val = (i.checked ? "1" : "0") === i.dataset.def ? "" : (i.checked ? "1" : "0");
       const dot = i.name.indexOf(".");
       if (dot > 0) e[i.name.slice(0, dot)][i.name.slice(dot + 1)] = val; else e[i.name] = val;
     });
@@ -1519,7 +1522,7 @@ async function pageFleet() {
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км</th>
-        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th class="col-isf" title="Порядок списання для цього авто: як у підрозділі (реквізити) або інакше">Списувати спочатку</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist>
@@ -1603,8 +1606,6 @@ async function pageFleet() {
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
       <td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>
       <td class="col-mvo"><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
-      <td class="col-isf"><select data-f="iss_first" title="Порядок списання для цього авто">${[["", "як у підрозділі"], ["0", "залишок"], ["1", "видане"]]
-        .map(([k, t]) => `<option value="${k}" ${String(v.iss_first || "") === k ? "selected" : ""}>${t}</option>`).join("")}</select></td>
       <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
       <td><button class="btn sm danger js-del" title="Видалити з довідника">🗑</button></td>`;
     tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Видалити авто з довідника?")) tr.remove(); });
@@ -2238,8 +2239,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261120b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261120b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261120c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261120c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
