@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261120d";
+import * as C from "./core.js?v=20261120e";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -14,15 +14,15 @@ export function splitName(name) {
 const fmtNum = (x) => C.fmtC(C.toC(x));
 
 export function idHtml(v, status, srcTitle = "") {
-  const [model, plate] = splitName(v.name);
+  const [model, plate] = C.isWater(v) ? [`🚤 ${v.name || ""}`, ""] : splitName(v.name);
   const head = plate
     ? `<div class='model'>${esc(model)}</div><div class='fr-plate'><div class='ua'><i></i>UA</div><div class='n'>${esc(plate)}</div></div>`
     : `<div class='fr-name'>${esc(model) || "—"}</div>`;
-  const rate = `${fmtNum(v.rate)} л/100 км`;
+  const rate = C.isWater(v) ? `${fmtNum(v.rate)} л/мотогод` : `${fmtNum(v.rate)} л/100 км`;
   let chips = `<span class='fr-chip y'>${rate}</span>`;
   if (v.fuel) chips += `<span class='fr-chip'>${esc(v.fuel)}</span>`;
   if (srcTitle) chips += `<span class='fr-chip' title='Основне джерело списання'>${esc(srcTitle)}</span>`;
-  const sub = v.month_norm_km ? `норма пробігу ${C.fmtKm(v.month_norm_km)} км/міс` : "";
+  const sub = v.month_norm_km ? `норма ${C.isWater(v) ? "роботи" : "пробігу"} ${C.fmtRun(v, v.month_norm_km)} ${C.runUnit(v)}/міс` : "";
   return `<div class='fr-id'>${head}<div class='fr-chips'>${chips}</div><div class='fr-sub'>${sub}</div>` +
     `<div class='fr-st ${status}'>${STATUS_TXT[status]}</div></div>`;
 }
@@ -31,10 +31,10 @@ export function kmHtml(v, r) {
   const norm = v.month_norm_km || 0;
   if (!r.km && !norm) return "";
   const pct = norm ? (r.km / norm) * 100 : 0;
-  const right = norm ? `${Math.round(pct)}% від норми ${C.fmtKm(norm)} км` : "";
+  const right = norm ? `${Math.round(pct)}% від норми ${C.fmtRun(v, norm)} ${C.runUnit(v)}` : "";
   const over = pct > 100;
   const bar = over ? "linear-gradient(90deg,#0ea5e9,#f59e0b)" : "linear-gradient(90deg,#0ea5e9,#22d3ee)";
-  return `<div class='fr-km'><div class='t'><span>Пробіг за місяць <b>${C.fmtKm(r.km)} км</b></span>` +
+  return `<div class='fr-km'><div class='t'><span>${C.isWater(v) ? "Робота за місяць" : "Пробіг за місяць"} <b>${C.fmtRun(v, r.km)} ${C.runUnit(v)}</b></span>` +
     `<span style='color:${over ? "#fbbf24" : "#cbd5e1"}'>${right}</span></div>` +
     `<div class='b'><i style='width:${Math.min(pct, 100).toFixed(0)}%;background:${bar}'></i></div></div>`;
 }
@@ -140,7 +140,7 @@ export function previewHtml(rows, settings = {}, sources = rows.sources || []) {
     const startVid = legacy ? esc(C.legacyStartVid(r)) : esc(C.balanceText(r, "start", settings));
     let endVid = legacy ? esc((v.fuel || "")) : esc(C.balanceText(r, "end", settings));
     if (legacy && v.mvo_text) endVid += "<br>МВО " + esc(v.mvo_text);
-    const cells = [i + 1, u, esc(v.name), v.month_norm_km || "", C.fmtKm(r.km), C.fmtC(r.startC), startVid,
+    const cells = [i + 1, u, esc(v.name), C.fmtRun(v, v.month_norm_km) || "", C.fmtRun(v, r.km) + (C.isWater(v) ? " м/г" : ""), C.fmtC(r.startC), startVid,
       ...lay.iss.map((x) => C.fmtC(r.issued[x.id] || 0, true)), `<b>${C.fmtC(r.issuedC)}</b>`,
       ...lay.cons.map((x) => C.fmtC(r.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), `<b>${C.fmtC(r.consC)}</b>`,
       C.fmtC(r.endC), endVid];

@@ -173,6 +173,15 @@ export function fmtC(c, blankZero = false) {
   if (s === "") s = "0";
   return (neg && s !== "0" ? "-" : "") + s.replace(".", ",");
 }
+/** Водний транспорт (катери): пробіг — у мотогодинах, норма — л на 1 мотогодину. */
+export const isWater = (v) => !!v && v.kind === "water";
+export const runUnit = (v) => (isWater(v) ? "мотогод" : "км");
+/** Пробіг для показу: км — цілі; мотогодини — до сотих (кома). */
+export function fmtRun(v, x) {
+  if (isBlank(x)) return "";
+  if (!isWater(v)) return fmtKm(x);
+  return String(Math.round(Number(x) * 100) / 100).replace(".", ",");
+}
 export function fmtKm(x) {
   if (isBlank(x)) return "";
   return String(Math.trunc(Number(x))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -200,7 +209,7 @@ export function normalizeVehicle(v = {}) {
   if (!out.source) out.source = "smk";
   { const byLabel = Object.fromEntries(LEGACY_SOURCES.map((l) => [l.label, l.id])); if (byLabel[out.source]) out.source = byLabel[out.source]; }
   for (const k of ["rate", "winter_pct"]) { const n = Number(String(out[k] ?? 0).replace(",", ".")); out[k] = isFinite(n) ? n : 0; }
-  { const n = Math.trunc(Number(out.month_norm_km || 0)); out.month_norm_km = isFinite(n) ? n : 0; }
+  { const x = Number(String(out.month_norm_km || 0).replace(",", ".")); const n = out.kind === "water" ? Math.round(x * 10) / 10 : Math.trunc(x); out.month_norm_km = isFinite(n) ? n : 0; }
   out.active = out.active !== false;
   for (const k of ["name", "fuel", "supplier", "mvo_text"]) out[k] = String(out[k] ?? "").trim();
   return out;
@@ -371,13 +380,14 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const s0 = e.odo_start, s1 = e.odo_end;
   if (!isBlank(s0) && !isBlank(s1)) {
     if (Number(s1) < Number(s0)) r.errors.push("Пробіг на кінець менший за пробіг на початок — перевірте показники одометра.");
-    else r.km = Math.trunc(Number(s1)) - Math.trunc(Number(s0));
+    else r.km = isWater(vehicle) ? Math.round((Number(s1) - Number(s0)) * 100) / 100 : Math.trunc(Number(s1)) - Math.trunc(Number(s0));
   } else if (isBlank(s0) !== isBlank(s1)) {
     r.warnings.push("Не заповнено пробіг на " + (isBlank(s1) ? "кінець" : "початок") + " періоду.");
   }
   const rateC = toC(vehicle.rate);                 // норма ×100
   const wC = 0;                                    // зимової надбавки немає (прибрано з порталу)
-  r.normC = divHalfUp(r.km * rateC * (10000 + wC), 1000000);
+  r.normC = isWater(vehicle) ? divHalfUp(Math.round(r.km * 100) * rateC, 100)      // мотогодини × л/мотогод
+    : divHalfUp(r.km * rateC * (10000 + wC), 1000000);
   const avail = r.startC + r.issuedC;
   // загальне правило: витрата за нормою округлюється до цілих літрів (половина — вгору);
   // десяті/соті лишаються лише в залишку (або коли списується весь наявний залишок із сотими)
@@ -571,7 +581,8 @@ export function balanceText(r, which = "end", settings = {}) {
 export function totals(rows) {
   const t = { km: 0, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, normC: 0, endC: 0 };
   for (const r of rows) {
-    t.km += r.km; t.startC += r.startC; t.issuedC += r.issuedC; t.consC += r.consC; t.normC += r.normC; t.endC += r.endC;
+    if (isWater(r.vehicle)) t.hours = (t.hours || 0) + r.km; else t.km += r.km;
+    t.startC += r.startC; t.issuedC += r.issuedC; t.consC += r.consC; t.normC += r.normC; t.endC += r.endC;
     for (const k in r.issued) t.issued[k] = (t.issued[k] || 0) + r.issued[k];
     for (const k in r.consBy) t.consBy[k] = (t.consBy[k] || 0) + r.consBy[k];
   }
@@ -660,7 +671,7 @@ const num2 = (v) => {
 /** Очищення введення картки: {odo_start, odo_end, manual, consumed_manual, split, start:{}, iss:{}, cons:{}}. */
 export function cleanEntry(raw = {}) {
   const out = { manual: !!raw.manual, split: !!raw.split };
-  for (const f of ["odo_start", "odo_end"]) { const x = num2(raw[f]); out[f] = x === null ? null : Math.round(x); }
+  for (const f of ["odo_start", "odo_end"]) { const x = num2(raw[f]); out[f] = x; }    // км — цілі (рахуються цілими), мотогодини — до сотих
   out.consumed_manual = num2(raw.consumed_manual);
   if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
   if (raw.start_src) out.start_src = String(raw.start_src);

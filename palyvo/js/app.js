@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261120d";
-import * as U from "./ui.js?v=20261120d";
-import { litresWords } from "./words.js?v=20261120d";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261120d";
-import { buildCzRegister } from "./cz.js?v=20261120d";
-import * as ST from "./stock.js?v=20261120d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261120d";
-import * as X from "./crypto.js?v=20261120d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261120d";
-import { buildXlsx } from "./xlsx.js?v=20261120d";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261120d";
+import * as C from "./core.js?v=20261120e";
+import * as U from "./ui.js?v=20261120e";
+import { litresWords } from "./words.js?v=20261120e";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261120e";
+import { buildCzRegister } from "./cz.js?v=20261120e";
+import * as ST from "./stock.js?v=20261120e";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261120e";
+import * as X from "./crypto.js?v=20261120e";
+import { qrSvg } from "../vendor/qrcode.js?v=20261120e";
+import { buildXlsx } from "./xlsx.js?v=20261120e";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261120e";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -574,7 +574,7 @@ async function publishCatalog(unit) {
     if (state.dispPub === undefined) state.dispPub = await store.getDispPub();
     const pub = state.dispPub; if (!pub) return;
     const cat = { unit: unit.kind === "pog" ? `${unit.parent_name || ""} · ${unit.name}` : unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
-      .map((v) => ({ id: v.id, name: v.name, rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel })) };
+      .map((v) => ({ id: v.id, name: v.name, rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel, ...(C.isWater(v) ? { kind: "water" } : {}) })) };
     const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
     const cur = await store.getFleetCat(unit.id);
     if (cur && cur.h === h) return;
@@ -807,6 +807,7 @@ async function pageEntry(q) {
   const simple = !!SRC.legacy;          // стандартні джерела: картка як раніше
   const inp = (name, val, ph, step = "0.01", cls = "") => `<input type="number" inputmode="decimal" min="0" step="${step}" name="${name}" placeholder="${ph}" value="${val ?? ""}"${cls ? ` class="${cls}"` : ""}>`;
   const lv = (c) => (c ? C.cToNum(c) : "");
+  const RU = (v) => (C.isWater(v) ? "мотогод" : "км"), RS = (v) => (C.isWater(v) ? "0.01" : "1");
   const mainTitle = (r) => { const m = r.sources.find((x) => x.id === r.mainId); return m ? C.sourceTitle(m) : ""; };
   const tiles = (v, r, e) => {
     if (simple) {
@@ -847,11 +848,11 @@ async function pageEntry(q) {
     return `<div class="frc ${s}${e.split ? " split" : ""}" data-vid="${v.id}"><span class="saving">збережено ✓</span><div class="grid${simple ? "" : " ext"}">
       <div class="js-id">${U.idHtml(v, s, mainTitle(r))}</div>
       <div><div class="fr-h">Пробіг і залишок на початок</div>${simple ? `<div class="f3">
-        <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
-        <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
+        <div><label>Початок, ${RU(v)}</label>${inp("odo_start", e.odo_start, RU(v), RS(v))}</div>
+        <div><label>Кінець, ${RU(v)}</label>${inp("odo_end", e.odo_end, RU(v), RS(v))}</div>
         <div><label>Залишок, л</label>${pick ? inp("fuel_start", lv(r.startC), "л") : inp("start." + r.mainId, lv(r.startC), "л")}</div></div>${startSrc(r, e)}` : `<div class="f3">
-        <div><label>Початок, км</label>${inp("odo_start", e.odo_start, "км", "1")}</div>
-        <div><label>Кінець, км</label>${inp("odo_end", e.odo_end, "км", "1")}</div>
+        <div><label>Початок, ${RU(v)}</label>${inp("odo_start", e.odo_start, RU(v), RS(v))}</div>
+        <div><label>Кінець, ${RU(v)}</label>${inp("odo_end", e.odo_end, RU(v), RS(v))}</div>
         <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>${startSrc(r, e)}${startTxt(r, e)}`}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
@@ -1111,13 +1112,13 @@ function dispView(q) {
       const r = C.calcRow(v, { odo_start: val("odo_start"), odo_end: val("odo_end"), fuel_start: val("fuel_start"), smk: issuedSum / 100 }, C.unitSources({}));
       const coef = 1;
       res.innerHTML = r.empty && !r.km ? `<p class="muted">Введіть пробіг на початок і кінець.</p>` : `<div class="disp-kv">
-        <div><span>Пробіг</span><b>${C.fmtKm(r.km)} км</b></div>
+        <div><span>${C.isWater(v) ? "Робота" : "Пробіг"}</span><b>${C.fmtRun(v, r.km)} ${C.runUnit(v)}</b></div>
         <div><span>Норма витрати</span><b>${C.fmtC(C.toC(val("rate")))} л/100 км</b></div>
         <div><span>За нормою (точно)</span><b>${C.fmtC(r.normExactC)} л</b></div>
         <div class="hl"><span>${r.hasFrac ? "Витрата (є соті — без округлення)" : "Витрата (округлено до цілих)"}</span><b>${C.fmtC(r.consC)} л</b></div>
         <div><span>Залишок на початок + видано</span><b>${C.fmtC(r.startC)} + ${C.fmtC(r.issuedC)} л</b></div>
         <div class="hl"><span>Залишок на кінець</span><b>${C.fmtC(r.endC)} л</b></div></div>${U.msgsHtml(r)}
-        <p class="muted" style="margin-top:6px">${C.fmtKm(r.km)} км × ${esc(val("rate") || "0")} л/100 км${coef !== 1 ? ` × ${coef.toFixed(2).replace(".", ",")}` : ""} = ${C.fmtC(r.normExactC)} л → ${C.fmtC(r.normC)} л</p>`;
+        <p class="muted" style="margin-top:6px">${C.fmtRun(v, r.km)} ${C.runUnit(v)} × ${esc(val("rate") || "0")} ${C.isWater(v) ? "л/мотогод" : "л/100 км"}${coef !== 1 ? ` × ${coef.toFixed(2).replace(".", ",")}` : ""} = ${C.fmtC(r.normExactC)} л → ${C.fmtC(r.normC)} л</p>`;
     };
     f.addEventListener("input", run); run();
     $app.querySelector(".js-dclear").addEventListener("click", () => { ["odo_start", "odo_end", "fuel_start", "issued"].forEach((n) => { f[n].value = ""; }); f.rate.value = sel.rate ?? ""; run(); });
@@ -1506,6 +1507,7 @@ async function pageFleet() {
   const s = unit.settings;
   const pog = unit.kind === "pog";
   const cz = unit.profile === "cz";
+  const water = !!unit.water || unit.vehicles.some(C.isWater);
   const f = (k, label, cls = "") => `<label class="f ${cls}">${label}<input data-k="${k}" value="${esc(s[k] ?? "")}"></label>`;
   shell(`${onboarding ? `<div class="panel" style="border-color:rgba(250,204,21,.5);background:linear-gradient(120deg,rgba(8,145,178,.25),rgba(55,48,163,.25))">
       <h2 class="display">👋 Вітаємо! ${pog ? "Додайте свій службовий автомобіль" : "Створіть автопарк свого підрозділу"}</h2>
@@ -1521,8 +1523,8 @@ async function pageFleet() {
     <div class="panel"><h2>${pog ? "🚗 Мій автомобіль" : "🚗 Автопарк підрозділу"}</h2>
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
-      <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км</th>
-        <th>Норма пробігу, км/міс</th><th>Вид пального</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}${water ? `<th title="Авто — пробіг у км, норма л/100 км; водний транспорт — робота в мотогодинах, норма л на 1 мотогодину">Тип</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км${water ? "<br><small>(водний — л/мотогод)</small>" : ""}</th>
+        <th>Норма пробігу, км/міс${water ? "<br><small>(водний — мотогод/міс)</small>" : ""}</th><th>Вид пального</th><th title="Куди списується витрата в першу чергу">Основне джерело</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="ГАЗ"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist>
@@ -1599,10 +1601,10 @@ async function pageFleet() {
   const vbody = $app.querySelector("#veh tbody"), mbody = $app.querySelector("#mem tbody");
   const addVeh = (v) => {
     const tr = document.createElement("tr"); tr.dataset.id = v.id || C.newId();
-    tr.innerHTML = `${cz ? `<td><input data-f="service" list="czsvc" value="${esc(v.service || "")}" placeholder="ЦЗ" style="width:110px"></td>` : ""}<td><input data-f="name" value="${esc(v.name)}" placeholder="${cz ? "Марка" : "Марка модель номер"}"></td>
+    tr.innerHTML = `${cz ? `<td><input data-f="service" list="czsvc" value="${esc(v.service || "")}" placeholder="ЦЗ" style="width:110px"></td>` : ""}${water ? `<td><select data-f="kind"><option value="" ${C.isWater(v) ? "" : "selected"}>🚗 авто</option><option value="water" ${C.isWater(v) ? "selected" : ""}>🚤 водний</option></select></td>` : ""}<td><input data-f="name" value="${esc(v.name)}" placeholder="${cz ? "Марка" : "Марка модель номер"}"></td>
       ${cz ? `<td><input data-f="plate" value="${esc(v.plate || "")}" placeholder="1714" style="width:110px"></td>` : ""}
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
-      <td><input data-f="month_norm_km" type="number" step="10" min="0" value="${v.month_norm_km ?? 2640}"></td>
+      <td><input data-f="month_norm_km" type="number" step="${C.isWater(v) ? "0.1" : "10"}" min="0" value="${v.month_norm_km ?? (C.isWater(v) ? "" : 2640)}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
       <td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>
       <td class="col-mvo"><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
@@ -1866,6 +1868,7 @@ async function pageAdmin(sub, q) {
         <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
         <td><button class="btn sm js-open">Відкрити як підрозділ →</button> ${usersIn(u.id) ? "" : `<button class="btn sm danger js-unitdel">🗑 Видалити</button>`}
           <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-left:8px" title="Особливий режим ЦЗ: служби авто, «передано з ТЗ на ТЗ», реєстр у Excel, свої акти"><input type="checkbox" class="js-cz" ${u.profile === "cz" ? "checked" : ""}> режим ЦЗ</label>
+          <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-left:8px" title="Водний транспорт (катери): у автопарку можна обрати тип «водний» — робота в мотогодинах, норма л/мотогод"><input type="checkbox" class="js-water" ${u.water ? "checked" : ""}> водний транспорт</label>
           ${u.crypto && state.adminPriv ? `<button class="btn sm js-rkshow">🔑 Новий ключ підрозділу</button>
           <form class="js-rk row" hidden autocomplete="off" style="margin-top:8px"><input name="n1" type="password" placeholder="новий ключ (від 10 символів)" required minlength="10">
             <input name="n2" type="password" placeholder="повторіть" required minlength="10"><button class="btn sm primary">Встановити</button></form>` : ""}</td></tr>`).join("")}
@@ -1975,6 +1978,11 @@ async function pageAdmin(sub, q) {
   const act = async (fn, okMsg) => { busy(true); try { await fn(); if (okMsg) flash("ok", okMsg); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); render(); } };
 
   $app.querySelectorAll(".js-unitsel, .js-pparent").forEach(searchSelect);
+  $app.querySelectorAll(".js-water").forEach((c) => c.addEventListener("change", () => {
+    const id = c.closest("[data-id]").dataset.id;
+    act(async () => { await store.updateUnit(id, { water: c.checked }); store.log("unit_profile", `${unitName(id)}: водний транспорт ${c.checked ? "увімкнено" : "вимкнено"}`); },
+      c.checked ? "Водний транспорт увімкнено." : "Водний транспорт вимкнено.");
+  }));
   $app.querySelectorAll(".js-cz").forEach((c) => c.addEventListener("change", () => {
     const id = c.closest("[data-id]").dataset.id;
     act(async () => { await store.updateUnit(id, { profile: c.checked ? "cz" : "" }); store.log("unit_profile", `${unitName(id)}: ${c.checked ? "режим ЦЗ" : "звичайний"}`); },
@@ -2239,8 +2247,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261120d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261120d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261120e")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261120e")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
