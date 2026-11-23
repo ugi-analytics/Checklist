@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123c";
-import * as U from "./ui.js?v=20261123c";
-import { litresWords } from "./words.js?v=20261123c";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123c";
-import { buildCzRegister } from "./cz.js?v=20261123c";
-import * as ST from "./stock.js?v=20261123c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123c";
-import * as X from "./crypto.js?v=20261123c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123c";
-import { buildXlsx } from "./xlsx.js?v=20261123c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123c";
+import * as C from "./core.js?v=20261123d";
+import * as U from "./ui.js?v=20261123d";
+import { litresWords } from "./words.js?v=20261123d";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123d";
+import { buildCzRegister } from "./cz.js?v=20261123d";
+import * as ST from "./stock.js?v=20261123d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123d";
+import * as X from "./crypto.js?v=20261123d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123d";
+import { buildXlsx } from "./xlsx.js?v=20261123d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1861,7 +1861,15 @@ async function pageAdmin(sub, q) {
       <h3 style="margin-top:18px">🧮 Диспетчер</h3>
       <p class="muted">Диспетчер бачить лише довідник авто всіх підрозділів (назва, норма, пальне) і рахує витрату на своєму екрані — показників підрозділів він не бачить і нічого в них не змінює.
         Ключ диспетчера створює перший диспетчер; якщо його забули — скиньте, і диспетчер створить новий (довідники підрозділів оновляться, коли їх відкриють).</p>
-      ${(await store.getDispPub().catch(() => null)) ? `<button class="btn sm danger js-dispreset">Скинути ключ диспетчера</button>` : `<span class="muted">Ключ диспетчера ще не створено.</span>`}</div>`;
+      <div class="row" style="gap:8px;align-items:center">
+        <button class="btn sm js-dsetshow">🔑 ${(await store.getDispPub().catch(() => null)) ? "Змінити ключ диспетчера" : "Встановити ключ диспетчера"}</button>
+        ${(await store.getDispPub().catch(() => null)) ? `<button class="btn sm danger js-dispreset">Скинути ключ диспетчера</button>` : `<span class="muted">Ключ диспетчера ще не створено.</span>`}</div>
+      <form class="js-dset row" hidden autocomplete="off" style="margin-top:8px;gap:8px">
+        <input name="n1" type="password" placeholder="новий ключ диспетчера (від 10 символів)" required minlength="10">
+        <input name="n2" type="password" placeholder="повторіть ключ" required minlength="10">
+        <button class="btn sm primary">Зберегти новий ключ</button></form>
+      <p class="muted" style="margin-top:6px">Новий ключ замінює старий для всіх диспетчерів — передайте його їм особисто. Довідники авто оновляться, коли підрозділи відкриють портал
+        або коли ви відкриєте «Зведення по області» з ключем адміністратора.</p></div>`;
   } else if (tab === "units") {
     body = `<div class="panel"><h2>Підрозділи</h2><div class="row" style="margin-bottom:14px">
       <label class="f">Новий підрозділ<input class="js-newunit" placeholder="напр. Кременчуцьке РУП ГУНП" style="min-width:320px"></label><button class="btn sky js-ucreate">➕ Створити</button></div>
@@ -2069,6 +2077,19 @@ async function pageAdmin(sub, q) {
     };
     Object.values(ctl).forEach((el) => el.addEventListener(el === ctl.q ? "input" : "change", apply)); apply();
   }
+  $app.querySelector(".js-dsetshow")?.addEventListener("click", () => { const f = $app.querySelector(".js-dset"); f.hidden = !f.hidden; if (!f.hidden) f.n1.focus(); });
+  $app.querySelector(".js-dset")?.addEventListener("submit", (e) => {
+    e.preventDefault(); const f = e.target;
+    const k1 = f.n1.value.replace(/\u00a0/g, " ").trim(), k2 = f.n2.value.replace(/\u00a0/g, " ").trim();
+    if (k1 !== k2) { flash("err", "Ключі не збігаються."); return render(); }
+    const prob = X.passProblem(k1, "Ключ диспетчера"); if (prob) { flash("err", prob); return render(); }
+    if (!confirm("Встановити новий ключ диспетчера? Старий ключ перестане діяти для всіх диспетчерів.")) return;
+    act(async () => {
+      const keys = await X.newDispKeys(k1);
+      if (await store.getDispPub().catch(() => null)) await store.resetDispKeys();
+      await store.createDispKeys(keys); state.dispPub = undefined; store.log("disp_key_set", "адміністратор");
+    }, "Новий ключ диспетчера встановлено. Передайте його диспетчерам особисто; для оновлення довідників відкрийте «Зведення по області».");
+  });
   $app.querySelector(".js-dispreset")?.addEventListener("click", () => {
     if (!confirm("Скинути ключ диспетчера? Диспетчер створить новий, а довідники авто оновляться, коли підрозділи відкриють портал (або ви відкриєте «Зведення по області»).")) return;
     act(async () => { await store.resetDispKeys(); state.dispPub = undefined; store.log("disp_key_reset", ""); }, "Ключ диспетчера скинуто.");
@@ -2254,8 +2275,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
