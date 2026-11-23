@@ -1,8 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261123b";
-import { litresWords } from "./words.js?v=20261123b";
-import * as S from "./stock.js?v=20261123b";
+import * as C from "./core.js?v=20261123c";
+import { litresWords } from "./words.js?v=20261123c";
+import * as S from "./stock.js?v=20261123c";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -124,7 +124,7 @@ export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSo
       startVid = C.balanceText(r, "start", s).split(" + ").join(" +\n");
       endVid = C.balanceText(r, "end", s).split(" + ").join(" +\n");
     }
-    const vals = [String(i + 1), s.unit || "", v.name, C.fmtRun(v, v.month_norm_km) || "", C.fmtRun(v, r.km) + (C.isWater(v) ? " м/г" : ""), C.fmtC(r.startC), startVid,
+    const vals = [String(i + 1), s.unit || "", C.vehName(v), C.fmtRun(v, v.month_norm_km) || "", C.fmtRun(v, r.km) + (C.isWater(v) ? " м/г" : ""), C.fmtC(r.startC), startVid,
       ...lay.iss.map((x) => C.fmtC(r.issued[x.id] || 0, true)), C.fmtC(r.issuedC),
       ...lay.cons.map((x) => C.fmtC(r.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(r.consC),
       C.fmtC(r.endC), endVid];

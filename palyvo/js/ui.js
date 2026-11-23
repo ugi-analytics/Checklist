@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261123b";
+import * as C from "./core.js?v=20261123c";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -14,7 +14,7 @@ export function splitName(name) {
 const fmtNum = (x) => C.fmtC(C.toC(x));
 
 export function idHtml(v, status, srcTitle = "") {
-  const [model, plate] = C.isWater(v) ? [`🚤 ${v.name || ""}`, ""] : splitName(v.name);
+  const [model, plate] = C.isWater(v) ? [`🚤 ${C.vehName(v)}`, ""] : v.plate ? [v.name || "", String(v.plate).trim()] : splitName(v.name);
   const head = plate
     ? `<div class='model'>${esc(model)}</div><div class='fr-plate'><div class='ua'><i></i>UA</div><div class='n'>${esc(plate)}</div></div>`
     : `<div class='fr-name'>${esc(model) || "—"}</div>`;
@@ -22,7 +22,7 @@ export function idHtml(v, status, srcTitle = "") {
   let chips = `<span class='fr-chip y'>${rate}</span>`;
   if (v.fuel) chips += `<span class='fr-chip'>${esc(v.fuel)}</span>`;
   if (srcTitle) chips += `<span class='fr-chip' title='Основне джерело списання'>${esc(srcTitle)}</span>`;
-  const sub = v.month_norm_km ? `норма ${C.isWater(v) ? "роботи" : "пробігу"} ${C.fmtRun(v, v.month_norm_km)} ${C.runUnit(v)}/міс` : "";
+  const sub = [v.service ? `служба: ${v.service}` : "", v.month_norm_km ? `норма ${C.isWater(v) ? "роботи" : "пробігу"} ${C.fmtRun(v, v.month_norm_km)} ${C.runUnit(v)}/міс` : ""].filter(Boolean).join(" · ");
   return `<div class='fr-id'>${head}<div class='fr-chips'>${chips}</div><div class='fr-sub'>${sub}</div>` +
     `<div class='fr-st ${status}'>${STATUS_TXT[status]}</div></div>`;
 }
@@ -84,7 +84,7 @@ export function kpiHtml(rows, statuses, monthLabel) {
   const t = C.totals(rows);
   const n = rows.length;
   const done = statuses.filter((s) => s === "ok" || s === "warn").length;
-  const left = rows.filter((r, i) => !["ok", "warn"].includes(statuses[i])).map((r) => r.vehicle.name);
+  const left = rows.filter((r, i) => !["ok", "warn"].includes(statuses[i])).map((r) => C.vehName(r.vehicle));
   const pct = n ? (done / n) * 100 : 0;
   const leftTxt = left.length ? "Не заповнено: " + left.map(esc).join(", ") : "Усі авто заповнено ✓";
   const tile = (icon, bg, glow, label, value, unit, color = "#f8fafc") =>
@@ -140,7 +140,7 @@ export function previewHtml(rows, settings = {}, sources = rows.sources || []) {
     const startVid = legacy ? esc(C.legacyStartVid(r)) : esc(C.balanceText(r, "start", settings));
     let endVid = legacy ? esc((v.fuel || "")) : esc(C.balanceText(r, "end", settings));
     if (legacy && v.mvo_text) endVid += "<br>МВО " + esc(v.mvo_text);
-    const cells = [i + 1, u, esc(v.name), C.fmtRun(v, v.month_norm_km) || "", C.fmtRun(v, r.km) + (C.isWater(v) ? " м/г" : ""), C.fmtC(r.startC), startVid,
+    const cells = [i + 1, u, esc(C.vehName(v)), C.fmtRun(v, v.month_norm_km) || "", C.fmtRun(v, r.km) + (C.isWater(v) ? " м/г" : ""), C.fmtC(r.startC), startVid,
       ...lay.iss.map((x) => C.fmtC(r.issued[x.id] || 0, true)), `<b>${C.fmtC(r.issuedC)}</b>`,
       ...lay.cons.map((x) => C.fmtC(r.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), `<b>${C.fmtC(r.consC)}</b>`,
       C.fmtC(r.endC), endVid];

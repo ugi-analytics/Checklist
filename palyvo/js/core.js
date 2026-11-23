@@ -173,6 +173,8 @@ export function fmtC(c, blankZero = false) {
   if (s === "") s = "0";
   return (neg && s !== "0" ? "-" : "") + s.replace(".", ",");
 }
+/** Назва авто для показу: марка + номерний знак (у режимі ЦЗ номер — окреме поле). */
+export const vehName = (v) => [String((v && v.name) || "").trim(), String((v && v.plate) || "").trim()].filter(Boolean).join(" ");
 /** Водний транспорт (катери): пробіг — у мотогодинах, норма — л на 1 мотогодину. */
 export const isWater = (v) => !!v && v.kind === "water";
 export const runUnit = (v) => (isWater(v) ? "мотогод" : "км");

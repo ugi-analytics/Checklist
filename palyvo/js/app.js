@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123b";
-import * as U from "./ui.js?v=20261123b";
-import { litresWords } from "./words.js?v=20261123b";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123b";
-import { buildCzRegister } from "./cz.js?v=20261123b";
-import * as ST from "./stock.js?v=20261123b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123b";
-import * as X from "./crypto.js?v=20261123b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123b";
-import { buildXlsx } from "./xlsx.js?v=20261123b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123b";
+import * as C from "./core.js?v=20261123c";
+import * as U from "./ui.js?v=20261123c";
+import { litresWords } from "./words.js?v=20261123c";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123c";
+import { buildCzRegister } from "./cz.js?v=20261123c";
+import * as ST from "./stock.js?v=20261123c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123c";
+import * as X from "./crypto.js?v=20261123c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123c";
+import { buildXlsx } from "./xlsx.js?v=20261123c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -574,7 +574,7 @@ async function publishCatalog(unit) {
     if (state.dispPub === undefined) state.dispPub = await store.getDispPub();
     const pub = state.dispPub; if (!pub) return;
     const cat = { unit: unit.kind === "pog" ? `${unit.parent_name || ""} · ${unit.name}` : unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
-      .map((v) => ({ id: v.id, name: v.name, rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel, ...(C.isWater(v) ? { kind: "water" } : {}) })) };
+      .map((v) => ({ id: v.id, name: C.vehName(v), rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel, ...(C.isWater(v) ? { kind: "water" } : {}) })) };
     const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
     const cur = await store.getFleetCat(unit.id);
     if (cur && cur.h === h) return;
@@ -2254,8 +2254,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
