@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123j";
-import * as U from "./ui.js?v=20261123j";
-import { litresWords } from "./words.js?v=20261123j";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123j";
-import { buildCzRegister } from "./cz.js?v=20261123j";
-import * as ST from "./stock.js?v=20261123j";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123j";
-import * as X from "./crypto.js?v=20261123j";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123j";
-import { buildXlsx } from "./xlsx.js?v=20261123j";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123j";
+import * as C from "./core.js?v=20261123k";
+import * as U from "./ui.js?v=20261123k";
+import { litresWords } from "./words.js?v=20261123k";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123k";
+import { buildCzRegister } from "./cz.js?v=20261123k";
+import * as ST from "./stock.js?v=20261123k";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123k";
+import * as X from "./crypto.js?v=20261123k";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123k";
+import { buildXlsx } from "./xlsx.js?v=20261123k";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123k";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1531,7 +1531,7 @@ async function pageFleet() {
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}${water ? `<th title="Авто — пробіг у км, норма л/100 км; водний транспорт — робота в мотогодинах, норма л на 1 мотогодину">Тип</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км${water ? "<br><small>(водний — л/мотогод)</small>" : ""}</th>
         <th>Норма пробігу, км/міс${water ? "<br><small>(водний — мотогод/міс)</small>" : ""}</th><th>Вид пального</th>${cz ? "" : `<th title="Куди списується витрата в першу чергу">Основне джерело</th>`}<th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
-      <button class="btn sm js-addveh" style="margin-top:10px${pog && unit.vehicles.length ? ";display:none" : ""}">➕ Додати авто</button>
+      <button class="btn sm js-addveh" style="margin-top:10px">${pog && unit.vehicles.length ? "➕ Додати ще авто (якщо за ПОГ закріплено кілька)" : "➕ Додати авто"}</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="Газ/бенз"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist>
       ${cz ? `<datalist id="czsvc">${[...new Set(["ЦЗ", "Керівництво", "УПД", "УКЗ", "УЛМТЗ", "ТЦ", "УІАП", "ВК", "ВПЗ", "УОАЗОР", "ЗК", "СОЗДМТТО", "УФЗБО", ...unit.vehicles.map((v) => v.service).filter(Boolean)])].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>` : ""}</div>
@@ -1711,12 +1711,10 @@ async function pageFleet() {
   });
 
   unit.vehicles.forEach(addVeh); if (!unit.vehicles.length) addVeh({});
-  if (pog && vbody.querySelectorAll("tr").length >= 1) $app.querySelector(".js-addveh").style.display = "none";   // ПОГ — один автомобіль
   toggleBox();
   (s.act_members || []).forEach(addMem);
   $app.querySelector(".js-addveh").addEventListener("click", () => {
     addVeh({}); refreshSrcSelects();
-    if (pog && vbody.querySelectorAll("tr").length >= 1) $app.querySelector(".js-addveh").style.display = "none";   // ПОГ — один автомобіль
   });
   $app.querySelector(".js-seedreq")?.addEventListener("click", async () => {
     if (!confirm("Замінити реквізити бланків і склад комісії на актуальні з підрозділу?")) return;
@@ -2291,8 +2289,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123j")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123j")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123k")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123k")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
