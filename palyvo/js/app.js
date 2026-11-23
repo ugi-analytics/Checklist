@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123i";
-import * as U from "./ui.js?v=20261123i";
-import { litresWords } from "./words.js?v=20261123i";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123i";
-import { buildCzRegister } from "./cz.js?v=20261123i";
-import * as ST from "./stock.js?v=20261123i";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123i";
-import * as X from "./crypto.js?v=20261123i";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123i";
-import { buildXlsx } from "./xlsx.js?v=20261123i";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123i";
+import * as C from "./core.js?v=20261123j";
+import * as U from "./ui.js?v=20261123j";
+import { litresWords } from "./words.js?v=20261123j";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123j";
+import { buildCzRegister } from "./cz.js?v=20261123j";
+import * as ST from "./stock.js?v=20261123j";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123j";
+import * as X from "./crypto.js?v=20261123j";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123j";
+import { buildXlsx } from "./xlsx.js?v=20261123j";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123j";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1615,8 +1615,13 @@ async function pageFleet() {
       ${cz ? `<input type="hidden" data-f="source" value="${C.NO_MAIN}">` : `<td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>`}
       <td class="col-mvo"><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
       <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
-      <td><button class="btn sm danger js-del" title="Видалити з довідника">🗑</button></td>`;
+      <td style="white-space:nowrap"><button class="btn sm js-up" title="Вище в списку">▲</button><button class="btn sm js-down" title="Нижче в списку">▼</button>
+        <button class="btn sm danger js-del" title="Видалити з довідника">🗑</button></td>`;
     tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Видалити авто з довідника?")) tr.remove(); });
+    // порядок авто в довіднику = порядок карток, реєстру й актів (зберігається кнопкою «Зберегти»)
+    const flashRow = () => { tr.classList.add("moved"); setTimeout(() => tr.classList.remove("moved"), 600); };
+    tr.querySelector(".js-up").addEventListener("click", () => { const p = tr.previousElementSibling; if (p) { p.before(tr); flashRow(); } });
+    tr.querySelector(".js-down").addEventListener("click", () => { const n = tr.nextElementSibling; if (n) { n.after(tr); flashRow(); } });
     bindMvoPick(tr);
     vbody.appendChild(tr);
   };
@@ -2286,8 +2291,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123i")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123i")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123j")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123j")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
