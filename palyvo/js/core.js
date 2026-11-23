@@ -8,8 +8,8 @@ export const MONTHS_UA = ["січень", "лютий", "березень", "к�
 // Джерело = вид пального + форма видачі + постачальник + МВО. Підрозділ налаштовує їх сам
 // («Автопарк і реквізити»); якщо не налаштовано — чотири стандартні джерела, як було раніше.
 // У стандартних джерелах вид пального, постачальник і МВО беруться з картки авто.
-export const FORMS = ["с/к", "талони", "АЗС ГУНП талони", "АЗС налив", "Налив ОВА"];
-export const FORM_GROUP = { "с/к": "tsmk", "талони": "tsmk", "АЗС ГУНП талони": "azs", "АЗС налив": "azs", "Налив ОВА": "ova" };
+export const FORMS = ["с/к", "талони", "АЗС ГУНП талони", "АЗС налив", "Налив ОВА", "Субвенція"];
+export const FORM_GROUP = { "с/к": "tsmk", "талони": "tsmk", "АЗС ГУНП талони": "azs", "АЗС налив": "azs", "Налив ОВА": "ova", "Субвенція": "azs" };
 export const LEGACY_SOURCES = [
   { id: "azs_gunp", form: "АЗС ГУНП талони", fuel: "", supplier: "", mvo: "", label: "АЗС ГУНП талони" },
   { id: "talony", form: "талони", fuel: "", supplier: "", mvo: "", label: "Талони" },
@@ -17,7 +17,7 @@ export const LEGACY_SOURCES = [
   { id: "azs_smk", form: "АЗС налив", fuel: "", supplier: "", mvo: "", label: "АЗС налив" },
 ];
 /** Коротка форма для опису залишку. */
-export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС", "Налив ОВА": "ОВА" };
+export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС", "Налив ОВА": "ОВА", "Субвенція": "субв." };
 export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS", "Інше"];
 /** Авто без основного джерела (заправляється з різних): витрата — спершу із залишку, потім із виданого, щоб джерела вичерпувались повністю. */
 export const NO_MAIN = "-";
@@ -46,7 +46,7 @@ export const czActOf = (src) => {
 };
 /** Субвенція / благодійна допомога: окремий акт із назвою джерела. Без явної галочки — BVS або «субвенц…», «благо…». */
 export const autoSubv = (src) => /^bvs$/i.test(String(src.supplier || "").trim()) || /субвенц|благо/i.test(`${src.supplier || ""} ${src.label || ""}`);
-export const isSubv = (src) => (src.subv === undefined || src.subv === null ? autoSubv(src) : !!src.subv);
+export const isSubv = (src) => src.form === "Субвенція" || (src.subv === undefined || src.subv === null ? autoSubv(src) : !!src.subv);
 const subvGroup = (src) => "sv:" + sourceTitle(src);
 /** Реквізити джерела для конкретного авто (порожні поля стандартних джерел — з картки авто). */
 export function sourceFor(src, v = {}, settings = {}) {
@@ -249,6 +249,7 @@ export function mainSource(v, list) {
 export function textForms(low) {
   low = String(low || "").toLowerCase();
   const tal = /талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low);
+  if (/субв|благо/.test(low)) return ["Субвенція"];
   if (/(?:^|[^а-яґєіїa-z])ова(?![а-яґєіїa-z])/.test(low)) return ["Налив ОВА"];   // окреме слово «ОВА» (не «Коваленко»)
   if (/азс/.test(low)) return tal ? ["АЗС ГУНП талони", "АЗС налив"] : ["АЗС налив", "АЗС ГУНП талони"];   // «т АЗС» — талони АЗС ГУНП
   if (tal) return ["талони", "АЗС ГУНП талони"];

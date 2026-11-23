@@ -1,8 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261123d";
-import { litresWords } from "./words.js?v=20261123d";
-import * as S from "./stock.js?v=20261123d";
+import * as C from "./core.js?v=20261123e";
+import { litresWords } from "./words.js?v=20261123e";
+import * as S from "./stock.js?v=20261123e";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -281,7 +281,7 @@ export function buildStock(D, s, ym, res, issTotalNo = 9) {
     }
     totRow(many ? `Всього (${g.title})` : "Всього", g.tot);
   }
-  if (many) totRow("РАЗОМ", res.tot);
+  if (many) totRow(res.hasSv ? "РАЗОМ (без субвенції)" : "РАЗОМ", res.tot);
   const KEEP = 3;
   body.forEach((f, i) => rows.push(f(i >= body.length - KEEP)));
   children.push(new D.Table({ rows, columnWidths: widths, width: { size: usable, type: D.WidthType.DXA }, layout: D.TableLayoutType.FIXED,
