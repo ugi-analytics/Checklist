@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123f";
-import * as U from "./ui.js?v=20261123f";
-import { litresWords } from "./words.js?v=20261123f";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123f";
-import { buildCzRegister } from "./cz.js?v=20261123f";
-import * as ST from "./stock.js?v=20261123f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123f";
-import * as X from "./crypto.js?v=20261123f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123f";
-import { buildXlsx } from "./xlsx.js?v=20261123f";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123f";
+import * as C from "./core.js?v=20261123g";
+import * as U from "./ui.js?v=20261123g";
+import { litresWords } from "./words.js?v=20261123g";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123g";
+import { buildCzRegister } from "./cz.js?v=20261123g";
+import * as ST from "./stock.js?v=20261123g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123g";
+import * as X from "./crypto.js?v=20261123g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123g";
+import { buildXlsx } from "./xlsx.js?v=20261123g";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -2275,8 +2275,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

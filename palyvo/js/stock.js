@@ -1,7 +1,7 @@
 // «Додаток № 2» — звіт про одержане і видане пальне (рух пального в МВО за накладними).
 // МВО вносить накладні (№/дата або від кого, джерело, одержано, «в наливі / резерв»); видане — з реєстру,
 // розписується на накладні того ж джерела: спершу робочі (від старішої), потім ті, що «в наливі / резерв».
-import * as C from "./core.js?v=20261123f";
+import * as C from "./core.js?v=20261123g";
 
 /** Налив (АЗС налив, налив ОВА) і газ — у графах «літри/(кг)»; талони і с/к — у графах «талони (с/к)». */
 export const LIT_FORMS = new Set(["АЗС налив", "Налив ОВА", "Субвенція"]);
@@ -131,14 +131,13 @@ export function calcStock(stock, rows, sources, settings = {}, ym = "") {
     m.lit = !m.T; // лише налив — графи «літри»
   }
   const gm = new Map();
-  // субвенція — окремими групами («Субвенція — Бензин А-95»), не змішується з іншим пальним
-  for (const l of docLines) { const k = (l.sv ? "9" : "") + FUEL_ORDER(l.fuel); if (!gm.has(k)) gm.set(k, { fuel: l.fuel, sv: !!l.sv, lines: [] }); gm.get(k).lines.push(l); }
-  const groups = [...gm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => ({ ...g, title: (g.sv ? "Субвенція — " : "") + fuelName(g.fuel), tot: sum(g.lines) }));
+  // субвенція йде в групі свого виду пального (власними рядками накладних, без злиття з іншими)
+  for (const l of docLines) { const k = FUEL_ORDER(l.fuel); if (!gm.has(k)) gm.set(k, { fuel: l.fuel, lines: [] }); gm.get(k).lines.push(l); }
+  const groups = [...gm.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, g]) => ({ ...g, title: fuelName(g.fuel), tot: sum(g.lines) }));
   // у групі: спершу за джерелом (вид, форма, постачальник, МВО), далі — за датою накладної
   const srcOrd = new Map(sources.map((s, i) => [s.id, i]));
   for (const g of groups) g.lines.sort((a, b) => ((srcOrd.get(a.src) ?? 99) - (srcOrd.get(b.src) ?? 99)) || (docDate(a.doc) - docDate(b.doc)) || (a.i - b.i));
-  const hasSv = lines.some((l) => l.sv);
-  return { lines, groups, tot: sum(lines.filter((l) => !l.sv)), totSv: hasSv ? sum(lines.filter((l) => l.sv)) : null, hasSv, errors, warnings, mvoCol };
+  return { lines, groups, tot: sum(lines), errors, warnings, mvoCol };
 }
 /** Перенесення на наступний місяць: накладні з залишком на кінець > 0 стають залишком на початок. */
 export function carryStock(res) {
