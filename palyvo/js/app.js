@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123g";
-import * as U from "./ui.js?v=20261123g";
-import { litresWords } from "./words.js?v=20261123g";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123g";
-import { buildCzRegister } from "./cz.js?v=20261123g";
-import * as ST from "./stock.js?v=20261123g";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123g";
-import * as X from "./crypto.js?v=20261123g";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123g";
-import { buildXlsx } from "./xlsx.js?v=20261123g";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123g";
+import * as C from "./core.js?v=20261123h";
+import * as U from "./ui.js?v=20261123h";
+import { litresWords } from "./words.js?v=20261123h";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123h";
+import { buildCzRegister } from "./cz.js?v=20261123h";
+import * as ST from "./stock.js?v=20261123h";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123h";
+import * as X from "./crypto.js?v=20261123h";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123h";
+import { buildXlsx } from "./xlsx.js?v=20261123h";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123h";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1880,7 +1880,7 @@ async function pageAdmin(sub, q) {
       ${regular.map((u) => `<tr data-id="${u.id}"><td><div class="row" style="gap:6px"><input class="js-uname" value="${esc(u.name)}" style="min-width:300px"><button class="btn sm js-urename">Перейменувати</button></div></td>
         <td class="num">${usersIn(u.id)}</td><td class="num">${u.n_vehicles ?? 0}</td>
         <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
-        <td><button class="btn sm js-open">Відкрити як підрозділ →</button> ${usersIn(u.id) ? "" : `<button class="btn sm danger js-unitdel">🗑 Видалити</button>`}
+        <td><button class="btn sm js-open">Відкрити як підрозділ →</button> <button class="btn sm danger js-unitdel">🗑 Видалити</button>
           <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-left:8px" title="Особливий режим ЦЗ: служби авто, «передано з ТЗ на ТЗ», реєстр у Excel, свої акти"><input type="checkbox" class="js-cz" ${u.profile === "cz" ? "checked" : ""}> режим ЦЗ</label>
           <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-left:8px" title="Водний транспорт (катери): у автопарку можна обрати тип «водний» — робота в мотогодинах, норма л/мотогод"><input type="checkbox" class="js-water" ${u.water ? "checked" : ""}> водний транспорт</label>
           ${u.crypto && state.adminPriv ? `<button class="btn sm js-rkshow">🔑 Новий ключ підрозділу</button>
@@ -1905,7 +1905,7 @@ async function pageAdmin(sub, q) {
         <td>${u.crypto ? `<span class="pill ok">🔒 увімкнено</span>` : `<span class="pill mut">ключ ще не створено</span>`}</td>
         <td>${!supPub ? `<span class="muted">ключ не створено</span>` : u.supwrap && u.supwrap.kid === supPub.kid ? `<span class="pill ok">👁 бачить</span>` : `<span class="pill mut">${u.crypto ? "відкриється з ключем адміністратора" : "після ключа ПОГ"}</span>`}</td>
         <td>${u.crypto && state.adminPriv ? `<button class="btn sm js-pseed">🔄 Скопіювати реквізити з підрозділу</button> ` : ""}<button class="btn sm js-open">Відкрити →</button>
-          ${usersIn(u.id) ? "" : ` <button class="btn sm danger js-unitdel">🗑 Видалити</button>`}</td></tr>`).join("")}</tbody></table>`
+           <button class="btn sm danger js-unitdel">🗑 Видалити</button></td></tr>`).join("")}</tbody></table>`
         : `<p class="muted">ПОГ ще немає. Вони з'являються, коли ви підтверджуєте заявку з роллю «ПОГ».</p>`}
       <h3 style="margin-top:18px">👁 Керівництво ПОГ</h3>
       <p class="muted">Роль «керівництво ПОГ» бачить кабінети всіх ПОГ області (хто зареєструвався, автомобіль, показники, документи) — лише для перегляду.
@@ -2147,9 +2147,20 @@ async function pageAdmin(sub, q) {
     state.unitId = b.closest("[data-id]").dataset.id; sessionStorage.setItem("unitCtx", state.unitId); go("#/entry");
   }));
   $app.querySelectorAll(".js-unitdel").forEach((b) => b.addEventListener("click", () => {
-    if (!confirm("Видалити підрозділ разом з автопарком і всіма місяцями? Це незворотно.")) return;
-    const id = b.closest("[data-id]").dataset.id;
-    act(async () => { await store.deleteUnit(id); store.log("unit_delete", unitName(id)); if (state.unitId === id) state.unitId = state.me.unit_id; }, "Підрозділ видалено.");
+    const id = b.closest("[data-id]").dataset.id, name = unitName(id);
+    const ppl = users.filter((x) => x.unit_id === id), kids = pogs.filter((x) => x.parent_id === id);
+    const extra = [ppl.length ? `• користувачів, прив'язаних до підрозділу: ${ppl.length} (${ppl.map((x) => x.full_name || x.email).join(", ")}) — їх буде відв'язано, доступ до даних вони втратять` : "",
+      kids.length ? `• ПОГ цього підрозділу: ${kids.length} — їхні кабінети НЕ видаляються (за потреби видаліть або переведіть окремо)` : ""].filter(Boolean).join("\n");
+    if (!confirm(`Видалити підрозділ «${name}» повністю — разом з ключем, автопарком і всіма місяцями? Це незворотно.${extra ? "\n\n" + extra : ""}`)) return;
+    const typed = prompt(`Для підтвердження введіть назву підрозділу:\n${name}`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== String(name).trim().toLowerCase()) { flash("err", "Назву введено неправильно — підрозділ не видалено."); return render(); }
+    act(async () => {
+      for (const x of ppl) await store.updateUser(x.uid, { unit_id: "" });
+      await store.deleteUnit(id); store.log("unit_delete", `${name}${ppl.length ? ` (відв'язано користувачів: ${ppl.length})` : ""}`);
+      if (state.me.unit_id === id) state.me.unit_id = "";
+      if (state.unitId === id) { state.unitId = (state.units.find((x) => x.id !== id && x.kind !== "pog") || {}).id || null; sessionStorage.setItem("unitCtx", state.unitId || ""); }
+    }, `Підрозділ «${name}» видалено.`);
   }));
   $app.querySelectorAll(".js-fleetxl").forEach((b) => b.addEventListener("click", () => {
     const { ym, all } = state.lastSummary;
@@ -2275,8 +2286,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123g")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123g")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123h")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123h")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
