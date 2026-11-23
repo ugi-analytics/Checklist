@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261120e";
-import * as U from "./ui.js?v=20261120e";
-import { litresWords } from "./words.js?v=20261120e";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261120e";
-import { buildCzRegister } from "./cz.js?v=20261120e";
-import * as ST from "./stock.js?v=20261120e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261120e";
-import * as X from "./crypto.js?v=20261120e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261120e";
-import { buildXlsx } from "./xlsx.js?v=20261120e";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261120e";
+import * as C from "./core.js?v=20261123a";
+import * as U from "./ui.js?v=20261123a";
+import { litresWords } from "./words.js?v=20261123a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123a";
+import { buildCzRegister } from "./cz.js?v=20261123a";
+import * as ST from "./stock.js?v=20261123a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123a";
+import * as X from "./crypto.js?v=20261123a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261123a";
+import { buildXlsx } from "./xlsx.js?v=20261123a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -761,7 +761,13 @@ function pageUnitKey(mode, u) {
   $app.querySelector(".js-kopen").addEventListener("submit", async (e) => {
     e.preventDefault(); const f = e.target; busy(true);
     try {
-      const dk = await X.unwrapWithPass(u.crypto.pass, f.k.value, X.aadPass(u.id));
+      // ключ часто копіюють із месенджера з пробілом/переносом на краях — пробуємо і як введено, і без них
+      const raw = f.k.value, clean = raw.replace(/\u00a0/g, " ").trim();
+      // завжди свіжий запис підрозділу: якщо адміністратор щойно встановив новий ключ, а сторінка відкрита давно
+      const fresh = await store.getUnit(u.id).catch(() => null); if (fresh && fresh.crypto) u = fresh;
+      let dk;
+      try { dk = await X.unwrapWithPass(u.crypto.pass, raw, X.aadPass(u.id)); }
+      catch (e1) { if (clean === raw || e1.code !== "wrong-key") throw e1; dk = await X.unwrapWithPass(u.crypto.pass, clean, X.aadPass(u.id)); }
       await rememberKey(u.id, dk, f.remember.checked);
       render();
     } catch (err) { flash("err", store.errUa(err)); pageUnitKey(mode, u); } finally { busy(false); }
@@ -2084,6 +2090,7 @@ async function pageAdmin(sub, q) {
   $app.querySelectorAll(".js-rkshow").forEach((b) => b.addEventListener("click", () => { const f = b.parentElement.querySelector(".js-rk"); f.hidden = !f.hidden; }));
   $app.querySelectorAll(".js-rk").forEach((f) => f.addEventListener("submit", (e) => {
     e.preventDefault();
+    f.n1.value = f.n1.value.replace(/\u00a0/g, " ").trim(); f.n2.value = f.n2.value.replace(/\u00a0/g, " ").trim();   // без пробілів на краях
     if (f.n1.value !== f.n2.value) { flash("err", "Ключі не збігаються."); return render(); }
     const kp = X.passProblem(f.n1.value, "Ключ підрозділу"); if (kp) { flash("err", kp); return render(); }
     const id = f.closest("[data-id]").dataset.id;
@@ -2247,8 +2254,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261120e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261120e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261123a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
