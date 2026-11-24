@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124f";
-import * as U from "./ui.js?v=20261124f";
-import { litresWords } from "./words.js?v=20261124f";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124f";
-import { buildCzRegister } from "./cz.js?v=20261124f";
-import * as ST from "./stock.js?v=20261124f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124f";
-import * as X from "./crypto.js?v=20261124f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124f";
-import { buildXlsx } from "./xlsx.js?v=20261124f";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124f";
+import * as C from "./core.js?v=20261124g";
+import * as U from "./ui.js?v=20261124g";
+import { litresWords } from "./words.js?v=20261124g";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124g";
+import { buildCzRegister } from "./cz.js?v=20261124g";
+import * as ST from "./stock.js?v=20261124g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124g";
+import * as X from "./crypto.js?v=20261124g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124g";
+import { buildXlsx } from "./xlsx.js?v=20261124g";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -2001,7 +2001,7 @@ async function pageAdmin(sub, q) {
       const p = byId[r.u.parent_id]; r.parentName = p ? p.u.name : (r.u.parent_name || "—");
       if (r.exp) r.exp = { ...r.exp, unit: r.parentName };          // у модулі хабу — у складі свого підрозділу
       if (!p) continue;
-      p.n += r.n; p.done += r.done; p.err += r.err; if (r.u.solo) p.soloN = (p.soloN || 0) + 1; else p.pogN = (p.pogN || 0) + 1;
+      p.n += r.n; p.done += r.done; p.err += r.err; p.qx = (p.qx || "") + " " + r.u.name; if (r.u.solo) p.soloN = (p.soloN || 0) + 1; else p.pogN = (p.pogN || 0) + 1;
       if (r.t) { p.t = p.t ? { ...p.t } : {}; for (const [k, v] of Object.entries(r.t)) if (typeof v === "number") p.t[k] = (p.t[k] || 0) + v; }
     }
     rowsSum = allRows.filter((r) => r.u.kind !== "pog" || !byId[r.u.parent_id]);
@@ -2013,8 +2013,11 @@ async function pageAdmin(sub, q) {
       <h2>Зведення по області за ${C.monthTitle(ym)}</h2>
       <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів${pogRows.length ? ` · ПОГ: <b>${pogRows.filter((r) => !r.u.solo).length}</b>${pogRows.some((r) => r.u.solo) ? `, окремих кабінетів: <b>${pogRows.filter((r) => r.u.solo).length}</b>` : ""} (їхні авто враховано у своїх підрозділах)` : ""} ·
         видано <b>${C.fmtC(sum("issuedC"))} л</b> · витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок у баках <b>${C.fmtC(sum("endC"))} л</b></p>
-      <table class="list"><thead><tr><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
-      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.svcOf ? ` <span class="muted" title="Умовний підрозділ: авто служби, які веде ${esc(r.svcOf)}">· веде ${esc(r.svcOf)}</span>` : ""}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}${r.soloN ? ` <span class="muted" title="Авто з окремих кабінетів працівників зараховано до підрозділу">· у т.ч. окремі кабінети: ${r.soloN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
+      <div class="row" style="margin:6px 0 10px;gap:8px;align-items:center"><input type="search" class="js-sumq" placeholder="🔍 Пошук підрозділу (або прізвища ПОГ)…" autocomplete="off" style="max-width:360px">
+        <select class="js-sumf" style="max-width:230px"><option value="">усі</option><option value="none">не почали (0 з …)</option><option value="part">заповнили частково</option><option value="notfull">не заповнили повністю</option><option value="full">заповнили повністю</option><option value="err">з помилками</option></select>
+        <span class="muted js-sumn"></span></div>
+      <table class="list js-sumtbl"><thead><tr><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
+      ${rowsSum.map((r) => `<tr data-q="${esc((r.u.name + " " + (r.svcOf || "") + (r.qx || "")).toLowerCase())}" data-st="${!r.n ? "empty" : r.done === r.n ? "full" : r.done ? "part" : "none"}${r.err ? " err" : ""}"><td>${esc(r.u.name)}${r.svcOf ? ` <span class="muted" title="Умовний підрозділ: авто служби, які веде ${esc(r.svcOf)}">· веде ${esc(r.svcOf)}</span>` : ""}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}${r.soloN ? ` <span class="muted" title="Авто з окремих кабінетів працівників зараховано до підрозділу">· у т.ч. окремі кабінети: ${r.soloN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
         : r.done ? `<span class="pill warn">${r.done}/${r.n}</span>` : `<span class="pill err">0/${r.n}</span>`}${r.err ? ` <span class="pill err">помилок: ${r.err}</span>` : ""}</td>
         <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
         <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table>
@@ -2228,6 +2231,23 @@ async function pageAdmin(sub, q) {
     store.log("fleet_xlsx", `${b.dataset.kind} ${ym}: ${stats.cars} авто`);
     if (skipped.length) { flash("info", `У файл не потрапили підрозділи без ключа шифрування: ${skipped.join(", ")}.`); render(); }
   }));
+  const sumTbl = $app.querySelector(".js-sumtbl");
+  if (sumTbl) {
+    const q = $app.querySelector(".js-sumq"), f = $app.querySelector(".js-sumf"), cnt = $app.querySelector(".js-sumn");
+    const rows = [...sumTbl.querySelectorAll("tbody tr")];
+    const norm = (t) => String(t).toLowerCase().replace(/['’`ʼ]/g, "").replace(/\s+/g, " ");
+    const apply = () => {
+      const w = norm(q.value).trim().split(" ").filter(Boolean), fv = f.value; let n = 0;
+      for (const tr of rows) {
+        const st = tr.dataset.st.split(" ");
+        const okF = !fv || (fv === "notfull" ? st[0] === "part" || st[0] === "none" : st.includes(fv));
+        const ok = okF && w.every((x) => norm(tr.dataset.q).includes(x));
+        tr.hidden = !ok; if (ok) n++;
+      }
+      cnt.textContent = w.length || fv ? `показано ${n} з ${rows.length}` : "";
+    };
+    q.addEventListener("input", apply); f.addEventListener("change", apply);
+  }
   $app.querySelector(".js-sumdoc")?.addEventListener("click", async () => {
     const D = window.docx; const { ym, rowsSum } = state.lastSummary;
     const cellP = (t, bold = false) => new D.TableCell({ children: [new D.Paragraph({ children: [new D.TextRun({ text: String(t), bold, font: "Times New Roman", size: 22 })] })] });
@@ -2342,8 +2362,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
