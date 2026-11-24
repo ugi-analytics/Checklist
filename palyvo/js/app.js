@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261123k";
-import * as U from "./ui.js?v=20261123k";
-import { litresWords } from "./words.js?v=20261123k";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261123k";
-import { buildCzRegister } from "./cz.js?v=20261123k";
-import * as ST from "./stock.js?v=20261123k";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261123k";
-import * as X from "./crypto.js?v=20261123k";
-import { qrSvg } from "../vendor/qrcode.js?v=20261123k";
-import { buildXlsx } from "./xlsx.js?v=20261123k";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261123k";
+import * as C from "./core.js?v=20261124a";
+import * as U from "./ui.js?v=20261124a";
+import { litresWords } from "./words.js?v=20261124a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124a";
+import { buildCzRegister } from "./cz.js?v=20261124a";
+import * as ST from "./stock.js?v=20261124a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124a";
+import * as X from "./crypto.js?v=20261124a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124a";
+import { buildXlsx } from "./xlsx.js?v=20261124a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -633,12 +633,13 @@ async function syncPogSupAccess(pogs, users) {
   if (!state.adminPriv) return 0;
   const pub = await store.getPogSupPub(); let n = 0;
   for (const u of pogs) {
+    if (u.solo) continue;                                        // окремий кабінет працівника — не ПОГ
     if (pub && u.crypto && u.crypto.admin && (!u.supwrap || u.supwrap.kid !== pub.kid)) {
       const dk = await X.unwrapByAdmin(u.crypto.admin, state.adminPriv, true);
       await wrapForPogSup(u.id, dk, pub); n++;
     }
   }
-  for (const x of users) if (!x.pog && pogs.some((u) => u.id === x.unit_id)) await store.updateUser(x.uid, { pog: true });
+  for (const x of users) if (!x.pog && pogs.some((u) => u.id === x.unit_id && !u.solo)) await store.updateUser(x.uid, { pog: true });
   return n;
 }
 // реквізити підрозділу (для копіювання до кабінету ПОГ) — адміністратор розшифровує своїм ключем
@@ -740,7 +741,7 @@ function pageUnitKey(mode, u) {
         const cryptoObj = { v: 1, pass: await X.wrapWithPass(dk, f.k1.value, X.aadPass(u.id)), admin: await X.wrapForAdmin(dk, pub) };
         const enc = await X.encJson(dk, { settings: { ...C.DEFAULT_SETTINGS, ...(u.settings || {}) }, vehicles: u.vehicles || [] }, X.aadUnit(u.id));
         await store.initUnitCrypto(u.id, cryptoObj, enc, (u.vehicles || []).length);
-        if (u.kind === "pog") await wrapForPogSup(u.id, dk).catch(() => {});
+        if (u.kind === "pog" && !u.solo) await wrapForPogSup(u.id, dk).catch(() => {});
         await rememberKey(u.id, dk, f.remember.checked);
         store.log("unit_key_create", "", u.id);
         flash("ok", "Ключ підрозділу створено. Дані підрозділу тепер шифруються.");
@@ -1180,7 +1181,8 @@ async function pagePogSup(q) {
     return;
   }
   const ym = currentYm(q);
-  const [units, users] = await Promise.all([store.listPogUnits(), store.listPogUsers()]);
+  let [units, users] = await Promise.all([store.listPogUnits(), store.listPogUsers()]);
+  units = units.filter((u) => !u.solo);                        // окремі кабінети працівників (не ПОГ) керівництво ПОГ не бачить
   units.sort((a, b) => String(a.parent_name || "").localeCompare(String(b.parent_name || ""), "uk") || a.name.localeCompare(b.name, "uk"));
   const recs = await Promise.all(units.map(async (u) => {
     const people = users.filter((x) => x.unit_id === u.id);
@@ -1521,7 +1523,7 @@ async function pageFleet() {
         норма витрати, вид пального), перевірте реквізити бланків і склад комісії для акта списання, а потім натисніть
         <b>«Зберегти шаблон підрозділу»</b>. Після цього відкриється введення даних за місяць.</p>
       <p class="muted">Шаблон створюється один раз: колеги з вашого підрозділу, які зареєструються пізніше, одразу побачать цей автопарк.</p></div>` : ""}
-    ${pog ? `<div class="panel" style="border-color:rgba(56,189,248,.45)"><h2>👮 Поліцейський офіцер громади</h2>
+    ${pog ? `<div class="panel" style="border-color:rgba(56,189,248,.45)"><h2>${unit.solo ? "👤 Окремий кабінет працівника" : "👮 Поліцейський офіцер громади"}</h2>
       <p>Ваш кабінет належить до підрозділу <b>${esc(unit.parent_name || "—")}</b>. Ви — окрема МВО: тут лише ваш автомобіль, ваші джерела пального й ваші «Додаток 6» та акт.
         Реквізити бланків і склад комісії скопійовано з підрозділу; змінювати їх можна тут — це не змінює реквізитів підрозділу.</p>
       <div class="row"><button class="btn sm js-seedreq">🔄 Взяти реквізити й комісію з підрозділу</button>
@@ -1531,7 +1533,7 @@ async function pageFleet() {
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}${water ? `<th title="Авто — пробіг у км, норма л/100 км; водний транспорт — робота в мотогодинах, норма л на 1 мотогодину">Тип</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км${water ? "<br><small>(водний — л/мотогод)</small>" : ""}</th>
         <th>Норма пробігу, км/міс${water ? "<br><small>(водний — мотогод/міс)</small>" : ""}</th><th>Вид пального</th>${cz ? "" : `<th title="Куди списується витрата в першу чергу">Основне джерело</th>`}<th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
-      <button class="btn sm js-addveh" style="margin-top:10px">${pog && unit.vehicles.length ? "➕ Додати ще авто (якщо за ПОГ закріплено кілька)" : "➕ Додати авто"}</button>
+      <button class="btn sm js-addveh" style="margin-top:10px">${pog && unit.vehicles.length ? "➕ Додати ще авто (якщо за вами закріплено кілька)" : "➕ Додати авто"}</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="Газ/бенз"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist>
       ${cz ? `<datalist id="czsvc">${[...new Set(["ЦЗ", "Керівництво", "УПД", "УКЗ", "УЛМТЗ", "ТЦ", "УІАП", "ВК", "ВПЗ", "УОАЗОР", "ЗК", "СОЗДМТТО", "УФЗБО", ...unit.vehicles.map((v) => v.service).filter(Boolean)])].map((x) => `<option value="${esc(x)}">`).join("")}</datalist>` : ""}</div>
@@ -1811,7 +1813,7 @@ async function pageAdmin(sub, q) {
   const tab = sub || "requests";
   const [users, units] = await Promise.all([store.listUsers(), store.listUnits()]);
   state.units = units; setUserStats(users);
-  const unitName = (id) => { const x = units.find((u) => u.id === id); return x ? (x.kind === "pog" ? `${x.name} (${x.parent_name || "—"})` : x.name) : "—"; };
+  const unitName = (id) => { const x = units.find((u) => u.id === id); return x ? (x.kind === "pog" ? `${x.name}${x.solo ? " · окремий кабінет" : ""} (${x.parent_name || "—"})` : x.name) : "—"; };
   const regular = units.filter((u) => u.kind !== "pog"), pogs = units.filter((u) => u.kind === "pog");
   const usersIn = (id) => users.filter((u) => u.unit_id === id).length;
   const tabs = `<nav class="tabs" style="margin-top:16px">
@@ -1849,7 +1851,7 @@ async function pageAdmin(sub, q) {
       ${list.map((u) => `<tr data-uid="${u.uid}" data-pog="${pogs.some((x) => x.id === u.unit_id) ? 1 : 0}" data-role="${esc(u.role || "user")}" data-unit="${esc((() => { const x = units.find((y) => y.id === u.unit_id); return x ? (x.kind === "pog" ? x.parent_id : x.id) : "-"; })())}" data-st="${esc(u.status)}"
         data-s="${esc([u.full_name, u.email, u.position, u.phone, unitName(u.unit_id)].join(" ").toLowerCase())}"><td><b>${esc(u.full_name)}</b><br><span class="muted">${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}</span></td>
         <td>${esc(u.email)}</td>
-        <td>${pogs.some((x) => x.id === u.unit_id) ? `<span class="pill info">👮 ПОГ</span> ${esc(unitName(u.unit_id))}<br><span class="muted">переведення — на вкладці «ПОГ»</span>`
+        <td>${pogs.some((x) => x.id === u.unit_id) ? `<span class="pill info">${pogs.find((x) => x.id === u.unit_id).solo ? "👤 окремий кабінет" : "👮 ПОГ"}</span> ${esc(unitName(u.unit_id))}<br><span class="muted">переведення — на вкладці «ПОГ»</span>`
           : `<div class="row" style="gap:6px"><select class="js-unitsel">${unitOptions(u.unit_id)}</select>
           <select class="js-role">${[...Object.entries(ROLE_UA), ["dispunit", "диспетчер + кабінет підрозділу"]].map(([k, l]) => {
             const on = k === "dispunit" ? u.role === "dispatcher" && !!u.unit_id : u.role === k && !(k === "dispatcher" && u.unit_id);
@@ -1858,6 +1860,7 @@ async function pageAdmin(sub, q) {
         <td>${u.status === "active" ? `<span class="pill ok">активний</span>` : u.status === "blocked" ? `<span class="pill err">заблокований</span>` : `<span class="pill mut">${esc(u.status)}</span>`}</td>
         <td class="muted">${esc(u.last_login || "—")}</td>
         <td><button class="btn sm js-ureset">✉️ Лист для скидання пароля</button>
+          ${u.status === "active" && (u.role || "user") === "user" && regular.some((x) => x.id === u.unit_id) ? `<button class="btn sm js-usolo" title="Окремий кабінет у складі підрозділу: свій ключ, своє авто, свої документи; інших авто підрозділу не бачить (як ПОГ, але не ПОГ)">👤 Окремий кабінет</button>` : ""}
           ${u.uid !== state.authUser.uid ? `${u.status === "active" ? `<button class="btn sm danger js-ublock">Заблокувати</button>` : `<button class="btn sm js-uunblock">Розблокувати</button>`}
           <button class="btn sm danger js-udel">🗑 Видалити</button>` : ""}</td></tr>`).join("")}</tbody></table>
       <p class="muted">Видалення прибирає профіль і доступ до даних. Якщо людина знову увійде зі своїм e-mail, портал запропонує подати нову заявку.</p>
@@ -1901,7 +1904,7 @@ async function pageAdmin(sub, q) {
         Перевести ПОГ до іншого підрозділу може лише адміністратор. Реквізити й комісія копіюються з підрозділу ключем адміністратора.</p>
       ${state.adminPriv ? "" : adminKeyForm("Щоб копіювати реквізити підрозділу до кабінету ПОГ, введіть ключ адміністратора.")}
       ${pogs.length ? `<table class="list"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Користувач</th><th class="num">Авто</th><th>Шифрування</th><th>Керівництво ПОГ</th><th>Дії</th></tr></thead><tbody>
-      ${pogs.map((u) => `<tr data-id="${u.id}"><td><b>${esc(u.name)}</b></td>
+      ${pogs.map((u) => `<tr data-id="${u.id}"><td><b>${esc(u.name)}</b>${u.solo ? ` <span class="pill mut" title="Окремий кабінет працівника — не ПОГ; керівництво ПОГ його не бачить">окремий кабінет</span>` : ""}</td>
         <td><div class="row" style="gap:6px"><select class="js-pparent">${regular.map((x) => `<option value="${x.id}" ${x.id === u.parent_id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
           <button class="btn sm js-ptransfer">Перевести</button></div></td>
         <td>${users.filter((x) => x.unit_id === u.id).map((x) => esc(x.full_name)).join("<br>") || "—"}</td><td class="num">${u.n_vehicles ?? 0}</td>
@@ -1962,7 +1965,7 @@ async function pageAdmin(sub, q) {
       const p = byId[r.u.parent_id]; r.parentName = p ? p.u.name : (r.u.parent_name || "—");
       if (r.exp) r.exp = { ...r.exp, unit: r.parentName };          // у модулі хабу — у складі свого підрозділу
       if (!p) continue;
-      p.n += r.n; p.done += r.done; p.err += r.err; p.pogN = (p.pogN || 0) + 1;
+      p.n += r.n; p.done += r.done; p.err += r.err; if (r.u.solo) p.soloN = (p.soloN || 0) + 1; else p.pogN = (p.pogN || 0) + 1;
       if (r.t) { p.t = p.t ? { ...p.t } : {}; for (const [k, v] of Object.entries(r.t)) if (typeof v === "number") p.t[k] = (p.t[k] || 0) + v; }
     }
     rowsSum = allRows.filter((r) => r.u.kind !== "pog" || !byId[r.u.parent_id]);
@@ -1975,13 +1978,13 @@ async function pageAdmin(sub, q) {
       <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів${pogRows.length ? ` (з урахуванням ${pogRows.length} ПОГ)` : ""} ·
         видано <b>${C.fmtC(sum("issuedC"))} л</b> · витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок у баках <b>${C.fmtC(sum("endC"))} л</b></p>
       <table class="list"><thead><tr><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
-      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.svcOf ? ` <span class="muted" title="Умовний підрозділ: авто служби, які веде ${esc(r.svcOf)}">· веде ${esc(r.svcOf)}</span>` : ""}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
+      ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.svcOf ? ` <span class="muted" title="Умовний підрозділ: авто служби, які веде ${esc(r.svcOf)}">· веде ${esc(r.svcOf)}</span>` : ""}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}${r.soloN ? ` <span class="muted" title="Авто з окремих кабінетів працівників зараховано до підрозділу">· у т.ч. окремі кабінети: ${r.soloN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
         : r.done ? `<span class="pill warn">${r.done}/${r.n}</span>` : `<span class="pill err">0/${r.n}</span>`}${r.err ? ` <span class="pill err">помилок: ${r.err}</span>` : ""}</td>
         <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
         <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table>
-      ${pogRows.length ? `<h2 style="margin-top:18px">👮 ПОГ області</h2><p class="muted">Уже враховані в рядках своїх підрозділів вище.</p>
+      ${pogRows.some((r) => !r.u.solo) ? `<h2 style="margin-top:18px">👮 ПОГ області</h2><p class="muted">Уже враховані в рядках своїх підрозділів вище.</p>
       <table class="list"><thead><tr><th>ПОГ</th><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
-      ${pogRows.map((r) => `<tr><td>${esc(r.u.name)}</td><td>${esc(r.parentName)}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>` : `<span class="pill err">${r.done}/${r.n}</span>`}</td>
+      ${pogRows.filter((r) => !r.u.solo).map((r) => `<tr><td>${esc(r.u.name)}</td><td>${esc(r.parentName)}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>` : `<span class="pill err">${r.done}/${r.n}</span>`}</td>
         <td class="num">${r.t ? C.fmtKm(r.t.km) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.issuedC) : "0"}</td><td class="num">${r.t ? C.fmtC(r.t.consC) : "0"}</td>
         <td class="num">${r.t ? C.fmtC(r.t.endC) : "0"}</td><td class="muted">${esc(r.updated || "—")}${r.closed ? " · 🔒" : ""}</td></tr>`).join("")}</tbody></table>` : ""}</div>`;
   } else if (tab === "audit") {
@@ -2097,6 +2100,20 @@ async function pageAdmin(sub, q) {
     if (!confirm("Скинути ключ диспетчера? Диспетчер створить новий, а довідники авто оновляться, коли підрозділи відкриють портал (або ви відкриєте «Зведення по області»).")) return;
     act(async () => { await store.resetDispKeys(); state.dispPub = undefined; store.log("disp_key_reset", ""); }, "Ключ диспетчера скинуто.");
   });
+  $app.querySelectorAll(".js-usolo").forEach((b) => b.addEventListener("click", () => {
+    const uid = b.closest("[data-uid]").dataset.uid, u = users.find((x) => x.uid === uid);
+    const parent = regular.find((x) => x.id === u.unit_id);
+    if (!parent) { flash("err", "Користувач не прив'язаний до підрозділу."); return render(); }
+    if (!state.adminPriv) { flash("err", "Введіть ключ адміністратора (вкладка «Зведення по області» або «ПОГ») — потрібен, щоб скопіювати реквізити підрозділу."); return render(); }
+    if (!confirm(`Створити для ${u.full_name} окремий кабінет у складі «${parent.name}»?\n\n• свій ключ (створить сам під час наступного входу), своє авто, свої «Додаток 6» та акт;\n• інших авто підрозділу він більше не бачитиме;\n• реквізити й комісія скопіюються з підрозділу;\n• у «Зведенні по області» його авто рахуються в «${parent.name}».`)) return;
+    act(async () => {
+      const ps = await parentSettings(parent);
+      const id = await store.createUnit(C.shortName(u.full_name), { ...C.DEFAULT_SETTINGS, ...C.pickSeed(ps), compiler: C.shortName(u.full_name) },
+        { kind: "pog", solo: true, parent_id: parent.id, parent_name: parent.name });
+      await store.updateUser(uid, { unit_id: id, role: "user" });
+      store.log("unit_solo", `${u.full_name} → окремий кабінет (${parent.name})`, id);
+    }, `Окремий кабінет для ${u.full_name} створено. Під час наступного входу він створить свій ключ і додасть авто.`);
+  }));
   $app.querySelectorAll(".js-ublock").forEach((b) => b.addEventListener("click", () => { if (confirm("Заблокувати користувача?")) act(() => store.updateUser(b.closest("[data-uid]").dataset.uid, { status: "blocked" }), "Заблоковано."); }));
   $app.querySelectorAll(".js-uunblock").forEach((b) => b.addEventListener("click", () => act(() => store.updateUser(b.closest("[data-uid]").dataset.uid, { status: "active" }), "Розблоковано.")));
   $app.querySelectorAll(".js-ureset").forEach((b) => b.addEventListener("click", () => {
@@ -2289,8 +2306,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261123k")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261123k")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
