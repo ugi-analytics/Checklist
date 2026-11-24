@@ -125,8 +125,12 @@ export function balanceBreakdown(rows, settings = {}) {
 }
 
 /** Чи підходить джерело авто за видом пального (джерело без виду — для всіх). */
+/** Авто на двох видах пального: газ + бензин («Газ/бенз») — у реєстрі два рядки (бензин і газ). */
+export function isDual(v) { const f = String((v && v.fuel) || "").toLowerCase(); return /газ|lpg|пропан/.test(f) && /бенз|[аa]-?9\d/.test(f); }
+export const isGasSrc = (s) => normFuel(s && s.fuel) === "ГАЗ";
 export function sourceFits(src, v) {
   const a = normFuel(src.fuel), b = normFuel(v.fuel);
+  if (isDual(v)) return !a || a === "ГАЗ" || /^А\d\d$/.test(a) || /БЕНЗ/.test(a);
   return !a || !b || a === b || s_in(b, a);
 }
 const s_in = (x, y) => x.includes(y) || y.includes(x);
@@ -269,7 +273,10 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   // розбивка залишку за джерелами (start: {джерело: л}) — лише стандартний режим; у своїх джерелах старі записи
   // (з часу, коли залишок вводився в плитки джерел) читаються як загальний залишок + опис
   const useStartMap = hasMap && isBlank(e.fuel_start) && sources.legacy;
-  const startTotal = !isBlank(e.fuel_start) ? e.fuel_start : hasMap && !sources.legacy ? Object.values(e.start).reduce((a, x) => a + (Number(x) || 0), 0) : null;
+  const dual = isDual(vehicle) && !sources.legacy;
+  const gasStart = dual && !isBlank(e.fuel_start_gas) ? Number(e.fuel_start_gas) || 0 : 0;
+  let startTotal = !isBlank(e.fuel_start) ? e.fuel_start : hasMap && !sources.legacy ? Object.values(e.start).reduce((a, x) => a + (Number(x) || 0), 0) : null;
+  if (gasStart) startTotal = (Number(startTotal) || 0) + gasStart;
   const splitIn = [];          // [{mvo, c, hint}]
   const textWarn = [];
   if (!useStartMap) {
@@ -290,7 +297,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       parts.forEach((p) => { p.own = !!p.mv; });
       // опис без числа («ДП с/к Ольховський») — увесь загальний залишок належить цьому МВО / формі
       const withNum = parts.filter((p) => p.c !== null);
-      if (!withNum.length && parts.length === 1 && !isBlank(startTotal)) parts[0].c = toC(startTotal);
+      if (!withNum.length && parts.length === 1 && !isBlank(startTotal)) parts[0].c = toC(startTotal) - toC(gasStart);
       for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mv) nxt = parts[k].mv; else if (!parts[k].alien) parts[k].mv = nxt; }
       for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mv) prv = parts[k].mv; else if (!parts[k].alien) parts[k].mv = prv; }
       for (const p of parts) {
@@ -310,6 +317,13 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       }
     }
   }
+  // газ (авто «Газ/бенз»): окреме поле залишку газу — на джерело газу (з якого видавали цього місяця, інакше будь-яке газове)
+  if (gasStart > 0) {
+    const gi = (x) => { const m = e.iss || {}; return !isBlank(m[x.id]) && Number(m[x.id]) > 0 ? 1 : 0; };
+    const gsrc = [...list, ...sources.filter((x) => !list.includes(x) && x.active)].filter(isGasSrc).sort((a, b) => gi(b) - gi(a) || (list.includes(b) - list.includes(a)))[0];
+    if (gsrc) { if (!list.includes(gsrc)) list.push(gsrc); splitIn.push({ mvo: gsrc.mvo, c: toC(gasStart), src: gsrc, gas: true }); }
+    else splitIn.push({ keep: true, c: toC(gasStart), label: `${fmtC(toC(gasStart))} газ`, mvo: "", own: true, gas: true });
+  }
   // джерело для частини залишку: та ж МВО; далі — вид пального, постачальник і форма зі слів опису
   const pickSrc = (sp) => {
     const cand = [...list, ...sources.filter((x) => !list.includes(x))].filter((x) => x.mvo === sp.mvo);
@@ -327,11 +341,11 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   // куди йде залишок, не описаний за МВО: основне джерело; для «різних» — джерело того ж пального, з якого видавали цього місяця,
   // і не АЗС (талони/с/к), щоб не «списувати» з АЗС ГУНП пальне, якого там не було
   const issNow = (x) => { const m = e.iss || {}; return !isBlank(m[x.id]) && Number(m[x.id]) > 0; };
-  const anchorScore = (x) => (x.fuel && sourceFits(x, vehicle) ? 4 : 0) + (issNow(x) ? 2 : 0) + (FORM_GROUP[x.form] === "tsmk" ? 1 : 0);
+  const anchorScore = (x) => (x.fuel && sourceFits(x, vehicle) ? 4 : 0) + (issNow(x) ? 2 : 0) + (FORM_GROUP[x.form] === "tsmk" ? 1 : 0) + (dual && !isGasSrc(x) ? 3 : 0);
   const anchor = free ? ([...list].filter((x) => sourceFits(x, vehicle)).sort((a, b) => anchorScore(b) - anchorScore(a))[0] || list[0])
     : mainSource(vehicle, list);
   const main = free ? null : anchor;
-  const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0,
+  const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0, dual,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
     capped: false, errors: [], warnings: [], empty: true, keep: [], legacy: !!sources.legacy && !e.split };
   // --- залишок на початок: загальний (fuel_start) + за потреби розбивка за МВО (start_mvo);
@@ -349,7 +363,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
     let sum = 0;
     for (const sp of splitIn) {
       sum += sp.c; if (!sp.c) continue;
-      if (sp.keep) { r.keep.push({ label: sp.label, c: sp.c, left: sp.c, mvo: sp.mvo || "", own: sp.own }); continue; }
+      if (sp.keep) { r.keep.push({ label: sp.label, c: sp.c, left: sp.c, mvo: sp.mvo || "", own: sp.own, ...(sp.gas ? { gas: true } : {}) }); continue; }
       if (!sp.src) { r.errors.push(`Залишок за МВО ${sp.mvo}: немає джерела цієї МВО.`); continue; }
       r.startBy[sp.src.id] += sp.c;
     }
@@ -594,6 +608,28 @@ export function balanceText(r, which = "end", settings = {}) {
   return m ? sourceFor(m, r.vehicle, settings).fuel : (r.vehicle.fuel || "");
 }
 
+/** Авто «Газ/бенз»: рядок розрахунку, розділений на частини «бензин» і «газ» (для двох рядків реєстру).
+ *  Кожна частина — той самий вигляд, що й рядок calcRow (лише джерела свого пального). */
+export function dualParts(r) {
+  if (!r || !r.dual) return null;
+  const mk = (gas) => {
+    const srcs = r.sources.filter((x) => isGasSrc(x) === gas);
+    const pick = (o) => Object.fromEntries(srcs.map((x) => [x.id, (o || {})[x.id] || 0]));
+    const sum = (o) => srcs.reduce((a, x) => a + ((o || {})[x.id] || 0), 0);
+    const keep = (r.keep || []).filter((k) => (!!k.gas || /газ/i.test(k.label)) === gas);
+    const kS = keep.reduce((a, k) => a + k.c, 0), kE = keep.reduce((a, k) => a + Math.max(k.left, 0), 0);
+    const xfer = r.xferTo && srcs.some((x) => x.id === r.xferTo) ? r.xferC : 0;
+    const startBy = pick(r.startBy); if (xfer) startBy[r.xferTo] -= xfer;
+    const p = { ...r, frozenTxt: null, gasPart: gas, sources: srcs, startBy, issued: pick(r.issued), consBy: pick(r.consBy), endBy: pick(r.endBy), keep,
+      startC: sum(r.startBy) - xfer + kS, issuedC: sum(r.issued) + xfer, consC: sum(r.consBy) + keep.reduce((a, k) => a + (k.c - Math.max(k.left, 0)), 0), endC: sum(r.endBy) + kE,
+      mainId: srcs.some((x) => x.id === r.mainId) ? r.mainId : null, startSplit: true,
+      vehicle: { ...r.vehicle, fuel: gas ? "газ" : "А-95" },
+      entry: { ...r.entry, start_text: gas ? "" : r.entry.start_text, end_text: gas ? "" : r.entry.end_text } };
+    return p;
+  };
+  return [mk(false), mk(true)];
+}
+
 export function totals(rows) {
   const t = { km: 0, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, normC: 0, endC: 0 };
   for (const r of rows) {
@@ -681,6 +717,14 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
         const t = String(balanceText(r, "end") || "").trim();
         if (t && t.toLowerCase() !== String(v.fuel || "").trim().toLowerCase()) endText = t;
       }
+      const dp = dualParts(r);
+      if (dp) {
+        // «Газ/бенз»: залишок бензину й газу — окремими полями; опис — лише бензину
+        const [b, g] = dp; let bt = String(pe.end_text || "").trim();
+        if (!bt && b.endC > 0) { const t = String(balanceText(b, "end") || "").trim(); if (t && !/^а-?95$/i.test(t)) bt = t; }
+        out[v.id] = { odo_start: odo, fuel_start: b.endC ? b.endC / 100 : null, ...(g.endC ? { fuel_start_gas: g.endC / 100 } : {}), start: {}, iss: {},
+          ...(bt ? { start_text: bt } : {}) };
+      } else
       out[v.id] = { odo_start: odo, fuel_start: r.endC ? r.endC / 100 : null, start: {}, iss: {},
         ...(endText ? { start_text: endText } : {}) };
     }
@@ -700,6 +744,7 @@ export function cleanEntry(raw = {}) {
   for (const f of ["odo_start", "odo_end"]) { const x = num2(raw[f]); out[f] = x; }    // км — цілі (рахуються цілими), мотогодини — до сотих
   out.consumed_manual = num2(raw.consumed_manual);
   if ("fuel_start" in raw) out.fuel_start = num2(raw.fuel_start);
+  if (!isBlank(raw.fuel_start_gas)) { const g = num2(raw.fuel_start_gas); if (g) out.fuel_start_gas = g; }      // авто «Газ/бенз»: залишок газу
   if (raw.start_src) out.start_src = String(raw.start_src);
   if (raw.iss_first === "1" || raw.iss_first === "0") out.iss_first = raw.iss_first;   // порядок списання для цього авто (інакше, ніж у підрозділі)
   if (!isBlank(raw.xfer)) { const x = Number(String(raw.xfer).replace(",", ".").replace(/\s/g, "")); if (isFinite(x) && x !== 0) out.xfer = Math.round(x * 100) / 100; }      // «передано з ТЗ на ТЗ» (режим ЦЗ), може бути від'ємним

@@ -1,8 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261124i";
-import { litresWords } from "./words.js?v=20261124i";
-import * as S from "./stock.js?v=20261124i";
+import * as C from "./core.js?v=20261124j";
+import { litresWords } from "./words.js?v=20261124j";
+import * as S from "./stock.js?v=20261124j";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -114,6 +114,21 @@ export function buildRegister(D, s, ym, rows, sources = rows.sources || C.unitSo
   else if (!groups[0].title) { totRow("Всього", rows); breakdown(rows); }
 
   function pushRow(r, i) {
+    // авто «Газ/бенз» — два рядки: бензин і газ (№, підрозділ, марка, норма й пробіг — спільні)
+    const dp = !legacy && C.dualParts(r);
+    if (dp) {
+      const v = r.vehicle;
+      dp.forEach((p, k) => {
+        const sv = C.balanceText(p, "start", s), ev = C.balanceText(p, "end", s);
+        const head = k ? [] : [String(i + 1), s.unit || "", C.vehName(v), C.fmtRun(v, v.month_norm_km) || "", C.fmtRun(v, r.km)].map((t) => c(t, { rowSpan: 2 }));
+        const vals = [C.fmtC(p.startC), (p.startC || k === 0 ? sv : "газ").split(" + ").join(" +\n"),
+          ...lay.iss.map((x) => C.fmtC(p.issued[x.id] || 0, true)), C.fmtC(p.issuedC),
+          ...lay.cons.map((x) => C.fmtC(p.consBy[x.id] || 0, true)), ...(lay.blago ? [""] : []), C.fmtC(p.consC),
+          C.fmtC(p.endC), (p.endC || k === 0 ? ev : "газ").split(" + ").join(" +\n")];
+        tableRows.push(new D.TableRow({ cantSplit: true, children: [...head, ...vals.map((t, ci) => c(t, { bold: boldIdx.has(ci + 5) }))] }));
+      });
+      return;
+    }
     const v = r.vehicle;
     let startVid, endVid;
     if (legacy) {

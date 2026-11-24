@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124i";
-import * as U from "./ui.js?v=20261124i";
-import { litresWords } from "./words.js?v=20261124i";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124i";
-import { buildCzRegister } from "./cz.js?v=20261124i";
-import * as ST from "./stock.js?v=20261124i";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124i";
-import * as X from "./crypto.js?v=20261124i";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124i";
-import { buildXlsx } from "./xlsx.js?v=20261124i";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124i";
+import * as C from "./core.js?v=20261124j";
+import * as U from "./ui.js?v=20261124j";
+import { litresWords } from "./words.js?v=20261124j";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124j";
+import { buildCzRegister } from "./cz.js?v=20261124j";
+import * as ST from "./stock.js?v=20261124j";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124j";
+import * as X from "./crypto.js?v=20261124j";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124j";
+import { buildXlsx } from "./xlsx.js?v=20261124j";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124j";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -889,7 +889,8 @@ async function pageEntry(q) {
         <div><label>Залишок, л</label>${pick ? inp("fuel_start", lv(r.startC), "л") : inp("start." + r.mainId, lv(r.startC), "л")}</div></div>${startSrc(r, e)}` : `<div class="f3">
         <div><label>Початок, ${RU(v)}</label>${inp("odo_start", e.odo_start, RU(v), RS(v))}</div>
         <div><label>Кінець, ${RU(v)}</label>${inp("odo_end", e.odo_end, RU(v), RS(v))}</div>
-        <div><label>Залишок, л</label>${inp("fuel_start", lv(r.startC), "л")}</div></div>${startSrc(r, e)}${startTxt(r, e)}`}
+        <div><label>${r.dual ? "Залишок бенз., л" : "Залишок, л"}</label>${inp("fuel_start", lv(r.dual ? C.dualParts(r)[0].startC : r.startC), "л")}</div></div>${r.dual ? `<div class="f3" style="margin-top:6px">
+        <div></div><div></div><div><label title="Авто «Газ/бенз»: залишок газу на початок — у реєстрі окремим рядком">Залишок газу, л</label>${inp("fuel_start_gas", lv(C.dualParts(r)[1].startC), "л")}</div></div>` : ""}${startSrc(r, e)}${startTxt(r, e)}`}
         <div class="js-km">${r.empty ? "" : U.kmHtml(v, r)}</div></div>
       <div><div class="fr-h">${simple ? "Видано палива, л" : "Пальне за джерелами, л"}</div>${tiles(v, r, e)}
         ${unit.profile === "cz" ? `<div class="f3" style="margin-top:6px"><div><label title="Пальне, передане з іншого ТЗ (додається до виданого); якщо з цього авто передали — з мінусом">Передано з ТЗ на ТЗ, л</label>
@@ -1021,6 +1022,7 @@ async function pageEntry(q) {
       card.querySelector("[name=odo_start]").value = e.odo_start ?? "";
       card.querySelectorAll("input[name^='start.']").forEach((i) => { const id = i.name.slice(6); i.value = e.start && e.start[id] ? e.start[id] : ""; });
       const fs = card.querySelector("[name=fuel_start]"); if (fs) fs.value = e.fuel_start ?? (Object.values(e.start || {}).reduce((a, b) => a + b, 0) || "");
+      const fg = card.querySelector("[name=fuel_start_gas]"); if (fg) fg.value = e.fuel_start_gas ?? "";
       const ss = card.querySelector("[name=start_src]"); if (ss) { const ks = Object.keys(e.start || {}).filter((k) => e.start[k] > 0); ss.value = e.start_src || (ks.length === 1 ? ks[0] : ""); }
       const stx = card.querySelector("[name=start_text]"); if (stx) stx.value = e.start_text || "";
       if (simple) { const i = card.querySelector("input[name^='start.']"); if (i) i.value = Object.values(e.start || {}).reduce((a, b) => a + b, 0) || ""; }
@@ -2410,8 +2412,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124i")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124i")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124j")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124j")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
