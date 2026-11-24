@@ -100,6 +100,8 @@ export function createStore() {
       if (cur && cur.closed && S.users[S.session]?.role !== "admin") err("permission-denied", "Немає доступу: місяць закрито.");
       S.months[`${u}/${ym}`] = clone({ ...extra, enc: e, updated_at: nowIso(), updated_by: S.session }); save();
     },
+    async saveHist(u, d) { S.hist = S.hist || []; S.hist.push(clone({ ...d, unit: u, id: "h" + rid(), saved_at: nowIso(), by: S.session })); save(); },
+    async listHist(u, ym) { return clone((S.hist || []).filter((h) => h.unit === u && h.ym === ym)).sort((a, b) => b.saved_at.localeCompare(a.saved_at)); },
     async listMonths(u) { return Object.entries(S.months).filter(([k]) => k.startsWith(u + "/")).map(([k, v]) => ({ ym: k.split("/")[1], ...clone(v) })).sort((a, b) => a.ym.localeCompare(b.ym)); },
     async log(action, details = "", unitId = null) { S.audit.unshift({ ts: nowIso(), uid: S.session, email: S.auth[S.session]?.email, unit_id: unitId, action, details }); save(); },
     async listAudit(n = 200) { return S.audit.slice(0, n); },

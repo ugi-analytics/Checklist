@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124h";
-import * as U from "./ui.js?v=20261124h";
-import { litresWords } from "./words.js?v=20261124h";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124h";
-import { buildCzRegister } from "./cz.js?v=20261124h";
-import * as ST from "./stock.js?v=20261124h";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124h";
-import * as X from "./crypto.js?v=20261124h";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124h";
-import { buildXlsx } from "./xlsx.js?v=20261124h";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124h";
+import * as C from "./core.js?v=20261124i";
+import * as U from "./ui.js?v=20261124i";
+import { litresWords } from "./words.js?v=20261124i";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124i";
+import { buildCzRegister } from "./cz.js?v=20261124i";
+import * as ST from "./stock.js?v=20261124i";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124i";
+import * as X from "./crypto.js?v=20261124i";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124i";
+import { buildXlsx } from "./xlsx.js?v=20261124i";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124i";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -601,9 +601,24 @@ async function readMonth(unit, ym) {
   if (!m) return null;
   return m.enc ? { ...m, ...(await X.decJson(unit.dk, m.enc, X.aadMonth(unit.id, ym))) } : m;
 }
+// скільки авто мають внесені дані (для журналу версій)
+const filledN = (entries) => Object.values(entries || {}).filter((e) => e && ["odo_start", "odo_end", "fuel_start", "consumed_manual"].some((k) => e[k] !== undefined && e[k] !== "" && e[k] !== null)
+  || Object.values((e && e.iss) || {}).some((x) => x !== "" && x != null)).length;
 async function writeMonth(unit, ym, data, extra = {}) {
+  // поточний запис читаємо обов'язково: не вдалося прочитати (мережа) — не пишемо взагалі
+  const raw = await store.getMonth(unit.id, ym);
+  const cur = raw ? (raw.enc ? { ...raw, ...(await X.decJson(unit.dk, raw.enc, X.aadMonth(unit.id, ym))) } : raw) : null;
   // накладні «Додатка 2» живуть у тому ж записі місяця — збереження карток авто їх не затирає
-  if (!("stock" in data)) { const cur = await readMonth(unit, ym).catch(() => null); if (cur && cur.stock) data = { ...data, stock: cur.stock }; }
+  if (!("stock" in data) && cur && cur.stock) data = { ...data, stock: cur.stock };
+  // попередня версія — у журнал версій: якщо карток із даними стає менше, і не частіше ніж раз на 10 хв
+  if (raw && raw.enc) {
+    const was = filledN(cur.entries), now = filledN(data.entries), k = unit.id + "/" + ym;
+    state.histAt = state.histAt || {};
+    if (now < was || Date.now() - (state.histAt[k] || 0) > 10 * 60e3) {
+      try { await store.saveHist(unit.id, { ym, enc: raw.enc, n: was, src_at: raw.updated_at || "" }); state.histAt[k] = Date.now(); }
+      catch (err) { console.warn("Версію місяця не збережено:", err && err.message); }
+    }
+  }
   await store.saveMonth(unit.id, ym, await X.encJson(unit.dk, data, X.aadMonth(unit.id, ym)), extra);
 }
 async function listMonthsDec(unit) {
@@ -894,6 +909,7 @@ async function pageEntry(q) {
   const hasPrev = !!(await store.getMonth(unit.id, C.prevYm(ym)));  // лише факт наявності — без розшифрування
   shell(`<div class="row" style="justify-content:space-between;margin-top:14px">${monthPicker(ym, "#/entry")}<div style="flex:1;min-width:280px">${info}</div></div>
     <div id="kpi"></div>
+    <button class="btn sm js-hist" style="float:right" title="Попередні збережені версії даних цього місяця — відновити картки, які стали порожніми">🕘 Попередні версії</button><div class="js-histbox"></div>
     ${hasPrev ? `<button class="btn sm js-prev">↪️ Підтягнути пробіг і залишок на початок з ${C.monthTitle(C.prevYm(ym))}</button>` : ""}
     <div style="margin-top:14px">${cards}</div>
     <div class="stickybar"><button class="btn primary js-reg">📥 Реєстр «Додаток 6» ${regLabel(unit)}</button>
@@ -943,12 +959,16 @@ async function pageEntry(q) {
     const ss = $app.querySelector(".js-savestate");
     try {
       // місяць могли щойно закрити (в іншій вкладці чи кнопкою на «Звіті») — тоді не перезаписуємо
-      const cur = await readMonth(unit, ym).catch(() => null);
+      // не вдалося прочитати свіжі дані — не зберігаємо (інакше можна затерти чужі картки); спробуємо ще раз
+      let cur;
+      try { cur = await readMonth(unit, ym); }
+      catch (err) { touched.forEach((c) => dirtyCards.add(c)); if (ss) ss.textContent = "⚠️ Немає зв'язку — зміни ще не збережено, повторна спроба…"; clearTimeout(timer); timer = setTimeout(saveNow, 5000); return; }
       if (cur && cur.closed) { if (ss) ss.textContent = "🔒 Місяць закрито — зміни не збережено"; return; }
       // одночасна робота кількох працівників: беремо свіжі картки з сервера й міняємо лише ті, які редагували тут,
       // щоб відкрита давно сторінка не затерла чужі дані
       const ids = new Set(touched.map((c) => c.dataset.vid));
-      const merged = { ...((cur && cur.entries) || {}) };
+      // місяця ще немає на сервері — зберігаємо все, що на сторінці (у т.ч. перенесене з попереднього місяця)
+      const merged = cur ? { ...(cur.entries || {}) } : { ...entries };
       for (const id of ids) { if (entries[id] === undefined) delete merged[id]; else merged[id] = entries[id]; }
       let others = 0;
       for (const [id, e] of Object.entries(merged)) {
@@ -962,7 +982,7 @@ async function pageEntry(q) {
       if (ss) ss.textContent = others ? `Збережено ✓ ${new Date().toLocaleTimeString("uk-UA")} · ⚠️ хтось інший заповнив ще ${others} авто — їх не затерто; оновіть сторінку (F5), щоб побачити`
         : "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
       if (others) refreshKpi();
-    } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
+    } catch (err) { touched.forEach((c) => dirtyCards.add(c)); if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
   };
   const schedule = (card, ms) => { dirtyCards.add(card); clearTimeout(timer); timer = setTimeout(saveNow, ms); };
   // при переході на іншу сторінку — зберегти негайно (а не через таймер після переходу)
@@ -1012,6 +1032,35 @@ async function pageEntry(q) {
     }
     refreshKpi(); await saveNow();
     if (needRender) render();
+  });
+  $app.querySelector(".js-hist").addEventListener("click", async () => {
+    const box = $app.querySelector(".js-histbox");
+    if (box.innerHTML) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="panel"><p class="muted">Завантаження…</p></div>`;
+    let hs = [];
+    try { hs = await store.listHist(unit.id, ym); } catch (err) { box.innerHTML = `<div class="panel"><p class="muted">⚠️ ${esc(store.errUa(err))}</p></div>`; return; }
+    const curN = filledN(entries);
+    box.innerHTML = `<div class="panel"><h2>🕘 Попередні версії · ${C.monthTitle(ym)}</h2>
+      <p class="muted">Зараз заповнено карток: <b>${curN}</b>. «Відновити» повертає дані лише в ті картки, які зараз порожні; заповнені зараз картки не змінюються.</p>
+      ${hs.length ? `<table class="list"><thead><tr><th>Версія від</th><th>Карток із даними</th><th></th></tr></thead><tbody>${hs.map((h) =>
+        `<tr><td>${esc((h.src_at || h.saved_at || "").replace("T", " ").slice(0, 19))}</td><td>${h.n ?? "?"}</td><td><button class="btn sm primary js-hrest" data-id="${esc(h.id)}">Відновити порожні картки</button></td></tr>`).join("")}</tbody></table>`
+        : `<p class="muted">Збережених версій ще немає (журнал версій ведеться з 24.11.2026).</p>`}</div>`;
+    box.querySelectorAll(".js-hrest").forEach((b) => b.addEventListener("click", async () => {
+      const h = hs.find((x) => x.id === b.dataset.id); if (!h) return;
+      try {
+        clearTimeout(timer); if (dirtyCards.size) await saveNow();
+        const old = await X.decJson(unit.dk, h.enc, X.aadMonth(unit.id, ym));
+        const cur = await readMonth(unit, ym);
+        const now = { ...((cur && cur.entries) || {}) };
+        let n = 0;
+        for (const [vid, e] of Object.entries(old.entries || {})) if (filledN({ x: e }) && !filledN({ x: now[vid] })) { now[vid] = e; n++; }
+        if (!n) { alert("У цій версії немає даних для порожніх зараз карток."); return; }
+        if (!confirm(`Відновити дані в ${n} картках, які зараз порожні?`)) return;
+        await writeMonth(unit, ym, { entries: now, snapshot: { ...(old.snapshot || {}), ...((cur && cur.snapshot) || {}) }, sources: (cur && cur.sources) || old.sources || [] });
+        store.log("month_restore", `${ym} · ${n} авто з версії ${h.src_at || h.saved_at}`, unit.id);
+        flash("ok", `Відновлено дані ${n} авто.`); render();
+      } catch (err) { alert("Не вдалося відновити: " + store.errUa(err)); }
+    }));
   });
   $app.querySelector(".js-reg").addEventListener("click", async () => {
     clearTimeout(timer); if (dirtyCards.size) await saveNow();
@@ -1384,7 +1433,7 @@ async function pageStock(q) {
         : { entries: v.st.entries, snapshot: Object.fromEntries(v.st.vehicles.map((x) => [x.id, x])), sources: v.st.sources.map((x) => ({ ...x })) };
       await writeMonth(unit, ym, { ...base, stock: { lines: stock.lines.map(ST.normalizeLine) } });
       if (ss) ss.textContent = "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
-    } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
+    } catch (err) { touched.forEach((c) => dirtyCards.add(c)); if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
   };
   const schedule = (ms = 700) => { clearTimeout(timer); timer = setTimeout(save, ms); };
   state.flushEntry = () => { if (timer) { clearTimeout(timer); timer = null; return save(); } };
@@ -1641,9 +1690,8 @@ async function pageFleet() {
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
       <td><input data-f="month_norm_km" type="number" step="${C.isWater(v) ? "0.1" : "10"}" min="0" value="${v.month_norm_km ?? (C.isWater(v) ? "" : 2640)}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
-      <input type="hidden" data-f="source" data-cur="${esc(v.source || "smk")}" value="${C.NO_MAIN}">
       <td class="col-mvo"><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
-      <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
+      <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}><input type="hidden" data-f="source" data-cur="${esc(v.source || "smk")}" value="${C.NO_MAIN}"></td>
       <td style="white-space:nowrap"><button class="btn sm js-up" title="Вище в списку">▲</button><button class="btn sm js-down" title="Нижче в списку">▼</button>
         <button class="btn sm danger js-del" title="Видалити з довідника">🗑</button></td>`;
     tr.querySelector(".js-del").addEventListener("click", () => { if (confirm("Видалити авто з довідника?")) tr.remove(); });
@@ -2362,8 +2410,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124h")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124h")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124i")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124i")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -135,11 +135,22 @@ service cloud.firestore {
       // місяць: лише зашифровані дані + позначка «закрито» (без вмісту); закритий місяць змінює лише адміністратор
       match /months/{ym} {
         allow read: if isAdmin() || inUnit(unitId) || (isPogSup() && isPogUnit(unitId));
+        // cv >= 2 — запис лише з нової версії Порталу (старі відкриті вкладки затирали чужі картки)
         allow create: if (isAdmin() || inUnit(unitId))
-          && request.resource.data.keys().hasOnly(['enc', 'updated_at', 'updated_by', 'closed']);
-        allow update: if request.resource.data.keys().hasOnly(['enc', 'updated_at', 'updated_by', 'closed'])
+          && request.resource.data.keys().hasOnly(['enc', 'updated_at', 'updated_by', 'closed', 'cv'])
+          && request.resource.data.get('cv', 0) >= 2;
+        allow update: if request.resource.data.keys().hasOnly(['enc', 'updated_at', 'updated_by', 'closed', 'cv'])
+          && request.resource.data.get('cv', 0) >= 2
           && (isAdmin() || (inUnit(unitId) && resource.data.get('closed', false) != true));
         allow delete: if isAdmin();
+      }
+      // попередні версії місяця (зашифровані) — для відновлення карток; змінити чи видалити може лише адміністратор
+      match /hist/{hid} {
+        allow read: if isAdmin() || inUnit(unitId);
+        allow create: if (isAdmin() || inUnit(unitId))
+          && request.resource.data.keys().hasOnly(['ym', 'enc', 'n', 'src_at', 'saved_at', 'by'])
+          && request.resource.data.by == request.auth.uid;
+        allow update, delete: if isAdmin();
       }
     }
 

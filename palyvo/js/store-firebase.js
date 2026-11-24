@@ -24,6 +24,7 @@ export function createStore(config) {
   const auth = getAuth(app);
   setPersistence(auth, browserLocalPersistence).catch(() => {});
   const db = getFirestore(app);
+  const state0 = {};
 
   let mfaResolver = null, totpSecret = null;
   const errUa = (e) => {
@@ -204,13 +205,29 @@ export function createStore(config) {
     async deleteUnit(id) {
       const ms = await getDocs(collection(db, "units", id, "months"));
       for (const d of ms.docs) await deleteDoc(d.ref);
+      const hs = await getDocs(collection(db, "units", id, "hist")).catch(() => ({ docs: [] }));
+      for (const d of hs.docs) await deleteDoc(d.ref).catch(() => {});
       await deleteDoc(doc(db, "fleet", id)).catch(() => {});
       await deleteDoc(doc(db, "units", id));
     },
     // ---------------------------------------------------------------- місяці
     async getMonth(unitId, ym) { const s = await getDoc(doc(db, "units", unitId, "months", ym)); return s.exists() ? s.data() : null; },
-    saveMonth: (unitId, ym, encBlob, extra = {}) => setDoc(doc(db, "units", unitId, "months", ym), { ...extra, enc: encBlob, updated_at: nowIso(),
-      updated_by: auth.currentUser.uid }),
+    // cv: 2 — запис нової версії Порталу (правила не пускають записи старих вкладок, що затирали чужі картки);
+    // поки правила ще старі (без cv) — повторюємо без нього
+    async saveMonth(unitId, ym, encBlob, extra = {}) {
+      const d = { ...extra, enc: encBlob, updated_at: nowIso(), updated_by: auth.currentUser.uid };
+      const ref = doc(db, "units", unitId, "months", ym);
+      if (!state0.cvOld) {
+        try { await setDoc(ref, { ...d, cv: 2 }); return; } catch (err) { if (!err || err.code !== "permission-denied") throw err; }
+      }
+      await setDoc(ref, d); state0.cvOld = true;
+    },
+    // попередні версії місяця (зашифровані тим самим ключем) — для відновлення
+    saveHist: (unitId, d) => addDoc(collection(db, "units", unitId, "hist"), { ...d, saved_at: nowIso(), by: auth.currentUser.uid }),
+    async listHist(unitId, ym) {
+      return (await getDocs(query(collection(db, "units", unitId, "hist"), where("ym", "==", ym)))).docs.map((x) => ({ id: x.id, ...x.data() }))
+        .sort((a, b) => b.saved_at.localeCompare(a.saved_at));
+    },
     async listMonths(unitId) { return (await getDocs(collection(db, "units", unitId, "months"))).docs.map((d) => ({ ym: d.id, ...d.data() }))
       .sort((a, b) => a.ym.localeCompare(b.ym)); },
     // ---------------------------------------------------------------- журнал
