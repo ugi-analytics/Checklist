@@ -255,6 +255,8 @@ export function textForms(low) {
   if (/(?:^|[^а-яґєіїa-z])ова(?![а-яґєіїa-z])/.test(low)) return ["Налив ОВА"];   // окреме слово «ОВА» (не «Коваленко»)
   if (/азс/.test(low)) return tal ? ["АЗС ГУНП талони", "АЗС налив"] : ["АЗС налив", "АЗС ГУНП талони"];   // «т АЗС» — талони АЗС ГУНП
   if (tal) return ["талони", "АЗС ГУНП талони"];
+  // «н», «нал.», «налив» — налив (АЗС або ОВА)
+  if (/налив|(?:^|[\s\d])н(?:ал)?\.?(?=[\s,;]|$)/.test(low)) return ["АЗС налив", "Налив ОВА"];
   if (/(?:^|[\s\d])см?\/к/.test(low)) return ["с/к"];
   return null;
 }
@@ -280,14 +282,17 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       const parts = String(e.start_text).split("+").map((part) => {
         const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/);   // число, але не «А-95»/«А95»
         const low = part.toLowerCase();
-        return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mv: mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "", own: false };
+        const mv = mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "";
+        // своє прізвище, якого немає серед МВО джерел (напр. «10 н Петрунь»), — частина не бере МВО сусідньої частини
+        const alien = !mv && hasAlienName(part);
+        return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mv, own: false, alien };
       });
       parts.forEach((p) => { p.own = !!p.mv; });
       // опис без числа («ДП с/к Ольховський») — увесь загальний залишок належить цьому МВО / формі
       const withNum = parts.filter((p) => p.c !== null);
       if (!withNum.length && parts.length === 1 && !isBlank(startTotal)) parts[0].c = toC(startTotal);
-      for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mv) nxt = parts[k].mv; else parts[k].mv = nxt; }
-      for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mv) prv = parts[k].mv; else parts[k].mv = prv; }
+      for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mv) nxt = parts[k].mv; else if (!parts[k].alien) parts[k].mv = nxt; }
+      for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mv) prv = parts[k].mv; else if (!parts[k].alien) parts[k].mv = prv; }
       for (const p of parts) {
         if (p.c === null) continue;
         const form = textForms(p.low);
@@ -474,17 +479,23 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   return r;
 }
 
+/** У частині опису є прізвище (слово з великої літери, не службове слово). */
+const NOT_NAMES = /^(зал|залишок|залишку|налив|нал|талон|талони|резерв|бенз|бензин|дизель|газ|азс|ова|укрнафта|окко|субвенція|благо|см|ск)$/;
+function hasAlienName(part) {
+  return (String(part).match(/[А-ЯҐЄІЇ][а-яґєії'’ʼ]{2,}/g) || []).some((w) => !NOT_NAMES.test(w.toLowerCase()));
+}
 /** Розбір опису залишку («202 А-95 с/к Мосійченко + 185 т А-95») на частини: {c, mvo, own, low, part}. МВО без прізвища — від наступної частини. */
 function parseBalanceParts(text, sources) {
   const mvos = [...new Set(sources.map((x) => String(x.mvo || "").trim()).filter(Boolean))];
   const parts = String(text || "").split("+").map((part) => {
     const m = part.match(/(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/);
     const low = part.toLowerCase();
-    return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mvo: mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "", own: false };
+    const mvo = mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "";
+    return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mvo, own: false, alien: !mvo && hasAlienName(part) };
   });
   parts.forEach((p) => { p.own = !!p.mvo; });
-  for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mvo) nxt = parts[k].mvo; else parts[k].mvo = nxt; }
-  for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mvo) prv = parts[k].mvo; else parts[k].mvo = prv; }
+  for (let k = parts.length - 1, nxt = ""; k >= 0; k--) { if (parts[k].mvo) nxt = parts[k].mvo; else if (!parts[k].alien) parts[k].mvo = nxt; }
+  for (let k = 0, prv = ""; k < parts.length; k++) { if (parts[k].mvo) prv = parts[k].mvo; else if (!parts[k].alien) parts[k].mvo = prv; }
   return parts;
 }
 /** Витрата за джерелами — так, щоб залишок на кінець збігся з внесеним вручну описом. */
