@@ -8,8 +8,8 @@ export const MONTHS_UA = ["січень", "лютий", "березень", "к�
 // Джерело = вид пального + форма видачі + постачальник + МВО. Підрозділ налаштовує їх сам
 // («Автопарк і реквізити»); якщо не налаштовано — чотири стандартні джерела, як було раніше.
 // У стандартних джерелах вид пального, постачальник і МВО беруться з картки авто.
-export const FORMS = ["с/к", "талони", "АЗС ГУНП талони", "АЗС налив", "Налив ОВА", "Субвенція"];
-export const FORM_GROUP = { "с/к": "tsmk", "талони": "tsmk", "АЗС ГУНП талони": "azs", "АЗС налив": "azs", "Налив ОВА": "ova", "Субвенція": "azs" };
+export const FORMS = ["с/к", "талони", "АЗС ГУНП талони", "АЗС налив", "Налив ОВА", "Субвенція", "з/ф"];
+export const FORM_GROUP = { "с/к": "tsmk", "талони": "tsmk", "АЗС ГУНП талони": "azs", "АЗС налив": "azs", "Налив ОВА": "ova", "Субвенція": "azs", "з/ф": "zf" };
 export const LEGACY_SOURCES = [
   { id: "azs_gunp", form: "АЗС ГУНП талони", fuel: "", supplier: "", mvo: "", label: "АЗС ГУНП талони" },
   { id: "talony", form: "талони", fuel: "", supplier: "", mvo: "", label: "Талони" },
@@ -17,7 +17,7 @@ export const LEGACY_SOURCES = [
   { id: "azs_smk", form: "АЗС налив", fuel: "", supplier: "", mvo: "", label: "АЗС налив" },
 ];
 /** Коротка форма для опису залишку. */
-export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС", "Налив ОВА": "ОВА", "Субвенція": "субв." };
+export const FORM_SHORT = { "с/к": "с/к", "талони": "т", "АЗС ГУНП талони": "АЗС т", "АЗС налив": "АЗС", "Налив ОВА": "ОВА", "Субвенція": "субв.", "з/ф": "з/ф" };
 export const SUPPLIERS = ["UKRNAFTA", "OKKO", "WOG", "BVS", "Інше"];
 /** Авто без основного джерела (заправляється з різних): витрата — спершу із залишку, потім із виданого, щоб джерела вичерпувались повністю. */
 export const NO_MAIN = "-";
@@ -28,6 +28,7 @@ export const ACT_GROUPS = {
   tsmk: { title: "Талони + см/к", file: "Талони_см-к" },
   azs: { title: "АЗС", file: "АЗС" },
   ova: { title: "Налив ОВА", file: "Налив_ОВА" },
+  zf: { title: "З/ф (загальний фонд)", file: "Загальний_фонд" },
 };
 
 /** Назва джерела для шапки таблиці (без даних авто). */
@@ -250,6 +251,7 @@ export function textForms(low) {
   low = String(low || "").toLowerCase();
   const tal = /талон|(?:^|[\s\d])т(?:ал)?\.?(?=[\s,;]|$)/.test(low);
   if (/субв|благо/.test(low)) return ["Субвенція"];
+  if (/з\s*\/\s*ф|загальн/.test(low)) return ["з/ф"];
   if (/(?:^|[^а-яґєіїa-z])ова(?![а-яґєіїa-z])/.test(low)) return ["Налив ОВА"];   // окреме слово «ОВА» (не «Коваленко»)
   if (/азс/.test(low)) return tal ? ["АЗС ГУНП талони", "АЗС налив"] : ["АЗС налив", "АЗС ГУНП талони"];   // «т АЗС» — талони АЗС ГУНП
   if (tal) return ["талони", "АЗС ГУНП талони"];
@@ -625,10 +627,20 @@ export function monthVehicles(vehicles, month, sources = LEGACY_SOURCES) {
     const hasData = v.id in entries && !calcRow(v, entries[v.id], sources).empty;
     if (v.active || hasData) { out.push(v); seen.add(v.id); }
   }
+  const norm = (v) => vehName(v).toLowerCase().replace(/\s+/g, " ").trim();
   for (const [vid, e] of Object.entries(entries)) {
     if (!seen.has(vid) && !(vid in byId) && vid in snap) {
       const v = normalizeVehicle(snap[vid]);
-      if (!calcRow(v, e, sources).empty) out.push(v);
+      if (calcRow(v, e, sources).empty) continue;
+      // авто видалили з довідника й створили знову (та сама назва/номер) — не дублюємо картку:
+      // дані місяця переходять до нового запису, якщо в нього ще нічого не внесено
+      const twin = vehicles.find((x) => norm(x) && norm(x) === norm(v));
+      if (twin) {
+        if (!(twin.id in entries) || calcRow(twin, entries[twin.id], sources).empty) entries[twin.id] = e;
+        if (!seen.has(twin.id)) { out.push(twin); seen.add(twin.id); }
+        continue;
+      }
+      out.push(v);
     }
   }
   return out;
@@ -758,7 +770,7 @@ export function actList(rows, settings = {}) {
     ...[...sv.entries()].map(([g, t]) => [g, `Субвенція: ${t}`, "Субвенція_" + t.replace(/[^\p{L}\d]+/gu, "_")])];
   for (const [g, title, file] of groups) {
     const lines = actGroups(rows, g, settings);
-    if ((g.startsWith("sv:") || g.startsWith("cz:")) && !lines.length) continue;
+    if ((g.startsWith("sv:") || g.startsWith("cz:") || g === "zf") && !lines.length) continue;
     const mvos = [...new Set(lines.map((l) => String(l.mvo || "").trim()))];
     if (mvos.length <= 1) { out.push({ group: g, mvo: mvos[0] || null, mvos: mvos.filter(Boolean), lines, title, file, subv: g.startsWith("sv:") }); continue; }
     for (const mv of mvos) out.push({ group: g, mvo: mv, mvos: [mv].filter(Boolean), lines: lines.filter((l) => String(l.mvo || "").trim() === mv),
