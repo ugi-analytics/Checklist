@@ -368,3 +368,4 @@ select.need { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248,1
 tr[hidden] { display: none; }
 #veh .js-up, #veh .js-down { padding: 4px 7px; margin-right: 2px; }
 #veh tr.moved td { background: rgba(59,130,246,.18); transition: background .6s; }
+.usw-lift { position: relative; z-index: 300 !important; overflow: visible !important; }

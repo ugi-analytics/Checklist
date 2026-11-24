@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124b";
-import * as U from "./ui.js?v=20261124b";
-import { litresWords } from "./words.js?v=20261124b";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124b";
-import { buildCzRegister } from "./cz.js?v=20261124b";
-import * as ST from "./stock.js?v=20261124b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124b";
-import * as X from "./crypto.js?v=20261124b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124b";
-import { buildXlsx } from "./xlsx.js?v=20261124b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124b";
+import * as C from "./core.js?v=20261124c";
+import * as U from "./ui.js?v=20261124c";
+import { litresWords } from "./words.js?v=20261124c";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124c";
+import { buildCzRegister } from "./cz.js?v=20261124c";
+import * as ST from "./stock.js?v=20261124c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124c";
+import * as X from "./crypto.js?v=20261124c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124c";
+import { buildXlsx } from "./xlsx.js?v=20261124c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1788,16 +1788,19 @@ function searchSelect(sel) {
     for (const it of items) { const ok = w.every((x) => norm(it.textContent).includes(x)); it.hidden = !ok; it.classList.toggle("hl", ok && !n); if (ok) n++; }
     box.querySelector(".usw-none").hidden = n > 0;
   };
-  const close = (e) => { if (!box.contains(e.target)) { pop.hidden = true; document.removeEventListener("mousedown", close); } };
-  const pick = (v) => { pop.hidden = true; if (v == null) return; if (v !== sel.value) { sel.value = v; sync(); sel.dispatchEvent(new Event("change", { bubbles: true })); } };
+  // список має бути поверх сусідніх карток (у них власний шар через backdrop-filter) — піднімаємо предків, поки список відкритий
+  const lifts = () => { const a = []; for (let el = box.parentElement; el && el !== document.body; el = el.parentElement) if (el.matches(".panel, tr, td, .tblwrap")) a.push(el); return a; };
+  const lift = (on) => lifts().forEach((el) => el.classList.toggle("usw-lift", on));
+  const close = (e) => { if (!box.contains(e.target)) { pop.hidden = true; lift(false); document.removeEventListener("mousedown", close); } };
+  const pick = (v) => { pop.hidden = true; lift(false); if (v == null) return; if (v !== sel.value) { sel.value = v; sync(); sel.dispatchEvent(new Event("change", { bubbles: true })); } };
   btn.addEventListener("click", () => {
-    pop.hidden = !pop.hidden;
+    pop.hidden = !pop.hidden; lift(!pop.hidden);
     if (!pop.hidden) { q.value = ""; filter(); q.focus(); box.querySelector(".usw-it.on")?.scrollIntoView({ block: "nearest" }); document.addEventListener("mousedown", close); }
   });
   q.addEventListener("input", filter);
   q.addEventListener("keydown", (e) => {
     const vis = items.filter((i) => !i.hidden), cur = vis.findIndex((i) => i.classList.contains("hl"));
-    if (e.key === "Escape") pop.hidden = true;
+    if (e.key === "Escape") { pop.hidden = true; lift(false); }
     else if (e.key === "Enter") { e.preventDefault(); pick((vis[cur] || vis[0])?.dataset.v); }
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault(); if (!vis.length) return;
@@ -2306,8 +2309,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
