@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124d";
-import * as U from "./ui.js?v=20261124d";
-import { litresWords } from "./words.js?v=20261124d";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124d";
-import { buildCzRegister } from "./cz.js?v=20261124d";
-import * as ST from "./stock.js?v=20261124d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124d";
-import * as X from "./crypto.js?v=20261124d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124d";
-import { buildXlsx } from "./xlsx.js?v=20261124d";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124d";
+import * as C from "./core.js?v=20261124e";
+import * as U from "./ui.js?v=20261124e";
+import { litresWords } from "./words.js?v=20261124e";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124e";
+import { buildCzRegister } from "./cz.js?v=20261124e";
+import * as ST from "./stock.js?v=20261124e";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124e";
+import * as X from "./crypto.js?v=20261124e";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124e";
+import { buildXlsx } from "./xlsx.js?v=20261124e";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124e";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -87,11 +87,18 @@ function shell(content, { nav = true } = {}) {
     key: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="15" cy="9" r="5"/><path d="M11.5 12.5 4 20m2-2 2 2"/></svg>`,
     out: `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="M10 12h10m-3-3 3 3-3 3"/></svg>` };
   const curU = state.units.find((u) => u.id === state.unitId);
+  // перемикач: окремі вкладки «Підрозділи», «ПОГ», «Окремі кабінети» — кожна зі своїм лічильником і пошуком
+  const uGrp = (u) => (u.kind !== "pog" ? "unit" : u.solo ? "solo" : "pog");
+  const uSorted = [...state.units].sort((a, b) => a.name.localeCompare(b.name, "uk"));
+  const uCnt = { unit: 0, pog: 0, solo: 0 }; uSorted.forEach((u) => uCnt[uGrp(u)]++);
+  const uTab0 = curU ? uGrp(curU) : "unit";
   const switcher = isAdmin() && state.units.length > 1 ? `<div class="usw js-usw">
-      <button type="button" class="usw-btn js-usw-btn" title="Працювати з підрозділом"><span>${esc(curU ? curU.name : "Оберіть підрозділ")}</span><span class="usw-ch">▾</span></button>
-      <div class="usw-pop" hidden><input class="usw-q" type="search" placeholder="🔍 Пошук підрозділу…" autocomplete="off">
-        <div class="usw-list">${[...state.units].sort((a, b) => a.name.localeCompare(b.name, "uk")).map((u) =>
-          `<button type="button" class="usw-it ${u.id === state.unitId ? "on" : ""}" data-id="${u.id}">${esc(u.name)}</button>`).join("")}</div>
+      <button type="button" class="usw-btn js-usw-btn" title="Працювати з підрозділом"><span>${esc(curU ? curU.name : "Оберіть підрозділ")}${curU && curU.kind === "pog" ? (curU.solo ? " · окремий кабінет" : " · ПОГ") : ""}</span><span class="usw-ch">▾</span></button>
+      <div class="usw-pop" hidden><div class="usw-tabs">${[["unit", "Підрозділи"], ["pog", "👮 ПОГ"], ["solo", "Окремі кабінети"]].filter(([k]) => k === "unit" || uCnt[k])
+          .map(([k, t]) => `<button type="button" class="usw-tab ${k === uTab0 ? "on" : ""}" data-g="${k}">${t} <b>${uCnt[k]}</b></button>`).join("")}</div>
+        <input class="usw-q" type="search" placeholder="🔍 Пошук…" autocomplete="off">
+        <div class="usw-list">${uSorted.map((u) =>
+          `<button type="button" class="usw-it ${u.id === state.unitId ? "on" : ""}" data-id="${u.id}" data-g="${uGrp(u)}">${esc(u.name)}${u.kind === "pog" ? `<span class="usw-sub"> · ${esc(u.parent_name || "—")}</span>` : ""}</button>`).join("")}</div>
         <div class="usw-none muted" hidden>Нічого не знайдено</div></div></div>` : "";
   const tab = (h, icon, label, extra = "") => `<a href="#/${h}" class="tile ${p === h || p.startsWith(h + "/") || (h === "entry" && !p) ? "on" : ""}">
     <span class="ti">${icon}</span><span class="tl">${label}${extra}</span><span class="chev">›</span></a>`;
@@ -126,11 +133,18 @@ function shell(content, { nav = true } = {}) {
   if (usw) {
     const pop = usw.querySelector(".usw-pop"), q = usw.querySelector(".usw-q"), items = [...usw.querySelectorAll(".usw-it")];
     const norm = (t) => String(t).toLowerCase().replace(/['’`ʼ]/g, "").replace(/\s+/g, " ");
+    let grp = usw.querySelector(".usw-tab.on")?.dataset.g || "unit";
     const filter = () => {
       const w = norm(q.value).trim().split(" ").filter(Boolean); let n = 0, first = true;
-      for (const it of items) { const ok = w.every((x) => norm(it.textContent).includes(x)); it.hidden = !ok; it.classList.toggle("hl", ok && first); if (ok) { n++; first = false; } }
-      usw.querySelector(".usw-none").hidden = n > 0;
+      for (const it of items) { const ok = it.dataset.g === grp && w.every((x) => norm(it.textContent).includes(x)); it.hidden = !ok; it.classList.toggle("hl", ok && first); if (ok) { n++; first = false; } }
+      // у поточній вкладці нічого — підказати, де знайшлося
+      const other = n ? [] : [...usw.querySelectorAll(".usw-tab")].filter((t) => t.dataset.g !== grp && w.length && items.some((it) => it.dataset.g === t.dataset.g && w.every((x) => norm(it.textContent).includes(x))));
+      const none = usw.querySelector(".usw-none"); none.hidden = n > 0;
+      none.textContent = other.length ? `Тут немає — є у вкладці «${other.map((t) => t.firstChild.textContent.trim()).join("», «")}»` : "Нічого не знайдено";
     };
+    usw.querySelectorAll(".usw-tab").forEach((t) => t.addEventListener("click", () => {
+      grp = t.dataset.g; usw.querySelectorAll(".usw-tab").forEach((x) => x.classList.toggle("on", x === t)); filter(); q.focus();
+    }));
     const pick = (id) => { pop.hidden = true; if (!id || id === state.unitId) return; state.unitId = id; sessionStorage.setItem("unitCtx", id); render(); };
     const close = (e) => { if (!usw.contains(e.target)) { pop.hidden = true; document.removeEventListener("mousedown", close); } };
     usw.querySelector(".js-usw-btn").addEventListener("click", () => {
@@ -1991,7 +2005,7 @@ async function pageAdmin(sub, q) {
         <button class="btn sm sky js-fleetxl" data-kind="end" title="Показники на початок і на кінець місяця — для модуля «Пробіг і пальне автопарку» в хабі">📊 Excel для модуля пробігу · на ${dmy(firstOf(nextYm(ym)))}</button>
         <button class="btn sm js-fleetxl" data-kind="start" title="Лише показники на початок місяця — коли файлу за попередній місяць ще немає">Зріз на початок · ${dmy(firstOf(ym))}</button></div>
       <h2>Зведення по області за ${C.monthTitle(ym)}</h2>
-      <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів${pogRows.length ? ` (з урахуванням ${pogRows.length} ПОГ)` : ""} ·
+      <p class="muted">Повністю заповнили: <b>${rowsSum.filter((r) => r.n && r.done === r.n).length}</b> з ${rowsSum.length} підрозділів${pogRows.length ? ` · ПОГ: <b>${pogRows.filter((r) => !r.u.solo).length}</b>${pogRows.some((r) => r.u.solo) ? `, окремих кабінетів: <b>${pogRows.filter((r) => r.u.solo).length}</b>` : ""} (їхні авто враховано у своїх підрозділах)` : ""} ·
         видано <b>${C.fmtC(sum("issuedC"))} л</b> · витрачено <b>${C.fmtC(sum("consC"))} л</b> · залишок у баках <b>${C.fmtC(sum("endC"))} л</b></p>
       <table class="list"><thead><tr><th>Підрозділ</th><th>Заповнено</th><th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Оновлено</th></tr></thead><tbody>
       ${rowsSum.map((r) => `<tr><td>${esc(r.u.name)}${r.svcOf ? ` <span class="muted" title="Умовний підрозділ: авто служби, які веде ${esc(r.svcOf)}">· веде ${esc(r.svcOf)}</span>` : ""}${r.pogN ? ` <span class="muted" title="Авто ПОГ зараховано до підрозділу">· у т.ч. ПОГ: ${r.pogN}</span>` : ""}${r.soloN ? ` <span class="muted" title="Авто з окремих кабінетів працівників зараховано до підрозділу">· у т.ч. окремі кабінети: ${r.soloN}</span>` : ""}</td><td>${r.n === 0 ? `<span class="pill mut">немає авто</span>` : r.done === r.n ? `<span class="pill ok">${r.done}/${r.n}</span>`
@@ -2322,8 +2336,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124e")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124e")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

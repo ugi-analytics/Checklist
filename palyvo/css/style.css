@@ -361,6 +361,12 @@ select.need { border-color: #f87171 !important; box-shadow: 0 0 0 2px rgba(248,1
 .usw-it:hover, .usw-it.hl { background: rgba(59,130,246,.22); color: #fff; }
 .usw-it.on { color: #7dd3fc; font-weight: 700; }
 .usw-it[hidden] { display: none; }
+.usw-tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+.usw-tab { flex: 1; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: #cbd5e1; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: .82rem; cursor: pointer; white-space: nowrap; }
+.usw-tab b { color: #94a3b8; font-weight: 700; margin-left: 2px; }
+.usw-tab.on { background: rgba(59,130,246,.3); border-color: rgba(125,211,252,.5); color: #fff; }
+.usw-tab.on b { color: #7dd3fc; }
+.usw-sub { color: #94a3b8; font-weight: 400; font-size: .8rem; }
 .usw-none { padding: 8px 10px; font-size: .85rem; }
 @media (max-width: 760px) { .usw { min-width: 0; width: 100%; max-width: none; } .usw-pop { width: 100%; } }
 .usw-inline { min-width: 260px; max-width: 360px; z-index: 30; } .usw-inline .usw-btn { padding: 7px 10px; font-size: .9rem; }
