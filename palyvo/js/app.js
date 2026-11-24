@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124c";
-import * as U from "./ui.js?v=20261124c";
-import { litresWords } from "./words.js?v=20261124c";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124c";
-import { buildCzRegister } from "./cz.js?v=20261124c";
-import * as ST from "./stock.js?v=20261124c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124c";
-import * as X from "./crypto.js?v=20261124c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124c";
-import { buildXlsx } from "./xlsx.js?v=20261124c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124c";
+import * as C from "./core.js?v=20261124d";
+import * as U from "./ui.js?v=20261124d";
+import { litresWords } from "./words.js?v=20261124d";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124d";
+import { buildCzRegister } from "./cz.js?v=20261124d";
+import * as ST from "./stock.js?v=20261124d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124d";
+import * as X from "./crypto.js?v=20261124d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124d";
+import { buildXlsx } from "./xlsx.js?v=20261124d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -929,12 +929,25 @@ async function pageEntry(q) {
     const ss = $app.querySelector(".js-savestate");
     try {
       // місяць могли щойно закрити (в іншій вкладці чи кнопкою на «Звіті») — тоді не перезаписуємо
-      const cur = await store.getMonth(unit.id, ym).catch(() => null);
+      const cur = await readMonth(unit, ym).catch(() => null);
       if (cur && cur.closed) { if (ss) ss.textContent = "🔒 Місяць закрито — зміни не збережено"; return; }
-      const snapshot = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
-      await writeMonth(unit, ym, { entries, snapshot, sources: SRC.map((x) => ({ ...x })) });
+      // одночасна робота кількох працівників: беремо свіжі картки з сервера й міняємо лише ті, які редагували тут,
+      // щоб відкрита давно сторінка не затерла чужі дані
+      const ids = new Set(touched.map((c) => c.dataset.vid));
+      const merged = { ...((cur && cur.entries) || {}) };
+      for (const id of ids) { if (entries[id] === undefined) delete merged[id]; else merged[id] = entries[id]; }
+      let others = 0;
+      for (const [id, e] of Object.entries(merged)) {
+        if (ids.has(id)) continue;
+        if (JSON.stringify(entries[id] || null) !== JSON.stringify(e)) { entries[id] = e; others++; }
+      }
+      const snapshot = { ...((cur && cur.snapshot) || {}), ...Object.fromEntries(st.vehicles.map((v) => [v.id, v])) };
+      await writeMonth(unit, ym, { entries: merged, snapshot, sources: SRC.map((x) => ({ ...x })) });
+
       touched.forEach((c) => { const s = c.querySelector(".saving"); s.classList.add("on"); setTimeout(() => s.classList.remove("on"), 1200); });
-      if (ss) ss.textContent = "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
+      if (ss) ss.textContent = others ? `Збережено ✓ ${new Date().toLocaleTimeString("uk-UA")} · ⚠️ хтось інший заповнив ще ${others} авто — їх не затерто; оновіть сторінку (F5), щоб побачити`
+        : "Збережено ✓ " + new Date().toLocaleTimeString("uk-UA");
+      if (others) refreshKpi();
     } catch (err) { if (ss) ss.textContent = "⚠️ Не збережено: " + store.errUa(err); alert("Не вдалося зберегти: " + store.errUa(err)); }
   };
   const schedule = (card, ms) => { dirtyCards.add(card); clearTimeout(timer); timer = setTimeout(saveNow, ms); };
@@ -2309,8 +2322,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
