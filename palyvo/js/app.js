@@ -1,15 +1,15 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124e";
-import * as U from "./ui.js?v=20261124e";
-import { litresWords } from "./words.js?v=20261124e";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124e";
-import { buildCzRegister } from "./cz.js?v=20261124e";
-import * as ST from "./stock.js?v=20261124e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124e";
-import * as X from "./crypto.js?v=20261124e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124e";
-import { buildXlsx } from "./xlsx.js?v=20261124e";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124e";
+import * as C from "./core.js?v=20261124f";
+import * as U from "./ui.js?v=20261124f";
+import { litresWords } from "./words.js?v=20261124f";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124f";
+import { buildCzRegister } from "./cz.js?v=20261124f";
+import * as ST from "./stock.js?v=20261124f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124f";
+import * as X from "./crypto.js?v=20261124f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261124f";
+import { buildXlsx } from "./xlsx.js?v=20261124f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -860,7 +860,7 @@ async function pageEntry(q) {
     const cur = e.start_src || (mapKeys.length === 1 ? mapKeys[0] : "");
     const opts = [...r.sources, ...SRC.filter((x) => x.active && !r.sources.includes(x))];
     return `<div class="mvo" style="margin-top:6px"><label>Залишок на початок — з якого джерела</label><select name="start_src" class="ssrc">
-      <option value="">${simple ? "— основне джерело авто —" : "— визначити автоматично —"}</option>
+      <option value="">— визначити автоматично —</option>
       ${opts.map((x) => `<option value="${x.id}" ${x.id === cur ? "selected" : ""}>${esc(C.sourceTitle(x))}</option>`).join("")}</select></div>`;
   };
   const cards = st.vehicles.map((v) => {
@@ -1559,7 +1559,7 @@ async function pageFleet() {
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
       <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}${water ? `<th title="Авто — пробіг у км, норма л/100 км; водний транспорт — робота в мотогодинах, норма л на 1 мотогодину">Тип</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км${water ? "<br><small>(водний — л/мотогод)</small>" : ""}</th>
-        <th>Норма пробігу, км/міс${water ? "<br><small>(водний — мотогод/міс)</small>" : ""}</th><th>Вид пального</th>${cz ? "" : `<th title="Куди списується витрата в першу чергу">Основне джерело</th>`}<th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
+        <th>Норма пробігу, км/міс${water ? "<br><small>(водний — мотогод/міс)</small>" : ""}</th><th>Вид пального</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px">${pog && unit.vehicles.length ? "➕ Додати ще авто (якщо за вами закріплено кілька)" : "➕ Додати авто"}</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="Газ/бенз"></datalist>
       <datalist id="suppliers">${C.SUPPLIERS.map((x) => `<option value="${x}">`).join("")}</datalist>
@@ -1641,7 +1641,7 @@ async function pageFleet() {
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
       <td><input data-f="month_norm_km" type="number" step="${C.isWater(v) ? "0.1" : "10"}" min="0" value="${v.month_norm_km ?? (C.isWater(v) ? "" : 2640)}"></td>
       <td><input data-f="fuel" list="fuels" value="${esc(v.fuel ?? "А-95")}"></td>
-      ${cz ? `<input type="hidden" data-f="source" value="${C.NO_MAIN}">` : `<td><select data-f="source" data-cur="${esc(v.source || "smk")}"></select></td>`}
+      <input type="hidden" data-f="source" data-cur="${esc(v.source || "smk")}" value="${C.NO_MAIN}">
       <td class="col-mvo"><div class="mvopick"><input data-f="mvo_text" value="${esc(v.mvo_text)}" placeholder="за замовчуванням — хто склав" title="Можна кілька МВО через кому"><button type="button" class="btn sm js-mvo" title="Вибрати одну або кілька МВО">▾</button><div class="mvomenu"></div></div></td>
       <td class="c"><input data-f="active" type="checkbox" ${v.active === false ? "" : "checked"}></td>
       <td style="white-space:nowrap"><button class="btn sm js-up" title="Вище в списку">▲</button><button class="btn sm js-down" title="Нижче в списку">▼</button>
@@ -1716,6 +1716,12 @@ async function pageFleet() {
   const currentSources = () => (custom() ? [...sbody.querySelectorAll("tr")].map(readSrc) : C.unitSources({}));
   function refreshSrcSelects() {
     const list = currentSources().filter((x) => x.active);
+    // «Основне джерело» в автопарку не показуємо: свої джерела — витрата розподіляється автоматично («різні»);
+    // стандартні джерела — лишається збережене (за замовчуванням с/к), куди йде залишок, не описаний вручну
+    vbody.querySelectorAll("input[type=hidden][data-f=source]").forEach((h) => {
+      const cur = h.dataset.cur || "smk";
+      h.value = cz || custom() ? C.NO_MAIN : (list.some((x) => x.id === cur) ? cur : "smk");
+    });
     vbody.querySelectorAll("select[data-f=source]").forEach((sel) => {
       if (!sel.dataset.b) { sel.dataset.b = 1; sel.addEventListener("change", () => { sel.dataset.cur = sel.value; }); }
       let cur = sel.dataset.cur;            // вибір користувача (а не те, що браузер вибрав за замовчуванням)
@@ -2336,8 +2342,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261124f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

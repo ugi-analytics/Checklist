@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261124e";
+import * as C from "./core.js?v=20261124f";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -21,7 +21,6 @@ export function idHtml(v, status, srcTitle = "") {
   const rate = C.isWater(v) ? `${fmtNum(v.rate)} л/мотогод` : `${fmtNum(v.rate)} л/100 км`;
   let chips = `<span class='fr-chip y'>${rate}</span>`;
   if (v.fuel) chips += `<span class='fr-chip'>${esc(v.fuel)}</span>`;
-  if (srcTitle) chips += `<span class='fr-chip' title='Основне джерело списання'>${esc(srcTitle)}</span>`;
   const sub = [v.service ? `служба: ${v.service}` : "", v.month_norm_km ? `норма ${C.isWater(v) ? "роботи" : "пробігу"} ${C.fmtRun(v, v.month_norm_km)} ${C.runUnit(v)}/міс` : ""].filter(Boolean).join(" · ");
   return `<div class='fr-id'>${head}<div class='fr-chips'>${chips}</div><div class='fr-sub'>${sub}</div>` +
     `<div class='fr-st ${status}'>${STATUS_TXT[status]}</div></div>`;
