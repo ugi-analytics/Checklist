@@ -1,8 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261125c";
-import { litresWords } from "./words.js?v=20261125c";
-import * as S from "./stock.js?v=20261125c";
+import * as C from "./core.js?v=20261125d";
+import { litresWords } from "./words.js?v=20261125d";
+import * as S from "./stock.js?v=20261125d";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips

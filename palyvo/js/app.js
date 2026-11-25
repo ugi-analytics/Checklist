@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261125c";
-import * as U from "./ui.js?v=20261125c";
-import { litresWords } from "./words.js?v=20261125c";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261125c";
-import { buildCzRegister } from "./cz.js?v=20261125c";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261125c";
-import * as ST from "./stock.js?v=20261125c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261125c";
-import * as X from "./crypto.js?v=20261125c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261125c";
-import { buildXlsx } from "./xlsx.js?v=20261125c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261125c";
+import * as C from "./core.js?v=20261125d";
+import * as U from "./ui.js?v=20261125d";
+import { litresWords } from "./words.js?v=20261125d";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261125d";
+import { buildCzRegister } from "./cz.js?v=20261125d";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261125d";
+import * as ST from "./stock.js?v=20261125d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261125d";
+import * as X from "./crypto.js?v=20261125d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261125d";
+import { buildXlsx } from "./xlsx.js?v=20261125d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261125d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -916,6 +916,9 @@ async function pageEntry(q) {
     <div id="kpi"></div>
     <button class="btn sm js-hist" style="float:right" title="Попередні збережені версії даних цього місяця — відновити картки, які стали порожніми">🕘 Попередні версії</button><div class="js-histbox"></div>
     ${hasPrev ? `<button class="btn sm js-prev">↪️ Підтягнути пробіг і залишок на початок з ${C.monthTitle(C.prevYm(ym))}</button>` : ""}
+    ${st.vehicles.length > 10 ? `<div class="vsearch"><input type="search" class="js-vq" placeholder="🔍 Пошук авто: марка або номер (напр. «туксон», «1111»)…" autocomplete="off">
+      <select class="js-vf"><option value="">усі авто</option><option value="empty">не заповнені</option><option value="part">заповнені частково</option><option value="err">з помилками</option><option value="done">заповнені</option></select>
+      <span class="muted js-vn"></span></div>` : ""}
     <div style="margin-top:14px">${cards}</div>
     <div class="stickybar"><button class="btn primary js-reg">📥 Реєстр «Додаток 6» ${regLabel(unit)}</button>${unit.profile === "cz" ? "" : `<button class="btn js-regx" title="Той самий реєстр у форматі Excel">📊 Реєстр у Excel</button>`}
       <a class="btn sky" href="#/report?ym=${ym}">🧾 Акти списання та перегляд</a>
@@ -923,6 +926,25 @@ async function pageEntry(q) {
   bindMonthPicker();
 
   const cardEls = [...$app.querySelectorAll(".frc")];
+  // пошук і фільтр карток (підрозділи з понад 10 авто)
+  const vq = $app.querySelector(".js-vq");
+  if (vq) {
+    const vf = $app.querySelector(".js-vf"), vn = $app.querySelector(".js-vn");
+    const norm = (t) => String(t || "").toLowerCase().replace(/['’`ʼ]/g, "").replace(/[\s-]+/g, " ");
+    const vmapQ = Object.fromEntries(st.vehicles.map((v) => [v.id, norm(C.vehName(v) + " " + v.name + " " + (v.plate || "") + " " + (v.service || ""))]));
+    const applyV = () => {
+      const w = norm(vq.value).trim().split(" ").filter(Boolean), f = vf.value; let n = 0;
+      for (const c of cardEls) {
+        const st0 = ["empty", "part", "err", "warn", "ok"].find((k) => c.classList.contains(k)) || "";
+        const okF = !f || (f === "done" ? st0 === "ok" || st0 === "warn" : st0 === f);
+        const ok = okF && w.every((x) => vmapQ[c.dataset.vid].includes(x) || vmapQ[c.dataset.vid].replace(/ /g, "").includes(x));
+        c.hidden = !ok; if (ok) n++;
+      }
+      vn.textContent = w.length || f ? `показано ${n} з ${cardEls.length}` : "";
+    };
+    vq.addEventListener("input", applyV); vf.addEventListener("change", applyV);
+    vq.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { vq.value = ""; applyV(); } });
+  }
   const vmap = Object.fromEntries(st.vehicles.map((v) => [v.id, v]));
   const readCard = (card) => {
     const e = { start: {}, iss: {}, cons: {}, start_mvo: {} };
@@ -2416,8 +2438,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261125c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261125c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261125d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261125d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

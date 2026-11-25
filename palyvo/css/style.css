@@ -375,3 +375,10 @@ tr[hidden] { display: none; }
 #veh .js-up, #veh .js-down { padding: 4px 7px; margin-right: 2px; }
 #veh tr.moved td { background: rgba(59,130,246,.18); transition: background .6s; }
 .usw-lift { position: relative; z-index: 300 !important; overflow: visible !important; }
+
+/* пошук авто у «Введенні даних» */
+.vsearch { position: sticky; top: 0; z-index: 20; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px;
+  background: rgba(10, 18, 40, .92); backdrop-filter: blur(6px); border: 1px solid rgba(125, 211, 252, .25); border-radius: 12px; }
+.vsearch .js-vq { flex: 1; min-width: 240px; }
+.vsearch .js-vf { max-width: 220px; }
+.frc[hidden] { display: none !important; }
