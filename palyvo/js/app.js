@@ -1,15 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261124j";
-import * as U from "./ui.js?v=20261124j";
-import { litresWords } from "./words.js?v=20261124j";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261124j";
-import { buildCzRegister } from "./cz.js?v=20261124j";
-import * as ST from "./stock.js?v=20261124j";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261124j";
-import * as X from "./crypto.js?v=20261124j";
-import { qrSvg } from "../vendor/qrcode.js?v=20261124j";
-import { buildXlsx } from "./xlsx.js?v=20261124j";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261124j";
+import * as C from "./core.js?v=20261125a";
+import * as U from "./ui.js?v=20261125a";
+import { litresWords } from "./words.js?v=20261125a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261125a";
+import { buildCzRegister } from "./cz.js?v=20261125a";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261125a";
+import * as ST from "./stock.js?v=20261125a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261125a";
+import * as X from "./crypto.js?v=20261125a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261125a";
+import { buildXlsx } from "./xlsx.js?v=20261125a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261125a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -807,7 +808,10 @@ function pageUnitKey(mode, u) {
 
 // ============================================================ введення даних
 // реєстр «Додаток 6»: звичайний — Word; кабінет у режимі ЦЗ — Excel (як реєстр ЦЗ)
-async function downloadRegister(unit, settings, ym, rows, sources) {
+// fmt "xlsx" — звичайний підрозділ у Excel (той самий вигляд, що й Word)
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+async function downloadRegister(unit, settings, ym, rows, sources, fmt) {
+  if (fmt === "xlsx" && unit.profile !== "cz") { downloadBytes(buildRegisterXlsx(settings, ym, rows, sources), `Додаток_6_Реєстр_пального_${ym}.xlsx`, XLSX_MIME); return; }
   if (unit.profile === "cz") {
     downloadBytes(buildCzRegister({ ...settings, profile: "cz" }, ym, rows, sources), `Додаток_6_Реєстр_ЦЗ_${ym}.xlsx`,
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -913,7 +917,7 @@ async function pageEntry(q) {
     <button class="btn sm js-hist" style="float:right" title="Попередні збережені версії даних цього місяця — відновити картки, які стали порожніми">🕘 Попередні версії</button><div class="js-histbox"></div>
     ${hasPrev ? `<button class="btn sm js-prev">↪️ Підтягнути пробіг і залишок на початок з ${C.monthTitle(C.prevYm(ym))}</button>` : ""}
     <div style="margin-top:14px">${cards}</div>
-    <div class="stickybar"><button class="btn primary js-reg">📥 Реєстр «Додаток 6» ${regLabel(unit)}</button>
+    <div class="stickybar"><button class="btn primary js-reg">📥 Реєстр «Додаток 6» ${regLabel(unit)}</button>${unit.profile === "cz" ? "" : `<button class="btn js-regx" title="Той самий реєстр у форматі Excel">📊 Реєстр у Excel</button>`}
       <a class="btn sky" href="#/report?ym=${ym}">🧾 Акти списання та перегляд</a>
       <span class="muted js-savestate">Дані зберігаються автоматично після кожної зміни.</span></div>`);
   bindMonthPicker();
@@ -1064,12 +1068,12 @@ async function pageEntry(q) {
       } catch (err) { alert("Не вдалося відновити: " + store.errUa(err)); }
     }));
   });
-  $app.querySelector(".js-reg").addEventListener("click", async () => {
+  $app.querySelectorAll(".js-reg, .js-regx").forEach((b) => b.addEventListener("click", async () => {
     clearTimeout(timer); if (dirtyCards.size) await saveNow();
     const rows = st.vehicles.map(calc);
-    await downloadRegister(unit, unit.settings, ym, rows, SRC);
+    await downloadRegister(unit, unit.settings, ym, rows, SRC, b.classList.contains("js-regx") ? "xlsx" : "");
     store.log("doc_register", ym, unit.id);
-  });
+  }));
   window.onbeforeunload = () => (dirtyCards.size ? "Є незбережені зміни" : undefined);
 }
 
@@ -1520,7 +1524,7 @@ async function pageReport(q) {
         <p class="muted">* дані графи № ${lay.issTotalNo} повинні відповідати даним граф № 11, 12 звіту про одержане і видане пальне.<br>
           * дані графи № ${lay.consTotalNo} повинні відповідати кількості пального в акті списання.<br>
           Підпис особи, яка склала реєстр: ${esc([S.compiler, S.compiler2, S.compiler3].filter((x) => String(x || "").trim()).join(", ") || "— (вкажіть у «Автопарк і реквізити»)")}</p>
-        <button class="btn primary js-reg">📥 Завантажити реєстр «Додаток 6» ${regLabel(unit)}</button>` : `<p class="muted">Немає даних за цей місяць.</p>`}</div>
+        <button class="btn primary js-reg">📥 Завантажити реєстр «Додаток 6» ${regLabel(unit)}</button>${unit.profile === "cz" ? "" : ` <button class="btn js-regx">📊 Реєстр у Excel</button>`}` : `<p class="muted">Немає даних за цей місяць.</p>`}</div>
     <div class="panel"><h2>🧾 Акти списання пального</h2>
       <p class="muted">Окремі акти: «Талони + см/к» (талони, смарт-картки) та «АЗС» (АЗС ГУНП талони, АЗС налив)${multi ? " — і окремо на кожну МВО (підписує вся комісія та ця МВО)" : ""}.
         ${rows.sources.legacy ? "Витрата авто розноситься між ними пропорційно до виданого за місяць; якщо нічого не видано — за основним джерелом списання."
@@ -1539,9 +1543,9 @@ async function pageReport(q) {
     busy(true); try { await reopenMonth(unit, ym); flash("ok", "Місяць відкрито для змін. Після виправлень закрийте його знову."); } catch (err) { flash("err", store.errUa(err)); } finally { busy(false); }
     render();
   });
-  $app.querySelector(".js-reg")?.addEventListener("click", async () => {
-    await downloadRegister(unit, S, ym, rows, rows.sources); store.log("doc_register", ym, unit.id);
-  });
+  $app.querySelectorAll(".js-reg, .js-regx").forEach((b) => b.addEventListener("click", async () => {
+    await downloadRegister(unit, S, ym, rows, rows.sources, b.classList.contains("js-regx") ? "xlsx" : ""); store.log("doc_register", ym, unit.id);
+  }));
   $app.querySelector(".js-doc2")?.addEventListener("click", async () => {
     await download(buildStock(window.docx, S, ym, sr, sr.issTotalNo), stockFile(ym)); store.log("doc_stock", ym, unit.id);
   });
@@ -1573,13 +1577,13 @@ async function pageArchive() {
     <th class="num">Пробіг, км</th><th class="num">Видано, л</th><th class="num">Витрачено, л</th><th class="num">Залишок, л</th><th>Документи</th></tr></thead><tbody>
     ${recs.map((r) => `<tr><td><a href="#/entry?ym=${r.ym}">${C.monthTitle(r.ym)}</a>${r.closed ? ` <span class="pill ok" title="${esc(r.closed.closed_at || "")}">🔒 закрито</span>` : ""}</td><td class="num">${r.rows.length}</td><td class="num">${C.fmtKm(r.t.km)}</td>
       <td class="num">${C.fmtC(r.t.issuedC)}</td><td class="num">${C.fmtC(r.t.consC)}</td><td class="num">${C.fmtC(r.t.endC)}</td>
-      <td><button class="btn sm js-doc" data-ym="${r.ym}" data-k="reg">Реєстр</button>
+      <td><button class="btn sm js-doc" data-ym="${r.ym}" data-k="reg">Реєстр</button>${unit.profile === "cz" ? "" : `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="regx">Реєстр Excel</button>`}
         ${r.acts.map((a, i) => `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="${i}">Акт «${esc(a.title)}»</button>`).join(" ")}
         ${r.stk ? `<button class="btn sm js-doc" data-ym="${r.ym}" data-k="stk">Додаток 2</button>` : ""}</td></tr>`).join("")}
     </tbody></table>` : `<p class="muted">Збережених місяців ще немає.</p>`}</div>`);
   $app.querySelectorAll(".js-doc").forEach((b) => b.addEventListener("click", async () => {
     const r = recs.find((x) => x.ym === b.dataset.ym); const k = b.dataset.k;
-    if (k === "reg") await downloadRegister(unit, r.S, r.ym, r.rows, r.rows.sources);
+    if (k === "reg" || k === "regx") await downloadRegister(unit, r.S, r.ym, r.rows, r.rows.sources, k === "regx" ? "xlsx" : "");
     else if (k === "stk") await download(buildStock(window.docx, r.S, r.ym, r.stk, r.stk.issTotalNo), stockFile(r.ym));
     else { const a = r.acts[Number(k)]; await download(buildAct(window.docx, r.S, r.ym, a), actFileName(a, r.ym)); }
   }));
@@ -2412,8 +2416,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261124j")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261124j")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261125a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261125a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
