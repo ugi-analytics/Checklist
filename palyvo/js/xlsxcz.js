@@ -36,13 +36,13 @@ export const ref = (c, r) => col(c) + (r + 1);
 const FONTS = [["11", true, false], ["13", true, false], ["8", false, true], ["10", true, false], ["11", true, false], ["12", true, false], ["9", true, false], ["9", false, false]];
 //         [font, border, h-align, v-align, wrap]
 export const ST = { def: 0, title: 1, cap: 2, head: 3, txt: 4, num: 5, ctr: 6, totN: 7, totT: 8, plain: 9, num2: 10, sign: 11, titleL: 12, num1: 13, totN2: 14,
-  headV: 15, headS: 16, ctrS: 17, numS: 18, totS: 19, titleR: 20, note: 21 };
+  headV: 15, headS: 16, ctrS: 17, numS: 18, totS: 19, titleR: 20, note: 21, headV10: 22 };
 //         [font, border, h-align, v-align, wrap, numFmtId]   164 = «0.0#» (залишок на початок), 2 = «0.00» (витрачено, залишок)
 const XF = [[0, 0, "", "", 0], [1, 0, "center", "center", 0], [2, 0, "center", "top", 0], [3, 1, "center", "center", 1], [0, 1, "center", "center", 1],
   [0, 1, "center", "center", 0], [0, 1, "center", "center", 1], [4, 1, "center", "center", 0], [4, 1, "center", "center", 0], [0, 0, "left", "top", 1], [0, 1, "center", "center", 0, 2],
   [5, 0, "left", "center", 0], [1, 0, "left", "center", 0], [0, 1, "center", "center", 0, 164], [4, 1, "center", "center", 0, 2],
   // реєстр «Додаток 6» (звичайний підрозділ): шрифт 9 — заголовок вертикальний / звичайний, текст і числа з переносом, підсумок жирний; «Додаток № 6» праворуч
-  [7, 1, "center", "center", 1, 0, 90], [7, 1, "center", "center", 1], [7, 1, "center", "center", 1], [7, 1, "center", "center", 0], [6, 1, "center", "center", 1], [5, 0, "right", "center", 0], [7, 0, "left", "center", 0]];
+  [7, 1, "center", "center", 1, 0, 90], [7, 1, "center", "center", 1], [7, 1, "center", "center", 1], [7, 1, "center", "center", 0], [6, 1, "center", "center", 1], [5, 0, "right", "center", 0], [7, 0, "left", "center", 0], [3, 1, "center", "center", 1, 0, 90]];
 function styles() {
   const fonts = FONTS.map(([sz, b, i]) => `<font>${b ? "<b/>" : ""}${i ? "<i/>" : ""}<sz val="${sz}"/><name val="Times New Roman"/><family val="1"/><charset val="204"/></font>`).join("");
   const xfs = XF.map(([f, b, h, v, w, nf = 0, rot = 0]) => `<xf numFmtId="${nf}" fontId="${f}" fillId="0" borderId="${b}" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"${nf ? ` applyNumberFormat="1"` : ""}><alignment${h ? ` horizontal="${h}"` : ""}${v ? ` vertical="${v}"` : ""}${w ? ` wrapText="1"` : ""}${rot ? ` textRotation="${rot}"` : ""}/></xf>`).join("");
