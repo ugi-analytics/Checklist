@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261126a";
-import * as U from "./ui.js?v=20261126a";
-import { litresWords } from "./words.js?v=20261126a";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126a";
-import { buildCzRegister } from "./cz.js?v=20261126a";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126a";
-import * as ST from "./stock.js?v=20261126a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126a";
-import * as X from "./crypto.js?v=20261126a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261126a";
-import { buildXlsx } from "./xlsx.js?v=20261126a";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126a";
+import * as C from "./core.js?v=20261126b";
+import * as U from "./ui.js?v=20261126b";
+import { litresWords } from "./words.js?v=20261126b";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126b";
+import { buildCzRegister } from "./cz.js?v=20261126b";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126b";
+import * as ST from "./stock.js?v=20261126b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126b";
+import * as X from "./crypto.js?v=20261126b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261126b";
+import { buildXlsx } from "./xlsx.js?v=20261126b";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1523,7 +1523,7 @@ async function pageReport(q) {
   const acts = actList.map((a, i) => {
     const tot = a.lines.reduce((x, l) => x + l.qtyC, 0);
     return `<div class="act"><h3>Акт «${esc(a.title)}»</h3><div class="big">${C.fmtC(tot)} л</div>
-      ${a.lines.length ? `<ul>${a.lines.map((l) => `<li>${esc([l.fuel, l.form, l.supplier].filter(Boolean).join(" "))} — ${C.fmtC(l.qtyC)} л${l.mvo ? ` (МВО ${esc(l.mvo)})` : ""}</li>`).join("")}</ul>
+      ${a.lines.length ? `<ul>${a.lines.map((l) => `<li>${esc([l.fuel, l.form, l.supplier].filter(Boolean).join(" "))}${l.moto ? ` · ${esc(l.moto)}` : ""} — ${C.fmtC(l.qtyC)} л${l.moto ? ` = <b>${C.fmtKg(l.kg)} кг</b> (× ${C.fmtKg(C.KG_PER_L)})` : ""}${l.mvo ? ` (МВО ${esc(l.mvo)})` : ""}</li>`).join("")}</ul>
         <p class="muted">«${litresWords(tot)}»</p><button class="btn sky js-act" data-i="${i}">📥 Завантажити акт (Word)</button>`
         : `<p class="muted">Немає пального до списання.</p>`}</div>`;
   }).join("");
@@ -2438,8 +2438,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261126a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261126b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

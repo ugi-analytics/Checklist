@@ -1,8 +1,8 @@
 // Формування Word: реєстр «Додаток 6» (A4 альбомно) і акт списання (типова форма № З-2, A4 книжково).
 // Перенесено з export_docx.py / export_act.py. D — простір імен бібліотеки docx (window.docx або require("docx")).
-import * as C from "./core.js?v=20261126a";
-import { litresWords } from "./words.js?v=20261126a";
-import * as S from "./stock.js?v=20261126a";
+import * as C from "./core.js?v=20261126b";
+import { litresWords } from "./words.js?v=20261126b";
+import * as S from "./stock.js?v=20261126b";
 
 const FONT = "Times New Roman";
 const cm = (x) => Math.round(x * 567);      // см → twips
@@ -178,7 +178,10 @@ export function buildAct(D, s, ym, act, now = new Date()) {
   const yearNow = now.getFullYear();
   const monthTxt = C.MONTHS_UA[m - 1];
   const groups = act.lines || [];
-  const total = groups.reduce((a, g) => a + g.qtyC, 0);
+  // техніка (трактор) — пункти в кг; «Разом» і підсумок — літри окремо, кг окремо
+  const total = groups.filter((g) => !g.moto).reduce((a, g) => a + g.qtyC, 0);
+  const totalKg = Math.round(groups.filter((g) => g.moto).reduce((a, g) => a + g.kg, 0) * 1000) / 1000;
+  const hasKg = groups.some((g) => g.moto);
   const usable = cm(21.0 - 3.5);
   const lw = Math.floor(usable * 0.44), rw = usable - lw;
   const P = (text, o = {}) => para(D, text ? [run(D, text, { size: o.size || 12, bold: o.bold })] : [], { align: "left", ...o });
@@ -218,12 +221,13 @@ export function buildAct(D, s, ym, act, now = new Date()) {
     new D.TableRow({ children: heads.map((_, i) => cell(D, `${i + 1}.`, { size: 10 })) })];
   const lines = groups.length ? groups : [null];
   lines.forEach((g, i) => {
-    const vals = g ? [`${i + 1}.`, "", [g.fuel, g.form === "с/к" ? "с/к" : g.form, g.supplier].filter(Boolean).join(" "), "л", C.fmtC(g.qtyC), "", "",
+    const vals = g ? [`${i + 1}.`, "", [g.fuel, g.form === "с/к" ? "с/к" : g.form, g.supplier].filter(Boolean).join(" ") + (g.moto ? ` (${g.moto}; ${C.fmtC(g.qtyC)} л × ${C.fmtKg(C.KG_PER_L)})` : ""),
+      g.moto ? "кг" : "л", g.moto ? C.fmtKg(g.kg) : C.fmtC(g.qtyC), "", "",
       g.mvo ? `МВО ${g.mvo}` : "", period] : ["1.", "", "", "л", "0", "", "", "", period];
     tr.push(new D.TableRow({ cantSplit: true, children: vals.map((v) => cell(D, v, { size: 11 })) }));
   });
   tr.push(new D.TableRow({ children: [cell(D, "Разом :", { size: 11, colSpan: 4, align: "left" }),
-    cell(D, C.fmtC(total), { size: 11, bold: true }), ...[0, 1, 2, 3].map(() => cell(D, "", { size: 11 }))] }));
+    cell(D, hasKg ? [total ? `${C.fmtC(total)} л` : "", `${C.fmtKg(totalKg)} кг`].filter(Boolean).join("\n") : C.fmtC(total), { size: 11, bold: true }), ...[0, 1, 2, 3].map(() => cell(D, "", { size: 11 }))] }));
   const table = new D.Table({ rows: tr, columnWidths: w, width: { size: usable, type: D.WidthType.DXA }, layout: D.TableLayoutType.FIXED,
     alignment: D.AlignmentType.CENTER, margins: { top: 30, bottom: 30, left: 50, right: 50 } });
 
@@ -233,7 +237,7 @@ export function buildAct(D, s, ym, act, now = new Date()) {
     para(D, [run(D, "Акт списання № ______", { size: 14, bold: true })], { before: 14, after: 8 }),
     para(D, [run(D, intro, { size: 12 })], { align: "justify", firstLine: cm(1.0), after: 6 }),
     table,
-    para(D, [run(D, `Усього за цим актом списано ${litresWords(total)} на загальну суму ___________ гривень __________ копійок.`,
+    para(D, [run(D, `Усього за цим актом списано ${[total || !hasKg ? litresWords(total) : "", hasKg ? `${C.fmtKg(totalKg)} кг` : ""].filter(Boolean).join(" та ")} на загальну суму ___________ гривень __________ копійок.`,
       { size: 12 })], { align: "justify", firstLine: cm(1.0), before: 12 }),
     P("Окремі зауваження комісії відсутні.", { indentLeft: cm(0.6), before: 10 }),
     P("Голова комісії:", { indentLeft: cm(0.6), before: 4, keepNext: true }),

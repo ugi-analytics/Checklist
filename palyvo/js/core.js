@@ -181,6 +181,12 @@ export function fmtC(c, blankZero = false) {
 /** Назва авто для показу: марка + номерний знак (у режимі ЦЗ номер — окреме поле). */
 export const vehName = (v) => [String((v && v.name) || "").trim(), String((v && v.plate) || "").trim()].filter(Boolean).join(" ");
 /** Водний транспорт (катери): пробіг — у мотогодинах, норма — л на 1 мотогодину. */
+/** Техніка (трактор): в акті списання — у кілограмах; густина дизпалива — постійна. */
+export const KG_PER_L = 0.852;
+export const isMoto = (v) => !!v && v.kind === "moto";
+/** літри (у сотих) → кг, до тисячних */
+export const kgOf = (qC) => Math.round((qC / 100) * KG_PER_L * 1000) / 1000;
+export const fmtKg = (kg) => String(kg).replace(".", ",");
 export const isWater = (v) => !!v && (v.kind === "water" || v.kind === "moto");   // також техніка (трактор) — у мотогодинах
 export const runUnit = (v) => (isWater(v) ? "мотогод" : "км");
 /** Пробіг для показу: км — цілі; мотогодини — до сотих (кома). */
@@ -810,15 +816,16 @@ export function actGroups(rows, group = null, settings = {}, mvo = null) {
       const f = sourceFor(s, r.vehicle, settings);
       if (group !== null && f.group !== group) continue;
       if (mvo !== null && f.mvo !== mvo) continue;
-      // окремі пункти акта за видом пального І формою (с/к окремо від талонів)
-      const k = JSON.stringify([f.fuel, f.supplier, f.mvo, f.form]);
+      // окремі пункти акта за видом пального І формою (с/к окремо від талонів); техніка (трактор) — окремим пунктом у кг
+      const k = JSON.stringify([f.fuel, f.supplier, f.mvo, f.form, ...(isMoto(r.vehicle) ? [vehName(r.vehicle)] : [])]);
       m.set(k + "|" + f.group, { k, q: ((m.get(k + "|" + f.group) || {}).q || 0) + q });
     }
   }
   const agg = new Map();
   for (const { k, q } of m.values()) agg.set(k, (agg.get(k) || 0) + q);
   const FORM_ORDER = FORMS;
-  return [...agg.entries()].map(([k, q]) => { const [fuel, supplier, mvo2, form] = JSON.parse(k); return { fuel, supplier, mvo: mvo2, form: form || "", qtyC: q }; })
+  return [...agg.entries()].map(([k, q]) => { const [fuel, supplier, mvo2, form, moto] = JSON.parse(k);
+    return { fuel, supplier, mvo: mvo2, form: form || "", qtyC: q, ...(moto ? { moto, kg: kgOf(q) } : {}) }; })
     .sort((a, b) => String(a.fuel).localeCompare(String(b.fuel), "uk") || FORM_ORDER.indexOf(a.form) - FORM_ORDER.indexOf(b.form) || String(a.mvo).localeCompare(String(b.mvo), "uk"));
 }
 function legacyActSplit(r) {
