@@ -181,7 +181,7 @@ export function fmtC(c, blankZero = false) {
 /** Назва авто для показу: марка + номерний знак (у режимі ЦЗ номер — окреме поле). */
 export const vehName = (v) => [String((v && v.name) || "").trim(), String((v && v.plate) || "").trim()].filter(Boolean).join(" ");
 /** Водний транспорт (катери): пробіг — у мотогодинах, норма — л на 1 мотогодину. */
-export const isWater = (v) => !!v && v.kind === "water";
+export const isWater = (v) => !!v && (v.kind === "water" || v.kind === "moto");   // також техніка (трактор) — у мотогодинах
 export const runUnit = (v) => (isWater(v) ? "мотогод" : "км");
 /** Пробіг для показу: км — цілі; мотогодини — до сотих (кома). */
 export function fmtRun(v, x) {
@@ -216,7 +216,7 @@ export function normalizeVehicle(v = {}) {
   if (!out.source) out.source = "smk";
   { const byLabel = Object.fromEntries(LEGACY_SOURCES.map((l) => [l.label, l.id])); if (byLabel[out.source]) out.source = byLabel[out.source]; }
   for (const k of ["rate", "winter_pct"]) { const n = Number(String(out[k] ?? 0).replace(",", ".")); out[k] = isFinite(n) ? n : 0; }
-  { const x = Number(String(out.month_norm_km || 0).replace(",", ".")); const n = out.kind === "water" ? Math.round(x * 10) / 10 : Math.trunc(x); out.month_norm_km = isFinite(n) ? n : 0; }
+  { const x = Number(String(out.month_norm_km || 0).replace(",", ".")); const n = isWater(out) ? Math.round(x * 10) / 10 : Math.trunc(x); out.month_norm_km = isFinite(n) ? n : 0; }
   out.active = out.active !== false;
   for (const k of ["name", "fuel", "supplier", "mvo_text"]) out[k] = String(out[k] ?? "").trim();
   return out;
@@ -265,6 +265,21 @@ export function textForms(low) {
   return null;
 }
 
+/** Джерело за назвою (міткою) у тексті опису: повне слово або його початок — «т», «та», «тал», «талон» → «талони»;
+ *  мітки з «/» чи пробілом («т/н», «налив/з», «ГУНП налив») — лише повністю. */
+export function labelSrc(low, cands) {
+  const words = String(low || "").toLowerCase().split(/[\s,;+]+/).map((w) => w.replace(/^[\d.,]+/, "").replace(/\.+$/, "")).filter((w) => /[а-яґєіїa-z]/.test(w));
+  let best = null, bs = 0;
+  for (const x of cands) {
+    const lab = String(x.label || "").toLowerCase().replace(/\s+/g, " ").trim(); if (!lab) continue;
+    for (const w of words) {
+      const sc = w === lab ? 10 : !/[\/\s]/.test(lab) && lab.startsWith(w) ? 5 + w.length / lab.length : 0;
+      if (sc > bs) { bs = sc; best = x; }
+    }
+  }
+  return best;
+}
+
 export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const e = entry || {};
   const list = vehicleSources(vehicle, e, sources);
@@ -303,6 +318,9 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
       for (const p of parts) {
         if (p.c === null) continue;
         const form = textForms(p.low);
+        // назва джерела в тексті («7 т», «5 т/н», «10 налив/з») — прямо на це джерело
+        const lsrc = labelSrc(p.low, sources.filter((x) => x.active && (!p.own || x.mvo === p.mv)));
+        if (lsrc) { splitIn.push({ mvo: lsrc.mvo, c: p.c, hint: p.low, text: true, src: lsrc }); continue; }
         // давні талони — окрема частина залишку: не прив'язується до джерела, переноситься як написано
         if (form && form[0] === "талони" && !(p.own && sources.some((x) => x.mvo === p.mv && form.includes(x.form) && sourceFits(x, vehicle)))) {
           splitIn.push({ keep: true, c: p.c, text: true, label: p.part, mvo: p.mv, own: p.own }); continue;
@@ -519,6 +537,8 @@ function applyManualEnd(r, e, list, sources, vehicle, availBy, pickSrc) {
   const endT = {}; const keepT = []; const unknown = [];
   for (const p of parts) {
     const form = textForms(p.low);
+    const lsrc = labelSrc(p.low, list.filter((x) => !p.own || x.mvo === p.mvo));
+    if (lsrc) { endT[lsrc.id] = (endT[lsrc.id] || 0) + p.c; continue; }
     if (form && form[0] === "талони" && r.keep.length && !(p.own && sources.some((x) => x.mvo === p.mvo && form.includes(x.form)))) { keepT.push(p.c); continue; }
     const src = p.mvo ? pickSrc({ mvo: p.mvo, hint: p.low }) : (form ? list.find((x) => form.includes(x.form) && sourceFits(x, vehicle)) : null);
     if (!src || !list.includes(src)) { unknown.push(p.part); continue; }

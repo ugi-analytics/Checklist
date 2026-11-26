@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261125d";
-import * as U from "./ui.js?v=20261125d";
-import { litresWords } from "./words.js?v=20261125d";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261125d";
-import { buildCzRegister } from "./cz.js?v=20261125d";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261125d";
-import * as ST from "./stock.js?v=20261125d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261125d";
-import * as X from "./crypto.js?v=20261125d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261125d";
-import { buildXlsx } from "./xlsx.js?v=20261125d";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261125d";
+import * as C from "./core.js?v=20261126a";
+import * as U from "./ui.js?v=20261126a";
+import { litresWords } from "./words.js?v=20261126a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126a";
+import { buildCzRegister } from "./cz.js?v=20261126a";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126a";
+import * as ST from "./stock.js?v=20261126a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126a";
+import * as X from "./crypto.js?v=20261126a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261126a";
+import { buildXlsx } from "./xlsx.js?v=20261126a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -589,7 +589,7 @@ async function publishCatalog(unit) {
     if (state.dispPub === undefined) state.dispPub = await store.getDispPub();
     const pub = state.dispPub; if (!pub) return;
     const cat = { unit: unit.kind === "pog" ? `${unit.parent_name || ""} · ${unit.name}` : unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
-      .map((v) => ({ id: v.id, name: C.vehName(v), rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel, ...(C.isWater(v) ? { kind: "water" } : {}) })) };
+      .map((v) => ({ id: v.id, name: C.vehName(v), rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel, ...(C.isWater(v) ? { kind: v.kind } : {}) })) };
     const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
     const cur = await store.getFleetCat(unit.id);
     if (cur && cur.h === h) return;
@@ -1619,7 +1619,7 @@ async function pageFleet() {
   const s = unit.settings;
   const pog = unit.kind === "pog";
   const cz = unit.profile === "cz";
-  const water = !!unit.water || unit.vehicles.some(C.isWater);
+  const water = !!unit.water || cz || unit.vehicles.some(C.isWater);
   const f = (k, label, cls = "") => `<label class="f ${cls}">${label}<input data-k="${k}" value="${esc(s[k] ?? "")}"></label>`;
   shell(`${onboarding ? `<div class="panel" style="border-color:rgba(250,204,21,.5);background:linear-gradient(120deg,rgba(8,145,178,.25),rgba(55,48,163,.25))">
       <h2 class="display">👋 Вітаємо! ${pog ? "Додайте свій службовий автомобіль" : "Створіть автопарк свого підрозділу"}</h2>
@@ -1635,7 +1635,7 @@ async function pageFleet() {
     <div class="panel"><h2>${pog ? "🚗 Мій автомобіль" : "🚗 Автопарк підрозділу"}</h2>
       <p class="muted">Шаблон вашого автопарку: усі місяці беруть авто звідси. Авто, яке тимчасово не звітує, краще не видаляти, а зняти «Активне» —
         історія місяців збережеться. «Марка, ДНЗ» пишіть як у звіті, номер — останнім словом (напр. <i>Peugeot 301 1825</i>).</p>
-      <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}${water ? `<th title="Авто — пробіг у км, норма л/100 км; водний транспорт — робота в мотогодинах, норма л на 1 мотогодину">Тип</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км${water ? "<br><small>(водний — л/мотогод)</small>" : ""}</th>
+      <div class="tblwrap"><table class="edit" id="veh"><thead><tr>${cz ? `<th title="Служба (підрозділ апарату), за якою закріплене авто — колонка «Підрозділ» реєстру і рядок у «Зведенні по області»">Служба</th>` : ""}${water ? `<th title="Авто — пробіг у км, норма л/100 км; водний транспорт і техніка (трактор) — робота в мотогодинах, норма л на 1 мотогодину">Тип</th>` : ""}<th style="min-width:200px">${cz ? "Марка ТЗ" : "Марка, ДНЗ"}</th>${cz ? "<th>Номерний знак</th>" : ""}<th>Норма, л/100 км${water ? "<br><small>(водний — л/мотогод)</small>" : ""}</th>
         <th>Норма пробігу, км/міс${water ? "<br><small>(водний — мотогод/міс)</small>" : ""}</th><th>Вид пального</th><th class="col-mvo" style="min-width:170px">МВО</th><th>Активне</th><th></th></tr></thead><tbody></tbody></table></div>
       <button class="btn sm js-addveh" style="margin-top:10px">${pog && unit.vehicles.length ? "➕ Додати ще авто (якщо за вами закріплено кілька)" : "➕ Додати авто"}</button>
       <datalist id="fuels"><option value="А-95"><option value="А-92"><option value="ДП"><option value="Газ/бенз"></datalist>
@@ -1713,7 +1713,7 @@ async function pageFleet() {
   const vbody = $app.querySelector("#veh tbody"), mbody = $app.querySelector("#mem tbody");
   const addVeh = (v) => {
     const tr = document.createElement("tr"); tr.dataset.id = v.id || C.newId();
-    tr.innerHTML = `${cz ? `<td><input data-f="service" list="czsvc" value="${esc(v.service || "")}" placeholder="ЦЗ" style="width:110px"></td>` : ""}${water ? `<td><select data-f="kind"><option value="" ${C.isWater(v) ? "" : "selected"}>🚗 авто</option><option value="water" ${C.isWater(v) ? "selected" : ""}>🚤 водний</option></select></td>` : ""}<td><input data-f="name" value="${esc(v.name)}" placeholder="${cz ? "Марка" : "Марка модель номер"}"></td>
+    tr.innerHTML = `${cz ? `<td><input data-f="service" list="czsvc" value="${esc(v.service || "")}" placeholder="ЦЗ" style="width:110px"></td>` : ""}${water ? `<td><select data-f="kind"><option value="" ${C.isWater(v) ? "" : "selected"}>🚗 авто</option><option value="water" ${v.kind === "water" ? "selected" : ""}>🚤 водний</option><option value="moto" ${v.kind === "moto" ? "selected" : ""}>🚜 техніка (мотогод.)</option></select></td>` : ""}<td><input data-f="name" value="${esc(v.name)}" placeholder="${cz ? "Марка" : "Марка модель номер"}"></td>
       ${cz ? `<td><input data-f="plate" value="${esc(v.plate || "")}" placeholder="1714" style="width:110px"></td>` : ""}
       <td><input data-f="rate" type="number" step="0.1" min="0" value="${v.rate ?? ""}"></td>
       <td><input data-f="month_norm_km" type="number" step="${C.isWater(v) ? "0.1" : "10"}" min="0" value="${v.month_norm_km ?? (C.isWater(v) ? "" : 2640)}"></td>
@@ -2438,8 +2438,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261125d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261125d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261126a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

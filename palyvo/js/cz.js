@@ -1,7 +1,7 @@
 // Режим ЦЗ: реєстр (Додаток 6) у Excel — як у реєстрі ЦЗ (служба, марка, номер, джерела за назвами колонок,
 // «передано з ТЗ на ТЗ», формули «всього» і залишку, порожня «Примітка»).
-import * as C from "./core.js?v=20261125d";
-import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261125d";
+import * as C from "./core.js?v=20261126a";
+import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261126a";
 
 const LOC = ["січні", "лютому", "березні", "квітні", "травні", "червні", "липні", "серпні", "вересні", "жовтні", "листопаді", "грудні"];
 const SHORT = { "талони": "т", "т/н": "т/н", "налив": "н", "налив/з": "н/з", "см/к": "см/к", "ова": "ова" };
@@ -72,7 +72,7 @@ export function buildCzRegister(s, ym, rows, sources) {
   rows.forEach((row, i) => {
     const v = row.vehicle, R = r + 1;
     put(r, 0, i + 1, ST.ctr); put(r, 1, v.service || "ЦЗ", ST.txt); put(r, 2, nameOf(v), ST.txt); put(r, 3, plateOf(v), ST.ctr);
-    put(r, 4, row.km || 0, ST.num); put(r, 5, n2(row.startC), ST.num1); put(r, 6, czForm(row, "start"), ST.ctr);
+    put(r, 4, C.isWater(row.vehicle) ? C.fmtRun(row.vehicle, row.km) + " м/г" : row.km || 0, C.isWater(row.vehicle) ? ST.ctr : ST.num); put(r, 5, n2(row.startC), ST.num1); put(r, 6, czForm(row, "start"), ST.ctr);
     cols.forEach((c, j) => { const q = c.ids.reduce((a, id) => a + (row.issued[id] || 0), 0); put(r, cI + j, q ? n2(q) : "", ST.num); });
     put(r, cIx, row.xferC ? n2(row.xferC) : "", ST.num);
     put(r, cIt, n2(row.issuedC), ST.num, `ROUND(SUM(${col(cI)}${R}:${col(cIx)}${R}),2)`);
