@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261126e";
-import * as U from "./ui.js?v=20261126e";
-import { litresWords } from "./words.js?v=20261126e";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126e";
-import { buildCzRegister } from "./cz.js?v=20261126e";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126e";
-import * as ST from "./stock.js?v=20261126e";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126e";
-import * as X from "./crypto.js?v=20261126e";
-import { qrSvg } from "../vendor/qrcode.js?v=20261126e";
-import { buildXlsx } from "./xlsx.js?v=20261126e";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126e";
+import * as C from "./core.js?v=20261126f";
+import * as U from "./ui.js?v=20261126f";
+import { litresWords } from "./words.js?v=20261126f";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126f";
+import { buildCzRegister } from "./cz.js?v=20261126f";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126f";
+import * as ST from "./stock.js?v=20261126f";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126f";
+import * as X from "./crypto.js?v=20261126f";
+import { qrSvg } from "../vendor/qrcode.js?v=20261126f";
+import { buildXlsx } from "./xlsx.js?v=20261126f";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126f";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1404,12 +1404,19 @@ async function pageStock(q) {
     return `<span>видано за реєстром: <b>${z(iss)} л</b></span> · <span>залишок на кінець: <b>${z(end)} л</b></span>
       ${miss ? `<span class="pill err">не покрито накладними ${z(miss)} л</span>` : iss ? `<span class="pill ok">✓ покрито</span>` : ""}`;
   };
+  // перенести накладну в інше джерело того ж пального (напр. субвенцію: налив окремо від талонів)
+  const mvOpts = (l) => {
+    const alt = SRCS.filter((x) => x.active !== false && x.id !== l.src && (!x.fuel || C.normFuel(x.fuel) === C.normFuel(l.fuel)));
+    if (!alt.length) return "";
+    return `<div style="margin-top:4px"><select class="js-mv" title="Перенести накладну до іншого джерела — тоді на неї списуватиметься видане саме з того джерела" style="font-size:.75rem;padding:2px 6px;max-width:260px">
+      <option value="">↔ перенести в інше джерело…</option>${alt.map((x) => `<option value="${esc(x.id)}">${esc(C.sourceTitle(x))}</option>`).join("")}</select></div>`;
+  };
   const lineRow = (l) => {
     const r = res.lines.find((x) => x.id === l.id) || { issC: 0, endC: 0 };
     if (ro) return `<tr><td>${esc(l.doc)}${l.carried ? ` <span class="pill mut">з ${prevTitle}</span>` : ""}</td><td>${esc(ST.formWord(l.form))}</td><td class="num">${z(l.startC)}</td><td class="num">${z(l.recvC)}</td>
       <td class="num">${z(l.issC)}</td><td class="num"><b>${z(l.endC)}</b></td><td>${l.reserve ? `в наливі / резерв${l.note ? ": " + esc(l.note) : ""}` : ""}</td>${res.mvoCol ? "" : `<td>${esc(l.nominal)}</td>`}<td></td></tr>`;
     return `<tr data-id="${l.id}"><td><input data-f="doc" value="${esc(l.doc)}" placeholder="в.н. № від дд.мм.рррр, або від кого" style="min-width:230px">
-        ${l.carried ? `<div class="muted" style="font-size:.75rem">↪️ залишок з ${prevTitle}</div>` : ""}</td>
+        ${l.carried ? `<div class="muted" style="font-size:.75rem">↪️ залишок з ${prevTitle}</div>` : ""}${mvOpts(l)}</td>
       <td><select data-f="form" class="${l.form ? "" : "need"}" title="Що одержано за накладною — від цього залежать графи 5–6 і колонки «талони (с/к)» / «літри»">
         <option value="" ${l.form ? "" : "selected"}>— оберіть —</option>${ST.LINE_FORMS.filter(([v]) => v === l.form || ["талони", "с/к", "АЗС налив", "Субвенція"].includes(v) || SRCS.some((x) => x.form === v))
           .map(([v, t]) => `<option value="${v}" ${v === l.form ? "selected" : ""}>${t}</option>`).join("")}</select></td>
@@ -1487,6 +1494,13 @@ async function pageStock(q) {
           refresh(); schedule();
         };
         i.addEventListener("input", on); i.addEventListener("change", on);
+      });
+      tr.querySelector(".js-mv")?.addEventListener("change", (ev) => {
+        const ns = SRCS.find((x) => x.id === ev.target.value); if (!ns) return;
+        const nl = ST.lineFromSource(ns, l.fuel, {});
+        Object.assign(l, { src: ns.id, supplier: nl.supplier, mvo: nl.mvo }); if (nl.subv) l.subv = true; else delete l.subv;
+        $app.querySelector(".js-all") && ($app.querySelector(".js-all").checked = true); showAll = true;
+        paint(); schedule(200); const ss = $app.querySelector(".js-savestate"); if (ss) ss.textContent = `Накладну «${l.doc || "без номера"}» перенесено до «${C.sourceTitle(ns)}»`;
       });
       tr.querySelector(".js-dl").addEventListener("click", () => {
         if (!confirm(l.carried ? "Прибрати накладну з залишком, перенесену з минулого місяця?" : "Прибрати накладну?")) return;
@@ -2455,8 +2469,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261126e")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126e")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261126f")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126f")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
