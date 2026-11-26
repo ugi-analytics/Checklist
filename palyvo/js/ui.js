@@ -1,5 +1,5 @@
 // HTML-фрагменти карток, KPI і попереднього перегляду (перенесено з ui.py).
-import * as C from "./core.js?v=20261126b";
+import * as C from "./core.js?v=20261126c";
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -14,7 +14,8 @@ export function splitName(name) {
 const fmtNum = (x) => C.fmtC(C.toC(x));
 
 export function idHtml(v, status, srcTitle = "") {
-  const [model, plate] = C.isWater(v) ? [`🚤 ${C.vehName(v)}`, ""] : v.plate ? [v.name || "", String(v.plate).trim()] : splitName(v.name);
+  let [model, plate] = v.kind === "water" ? [`🚤 ${C.vehName(v)}`, ""] : v.plate ? [v.name || "", String(v.plate).trim()] : splitName(v.name);
+  if (C.isMoto(v)) model = `🚜 ${model}`;
   const head = plate
     ? `<div class='model'>${esc(model)}</div><div class='fr-plate'><div class='ua'><i></i>UA</div><div class='n'>${esc(plate)}</div></div>`
     : `<div class='fr-name'>${esc(model) || "—"}</div>`;
