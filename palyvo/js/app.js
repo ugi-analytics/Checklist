@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261126d";
-import * as U from "./ui.js?v=20261126d";
-import { litresWords } from "./words.js?v=20261126d";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126d";
-import { buildCzRegister } from "./cz.js?v=20261126d";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126d";
-import * as ST from "./stock.js?v=20261126d";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126d";
-import * as X from "./crypto.js?v=20261126d";
-import { qrSvg } from "../vendor/qrcode.js?v=20261126d";
-import { buildXlsx } from "./xlsx.js?v=20261126d";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126d";
+import * as C from "./core.js?v=20261126e";
+import * as U from "./ui.js?v=20261126e";
+import { litresWords } from "./words.js?v=20261126e";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126e";
+import { buildCzRegister } from "./cz.js?v=20261126e";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126e";
+import * as ST from "./stock.js?v=20261126e";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126e";
+import * as X from "./crypto.js?v=20261126e";
+import { qrSvg } from "../vendor/qrcode.js?v=20261126e";
+import { buildXlsx } from "./xlsx.js?v=20261126e";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126e";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -1937,6 +1937,11 @@ async function pageAdmin(sub, q) {
     ${[["requests", "Заявки", state.pendingCount], ["users", "Користувачі"], ["units", `Підрозділи (${regular.length})`], ["pog", `👮 ПОГ (${pogs.length})`], ["summary", "📊 Зведення по області"], ["audit", "Журнал дій"]]
       .map(([k, l, b]) => `<a href="#/admin/${k}" class="${tab === k ? "on" : ""}">${l}${b ? `<span class="badge">${b}</span>` : ""}</a>`).join("")}</nav>`;
   let body = "";
+  const pogCabs = units.filter((x) => x.kind === "pog").sort((a, b) => a.name.localeCompare(b.name, "uk"));
+  // повторна реєстрація: наявний кабінет з тим самим прізвищем (без користувача) — вибрати одразу
+  const cabFor = (u) => { const sn = C.shortName(u.full_name).toLowerCase(), last = String(u.full_name || "").trim().split(/\s+/)[0].toLowerCase();
+    const free = pogCabs.filter((x) => !users.some((y) => y.uid !== u.uid && y.unit_id === x.id && y.status === "active"));
+    return free.find((x) => x.name.toLowerCase() === `пог ${sn}` || x.name.toLowerCase() === sn) || (last.length > 2 ? free.find((x) => x.name.toLowerCase().includes(last)) : null) || null; };
   const unitOptions = (sel) => regular.map((u) => `<option value="${u.id}" ${u.id === sel ? "selected" : ""}>${esc(u.name)}</option>`).join("");
 
   if (tab === "requests") {
@@ -1949,8 +1954,9 @@ async function pageAdmin(sub, q) {
           <div><b>${esc(u.full_name)}</b> · ${esc(u.position)}${u.phone ? " · " + esc(u.phone) : ""}<br>
             <span class="muted">${esc(u.email)} · вказаний підрозділ: <b>${esc(u.requested_unit)}</b>${u.pog_req ? ` · <span class="pill info">👮 ПОГ</span>` : ""} · подано ${esc(u.created_at || "")}</span></div>
           <div class="row" style="margin-top:10px">
-            <label class="f">Прив'язати до підрозділу<select class="js-unitsel"><option value="new" ${match ? "" : "selected"}>➕ Створити новий підрозділ</option>${unitOptions(match?.id)}</select></label>
-            <label class="f js-newname" ${match ? 'style="display:none"' : ""}>Назва нового підрозділу<input value="${esc(u.requested_unit)}"></label>
+            <label class="f">Прив'язати до підрозділу<select class="js-unitsel"><option value="new" ${match || cabFor(u) ? "" : "selected"}>➕ Створити новий підрозділ</option>${unitOptions(match?.id)}${pogCabs.length ? `<optgroup label="Наявні кабінети ПОГ / окремі (повторна реєстрація)">${pogCabs.map((x) =>
+              `<option value="${x.id}" ${cabFor(u) === x ? "selected" : ""}>${x.solo ? "👤" : "👮"} ${esc(x.name)} · ${esc(x.parent_name || "—")}</option>`).join("")}</optgroup>` : ""}</select></label>
+            <label class="f js-newname" ${match || cabFor(u) ? 'style="display:none"' : ""}>Назва нового підрозділу<input value="${esc(u.requested_unit)}"></label>
             <label class="f">Роль<select class="js-role"><option value="user" ${u.pog_req ? "" : "selected"}>Користувач підрозділу</option><option value="pog" ${u.pog_req ? "selected" : ""}>ПОГ — окремий кабінет у складі підрозділу</option><option value="dispatcher">Диспетчер (перевірка розрахунків, уся область)</option><option value="pogsup">Керівництво ПОГ (перегляд кабінетів усіх ПОГ області)</option><option value="admin">Адміністратор</option></select></label>
             <button class="btn primary js-approve">✓ Підтвердити</button></div>
           <div style="margin-top:8px"><button class="btn sm danger js-reject">✕ Відхилити</button> <button class="btn sm danger js-udel">🗑 Видалити заявку</button></div></div>`;
@@ -2147,6 +2153,12 @@ async function pageAdmin(sub, q) {
       // диспетчер / керівництво ПОГ не належать підрозділу і не бачать його даних
       await store.updateUser(uid, { status: "active", unit_id: "", role });
       store.log("approve", `${u.full_name} → ${ROLE_UA[role]}`); return;
+    }
+    // повторна реєстрація ПОГ / працівника з окремим кабінетом — прив'язати до наявного кабінету (з його авто й даними)
+    const cab = units.find((x) => x.id === unitId && x.kind === "pog");
+    if (cab) {
+      await store.updateUser(uid, { status: "active", unit_id: cab.id, role: "user", ...(cab.solo ? {} : { pog: true }) });
+      store.log("approve", `${u.full_name} → наявний кабінет «${cab.name}»`, cab.id); return;
     }
     if (role === "pog") {
       // ПОГ: окремий кабінет (свій ключ, своє авто) у складі підрозділу; реквізити й комісія — копія з підрозділу
@@ -2443,8 +2455,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261126d")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126d")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261126e")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126e")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
