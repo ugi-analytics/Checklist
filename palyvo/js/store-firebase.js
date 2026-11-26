@@ -77,6 +77,9 @@ export function createStore(config) {
       }
       throw last;
     },
+    // прив'язки застосунку (для підказки на екрані коду): дата кожної, новіші першими
+    mfaHints: () => (mfaResolver ? mfaResolver.hints.map((h) => ({ time: h.enrollmentTime || "", name: h.displayName || "" }))
+      .sort((a, b) => (Date.parse(b.time) || 0) - (Date.parse(a.time) || 0)) : []),
     mfaRequired: true,
     async mfaState() {
       const u = auth.currentUser; if (!u) return null;

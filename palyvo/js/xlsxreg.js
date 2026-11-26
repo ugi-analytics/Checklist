@@ -1,7 +1,7 @@
 // Реєстр «Додаток 6» у Excel для звичайного підрозділу — той самий вигляд, що й у Word (колонки джерел, «Газ/бенз» двома рядками,
 // підсумки за групами), числа — числами, «Всього» в рядку — формулою.
-import * as C from "./core.js?v=20261126c";
-import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261126c";
+import * as C from "./core.js?v=20261126d";
+import { buildSheet, ST, ref, col } from "./xlsxcz.js?v=20261126d";
 
 const n2 = (c) => Math.round(c || 0) / 100;
 

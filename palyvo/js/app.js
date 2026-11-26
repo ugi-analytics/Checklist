@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261126c";
-import * as U from "./ui.js?v=20261126c";
-import { litresWords } from "./words.js?v=20261126c";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126c";
-import { buildCzRegister } from "./cz.js?v=20261126c";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126c";
-import * as ST from "./stock.js?v=20261126c";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126c";
-import * as X from "./crypto.js?v=20261126c";
-import { qrSvg } from "../vendor/qrcode.js?v=20261126c";
-import { buildXlsx } from "./xlsx.js?v=20261126c";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126c";
+import * as C from "./core.js?v=20261126d";
+import * as U from "./ui.js?v=20261126d";
+import { litresWords } from "./words.js?v=20261126d";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126d";
+import { buildCzRegister } from "./cz.js?v=20261126d";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126d";
+import * as ST from "./stock.js?v=20261126d";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126d";
+import * as X from "./crypto.js?v=20261126d";
+import { qrSvg } from "../vendor/qrcode.js?v=20261126d";
+import { buildXlsx } from "./xlsx.js?v=20261126d";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126d";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -200,6 +200,11 @@ function pageMfaCode() {
     <form class="js-mfa" autocomplete="off"><label class="f">Код<input name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus
       autocomplete="one-time-code" style="font-size:24px;letter-spacing:6px;text-align:center"></label>
       <button class="btn primary">Увійти</button></form>
+    ${(() => { const h = store.mfaHints ? store.mfaHints() : []; if (!h.length) return "";
+      const d = (t) => { const x = new Date(t); return isNaN(x) ? "—" : x.toLocaleString("uk-UA", { dateStyle: "short", timeStyle: "short" }); };
+      return `<p class="muted" style="margin-top:12px;font-size:.85rem">До облікового запису прив'язано застосунків: <b>${h.length}</b>
+        (${h.map((x) => d(x.time)).join("; ")}). ${h.length > 1 ? "Підходить код з будь-якого з них." : ""}
+        Якщо код не приймається — увімкніть на телефоні автоматичні дату й час і введіть свіжий код (не в останні секунди).</p>`; })()}
     <p class="muted" style="margin-top:14px"><a href="#/login" class="js-back">← Інший обліковий запис</a></p>`), { nav: false });
   $app.querySelector(".js-mfa").addEventListener("submit", async (e) => {
     e.preventDefault(); busy(true);
@@ -2438,8 +2443,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261126c")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126c")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261126d")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126d")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
