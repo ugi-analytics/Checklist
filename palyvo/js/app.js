@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261126f";
-import * as U from "./ui.js?v=20261126f";
-import { litresWords } from "./words.js?v=20261126f";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126f";
-import { buildCzRegister } from "./cz.js?v=20261126f";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126f";
-import * as ST from "./stock.js?v=20261126f";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126f";
-import * as X from "./crypto.js?v=20261126f";
-import { qrSvg } from "../vendor/qrcode.js?v=20261126f";
-import { buildXlsx } from "./xlsx.js?v=20261126f";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126f";
+import * as C from "./core.js?v=20261126g";
+import * as U from "./ui.js?v=20261126g";
+import { litresWords } from "./words.js?v=20261126g";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126g";
+import { buildCzRegister } from "./cz.js?v=20261126g";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126g";
+import * as ST from "./stock.js?v=20261126g";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126g";
+import * as X from "./crypto.js?v=20261126g";
+import { qrSvg } from "../vendor/qrcode.js?v=20261126g";
+import { buildXlsx } from "./xlsx.js?v=20261126g";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126g";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -25,6 +25,11 @@ function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; state.su
 const keyCacheId = (unitId) => `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser?.uid}:${unitId}`;
 
 // ============================================================ утиліти
+// пошук: малі літери, латинські двійники → кирилиця, без дефісів/апострофів, пробіли — одинарні
+const LAT2CYR = { a: "а", b: "в", c: "с", e: "е", h: "н", i: "і", k: "к", m: "м", o: "о", p: "р", t: "т", x: "х", y: "у" };
+function searchNorm(t) {
+  return String(t || "").toLowerCase().replace(/[abcehikmoptxy]/g, (ch) => LAT2CYR[ch]).replace(/['’`ʼ]/g, "").replace(/[-–_.\/]+/g, " ").replace(/\s+/g, " ").trim();
+}
 function flash(type, text) { state.flash = [type, text]; }
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 function route() {
@@ -1185,7 +1190,7 @@ function dispView(q) {
   const { cats, stale } = state.dispCat;
   const all = cats.flatMap((c) => c.vehicles.map((v) => ({ ...v, unit: c.unit, unit_id: c.unit_id })));
   const sel = q.get("v") ? all.find((v) => `${v.unit_id}:${v.id}` === q.get("v")) : null;
-  const rowHtml = (v) => `<tr class="js-pick ${sel && sel === v ? "on" : ""}" data-k="${esc(v.unit_id + ":" + v.id)}" data-s="${esc((v.name + " " + v.unit + " " + (v.fuel || "")).toLowerCase())}">
+  const rowHtml = (v) => `<tr class="js-pick ${sel && sel === v ? "on" : ""}" data-k="${esc(v.unit_id + ":" + v.id)}" data-s="${esc(searchNorm(v.name + " " + v.unit + " " + (v.fuel || "")))}">
     <td><b>${esc(v.name)}</b></td><td class="muted">${esc(v.unit)}</td><td>${esc(v.fuel || "")}</td><td class="num">${esc(String(v.rate ?? ""))}</td></tr>`;
   const calc = sel ? `<div class="panel disp-calc"><h2>🧮 ${esc(sel.name)} <span class="muted" style="font-size:.9rem">· ${esc(sel.unit)}</span></h2>
     <p class="muted">Розрахунок лише на цьому екрані — нікуди не зберігається і не змінює даних підрозділу.</p>
@@ -1209,7 +1214,10 @@ function dispView(q) {
     <div class="panel"><div class="tblwrap" style="max-height:${sel ? 360 : 640}px;overflow:auto"><table class="list js-dlist"><thead><tr><th>Авто</th><th>Підрозділ</th><th>Пальне</th><th class="num">Норма, л/100 км</th></tr></thead>
       <tbody>${all.map(rowHtml).join("")}</tbody></table></div></div>`);
   const qi = $app.querySelector(".js-dq");
-  const filter = () => { const t = qi.value.trim().toLowerCase(); $app.querySelectorAll(".js-pick").forEach((tr) => { tr.style.display = !t || tr.dataset.s.includes(t) ? "" : "none"; }); };
+  // номер — без пробілів і дефісів, латиниця = кирилиця (BI = ВІ): «1915», «ВІ 1915», «bi1915ck», «19-15» знайдуть те саме
+  const filter = () => { const w = searchNorm(qi.value).split(" ").filter(Boolean);
+    $app.querySelectorAll(".js-pick").forEach((tr) => { const d = tr.dataset.s, dj = d.replace(/ /g, "");
+      tr.style.display = !w.length || w.every((x) => d.includes(x) || dj.includes(x)) ? "" : "none"; }); };
   qi.value = sessionStorage.getItem("dispQ") || ""; filter();
   qi.addEventListener("input", () => { sessionStorage.setItem("dispQ", qi.value); filter(); });
   $app.querySelectorAll(".js-pick").forEach((tr) => tr.addEventListener("click", () => go(`#/disp?v=${encodeURIComponent(tr.dataset.k)}`)));
@@ -2469,8 +2477,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261126f")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126f")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261126g")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126g")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
