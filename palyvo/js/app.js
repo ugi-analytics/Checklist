@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261126h";
-import * as U from "./ui.js?v=20261126h";
-import { litresWords } from "./words.js?v=20261126h";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261126h";
-import { buildCzRegister } from "./cz.js?v=20261126h";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261126h";
-import * as ST from "./stock.js?v=20261126h";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261126h";
-import * as X from "./crypto.js?v=20261126h";
-import { qrSvg } from "../vendor/qrcode.js?v=20261126h";
-import { buildXlsx } from "./xlsx.js?v=20261126h";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261126h";
+import * as C from "./core.js?v=20261127a";
+import * as U from "./ui.js?v=20261127a";
+import { litresWords } from "./words.js?v=20261127a";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261127a";
+import { buildCzRegister } from "./cz.js?v=20261127a";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261127a";
+import * as ST from "./stock.js?v=20261127a";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261127a";
+import * as X from "./crypto.js?v=20261127a";
+import { qrSvg } from "../vendor/qrcode.js?v=20261127a";
+import { buildXlsx } from "./xlsx.js?v=20261127a";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261127a";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -607,8 +607,11 @@ async function publishCatalog(unit) {
     await store.saveFleetCat(unit.id, { ...sealed, h, unit_name: unit.name, n: cat.vehicles.length });
   } catch (err) { console.warn("Довідник для диспетчера не оновлено:", err && err.message); }
 }
+// щойно прочитаний запис місяця (для запису одразу після читання — без повторного читання з сервера)
+const monthRaw = new Map();
 async function readMonth(unit, ym) {
   const m = await store.getMonth(unit.id, ym);
+  monthRaw.set(unit.id + "/" + ym, { m, t: Date.now() });
   if (!m) return null;
   return m.enc ? { ...m, ...(await X.decJson(unit.dk, m.enc, X.aadMonth(unit.id, ym))) } : m;
 }
@@ -617,7 +620,8 @@ const filledN = (entries) => Object.values(entries || {}).filter((e) => e && ["o
   || Object.values((e && e.iss) || {}).some((x) => x !== "" && x != null)).length;
 async function writeMonth(unit, ym, data, extra = {}) {
   // поточний запис читаємо обов'язково: не вдалося прочитати (мережа) — не пишемо взагалі
-  const raw = await store.getMonth(unit.id, ym);
+  const k0 = unit.id + "/" + ym, hit = monthRaw.get(k0); monthRaw.delete(k0);
+  const raw = hit && Date.now() - hit.t < 4000 ? hit.m : await store.getMonth(unit.id, ym);
   const cur = raw ? (raw.enc ? { ...raw, ...(await X.decJson(unit.dk, raw.enc, X.aadMonth(unit.id, ym))) } : raw) : null;
   // накладні «Додатка 2» живуть у тому ж записі місяця — збереження карток авто їх не затирає
   if (!("stock" in data) && cur && cur.stock) data = { ...data, stock: cur.stock };
@@ -625,7 +629,7 @@ async function writeMonth(unit, ym, data, extra = {}) {
   if (raw && raw.enc) {
     const was = filledN(cur.entries), now = filledN(data.entries), k = unit.id + "/" + ym;
     state.histAt = state.histAt || {};
-    if (now < was || Date.now() - (state.histAt[k] || 0) > 10 * 60e3) {
+    if (now < was || Date.now() - (state.histAt[k] || 0) > 30 * 60e3) {
       try { await store.saveHist(unit.id, { ym, enc: raw.enc, n: was, src_at: raw.updated_at || "" }); state.histAt[k] = Date.now(); }
       catch (err) { console.warn("Версію місяця не збережено:", err && err.message); }
     }
@@ -2376,7 +2380,7 @@ async function pageAdmin(sub, q) {
 }
 
 // ============================================================ присутність на сайті й лічильник користувачів
-const BEAT_MS = 5 * 60 * 1000, ONLINE_MS = 7 * 60 * 1000;
+const BEAT_MS = 10 * 60 * 1000, ONLINE_MS = 12 * 60 * 1000;   // рідше — менше записів у безкоштовній квоті Firestore
 let beatTimer = null, statsTimer = null, lastBeat = 0;
 function beat() { if (document.visibilityState !== "visible") return; lastBeat = Date.now(); store.heartbeat(); }
 function onVisible() { if (document.visibilityState === "visible" && Date.now() - lastBeat > BEAT_MS) { beat(); if (isAdmin()) refreshStats(); } }
@@ -2394,8 +2398,16 @@ function setUserStats(users) {
   state.pendingCount = users.filter((u) => u.status === "pending").length;
   state.userStats = { active: active.length, pending: state.pendingCount, online: online.map((u) => ({ name: u.full_name || u.email, unit: u.unit_id })) };
 }
+// лічильник у шапці адміністратора: не весь список користувачів, а лише онлайн + кількості (дешево для квоти Firestore)
 async function refreshStats() {
-  try { setUserStats(await store.listUsers()); } catch { return; }
+  try {
+    if (!store.userStatsLite) { setUserStats(await store.listUsers()); }
+    else {
+      const x = await store.userStatsLite(ONLINE_MS);
+      state.pendingCount = x.pending;
+      state.userStats = { active: x.active, pending: x.pending, online: x.online.filter((u) => u.status === "active").map((u) => ({ name: u.full_name || u.email, unit: u.unit_id })) };
+    }
+  } catch { return; }
   const el = document.querySelector(".who-stats"); if (el) el.innerHTML = statsHtml();
 }
 function statsHtml() {
@@ -2477,8 +2489,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261126h")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261126h")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261127a")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261127a")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;

@@ -14,7 +14,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, writeBatch, query, where, orderBy, limit,
-  addDoc, deleteField, runTransaction, serverTimestamp,
+  addDoc, deleteField, runTransaction, serverTimestamp, getCountFromServer, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const nowIso = () => new Date().toLocaleString("sv-SE").replace("T", " ");
@@ -136,6 +136,12 @@ export function createStore(config) {
     // «я на сайті» — час сервера, щоб годинники різних комп'ютерів не заважали
     heartbeat: () => (auth.currentUser ? updateDoc(doc(db, "users", auth.currentUser.uid), { last_seen: serverTimestamp() }).catch(() => {}) : Promise.resolve()),
     seenMs: (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : 0),
+    async userStatsLite(onlineMs) {
+      const U = collection(db, "users");
+      const [a, p, on] = await Promise.all([getCountFromServer(query(U, where("status", "==", "active"))), getCountFromServer(query(U, where("status", "==", "pending"))),
+        getDocs(query(U, where("last_seen", ">=", Timestamp.fromMillis(Date.now() - onlineMs))))]);
+      return { active: a.data().count, pending: p.data().count, online: on.docs.map((d) => ({ uid: d.id, ...d.data() })) };
+    },
     async listUsers() { return (await getDocs(collection(db, "users"))).docs.map((d) => ({ uid: d.id, ...d.data() })); },
     updateUser: (uid, fields) => updateDoc(doc(db, "users", uid), fields),
     deleteUser: (uid) => deleteDoc(doc(db, "users", uid)),
