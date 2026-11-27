@@ -274,7 +274,7 @@ export function textForms(low) {
 /** Джерело за назвою (міткою) у тексті опису: повне слово або його початок — «т», «та», «тал», «талон» → «талони»;
  *  мітки з «/» чи пробілом («т/н», «налив/з», «ГУНП налив») — лише повністю. */
 export function labelSrc(low, cands) {
-  const words = String(low || "").toLowerCase().split(/[\s,;+]+/).map((w) => w.replace(/^[\d.,]+/, "").replace(/\.+$/, "")).filter((w) => /[а-яґєіїa-z]/.test(w));
+  const words = String(low || "").toLowerCase().split(/[\s,;+]+/).map((w) => w.replace(/^[\d.,]+\/?/, "").replace(/\.+$/, "")).filter((w) => /[а-яґєіїa-z]/.test(w));
   let best = null, bs = 0;
   for (const x of cands) {
     const lab = String(x.label || "").toLowerCase().replace(/\s+/g, " ").trim(); if (!lab) continue;
@@ -720,7 +720,7 @@ export function monthVehicles(vehicles, month, sources = LEGACY_SOURCES) {
 }
 
 /** Початкові дані нового місяця з кінця попереднього (залишок — окремо за кожним джерелом). */
-export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSources = sources) {
+export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSources = sources, opt = {}) {
   if (!prevMonth) return {};
   const out = {};
   // закритий місяць — переносимо з його знімка (результати як у день закриття)
@@ -740,7 +740,8 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
       // щоб у новому місяці не загубилась форма (напр. «76 ДП т» не ставало «с/к»)
       let endText = String(pe.end_text || "").trim();
       if (!endText && r.endC > 0) {
-        const t = String(balanceText(r, "end") || "").trim();
+        // ЦЗ — короткий вид, як у його реєстрі («т», «50/н+20/т»), без МВО
+        const t = String((opt.endText ? opt.endText(r) : balanceText(r, "end")) || "").trim();
         if (t && t.toLowerCase() !== String(v.fuel || "").trim().toLowerCase()) endText = t;
       }
       const dp = dualParts(r);

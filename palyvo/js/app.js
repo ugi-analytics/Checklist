@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261127b";
-import * as U from "./ui.js?v=20261127b";
-import { litresWords } from "./words.js?v=20261127b";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261127b";
-import { buildCzRegister } from "./cz.js?v=20261127b";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261127b";
-import * as ST from "./stock.js?v=20261127b";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261127b";
-import * as X from "./crypto.js?v=20261127b";
-import { qrSvg } from "../vendor/qrcode.js?v=20261127b";
-import { buildXlsx } from "./xlsx.js?v=20261127b";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261127b";
+import * as C from "./core.js?v=20261127c";
+import * as U from "./ui.js?v=20261127c";
+import { litresWords } from "./words.js?v=20261127c";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261127c";
+import { buildCzRegister, czForm } from "./cz.js?v=20261127c";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261127c";
+import * as ST from "./stock.js?v=20261127c";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261127c";
+import * as X from "./crypto.js?v=20261127c";
+import { qrSvg } from "../vendor/qrcode.js?v=20261127c";
+import { buildXlsx } from "./xlsx.js?v=20261127c";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261127c";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -619,6 +619,8 @@ async function publishCatalog(unit) {
     state.catH[unit.id] = h; lsSet("palyvo-catH", state.catH);
   } catch (err) { console.warn("Довідник для диспетчера не оновлено:", err && err.message); }
 }
+// перенесення залишку на новий місяць: у ЦЗ — короткий вид як у реєстрі ЦЗ («т», «50/н+20/т»), без прізвищ МВО
+const carryOpt = (unit) => (unit.profile === "cz" ? { endText: (r) => czForm(r, "end") } : {});
 // щойно прочитаний запис місяця (для запису одразу після читання — без повторного читання з сервера)
 const monthRaw = new Map();
 async function readMonth(unit, ym) {
@@ -670,7 +672,7 @@ async function monthState(unit, ym) {
   else {
     const prev = await readMonth(unit, C.prevYm(ym));
     const prevSources = C.monthSources(unit.settings, prev && prev.sources, true);
-    entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, sources, prevSources) : {};
+    entries = prev ? C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, sources, prevSources, carryOpt(unit)) : {};
     if (prev) carried = C.prevYm(ym);
   }
   const vehicles = C.monthVehicles(unit.vehicles, { entries, snapshot: (saved && saved.snapshot) || {} }, sources);
@@ -1067,7 +1069,7 @@ async function pageEntry(q) {
   $app.querySelector(".js-prev")?.addEventListener("click", async () => {
     if (!confirm("Перезаписати «Пробіг на початок» і «Залишок на початок» значеннями на кінець попереднього місяця?")) return;
     const prev = await readMonth(unit, C.prevYm(ym));
-    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, SRC, C.monthSources(unit.settings, prev.sources, true));
+    const co = C.carryOver(unit.vehicles, { entries: prev.entries || {}, snapshot: prev.snapshot || {}, frozen: prev.closed ? prev.frozen : null }, SRC, C.monthSources(unit.settings, prev.sources, true), carryOpt(unit));
     let needRender = false;
     for (const card of cardEls) {
       const e = co[card.dataset.vid]; if (!e) continue;
@@ -2501,8 +2503,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261127b")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261127b")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261127c")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261127c")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
