@@ -313,7 +313,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
         const mv = mvos.find((x) => low.includes(x.toLowerCase().split(/\s+/)[0])) || "";
         // своє прізвище, якого немає серед МВО джерел (напр. «10 н Петрунь»), — частина не бере МВО сусідньої частини
         const alien = !mv && hasAlienName(part);
-        return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, mv, own: false, alien };
+        return { part: part.trim(), low, c: m ? toC(m[1].replace(",", ".")) : null, hn: !!m, mv, own: false, alien };
       });
       parts.forEach((p) => { p.own = !!p.mv; });
       // опис без числа («ДП с/к Ольховський») — увесь загальний залишок належить цьому МВО / формі
@@ -326,18 +326,18 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
         const form = textForms(p.low);
         // назва джерела в тексті («7 т», «5 т/н», «10 налив/з») — прямо на це джерело
         const lsrc = labelSrc(p.low, sources.filter((x) => x.active && (!p.own || x.mvo === p.mv)));
-        if (lsrc) { splitIn.push({ mvo: lsrc.mvo, c: p.c, hint: p.low, text: true, src: lsrc }); continue; }
+        if (lsrc) { splitIn.push({ mvo: lsrc.mvo, c: p.c, hint: p.low, text: true, src: lsrc, part: p.part, hn: p.hn }); continue; }
         // давні талони — окрема частина залишку: не прив'язується до джерела, переноситься як написано
         if (form && form[0] === "талони" && !(p.own && sources.some((x) => x.mvo === p.mv && form.includes(x.form) && sourceFits(x, vehicle)))) {
-          splitIn.push({ keep: true, c: p.c, text: true, label: p.part, mvo: p.mv, own: p.own }); continue;
+          splitIn.push({ keep: true, c: p.c, text: true, label: p.part, mvo: p.mv, own: p.own, part: p.part, hn: p.hn }); continue;
         }
         if (!p.mv) {
           const byForm = form && sources.filter((x) => form.includes(x.form))
             .sort((a, b) => (sourceFits(b, vehicle) - sourceFits(a, vehicle)) || (form.indexOf(a.form) - form.indexOf(b.form)) || (list.includes(b) - list.includes(a)))[0];
-          if (byForm) { splitIn.push({ mvo: byForm.mvo, c: p.c, hint: p.low, text: true, src: byForm }); continue; }
+          if (byForm) { splitIn.push({ mvo: byForm.mvo, c: p.c, hint: p.low, text: true, src: byForm, part: p.part, hn: p.hn }); continue; }
           textWarn.push(`У описі залишку «${p.part}» не знайдено МВО чи форму (талони, с/к, АЗС) з джерел — ця частина віднесена на основне джерело.`); continue;
         }
-        splitIn.push({ mvo: p.mv, c: p.c, hint: p.low, text: true });
+        splitIn.push({ mvo: p.mv, c: p.c, hint: p.low, text: true, part: p.part, hn: p.hn });
       }
     }
   }
@@ -360,6 +360,8 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const pickedStart = e.start_src ? sources.find((x) => x.id === e.start_src) : null;
   if (pickedStart && !list.includes(pickedStart)) list.push(pickedStart);
   for (const sp of splitIn) { sp.src = sp.src || (sp.c ? pickSrc(sp) : null); if (sp.src && !list.includes(sp.src)) list.push(sp.src); }
+  // як МВО описала залишок на початок (частини тексту → джерела) — для перенесення залишку тим самим записом
+  const startParts = splitIn.filter((sp) => sp.text && sp.part).map((sp) => ({ src: sp.src ? sp.src.id : null, keep: !!sp.keep, part: sp.part, hn: !!sp.hn }));
   // свої джерела: «різні» за замовчуванням — також коли вибране основне джерело вже не існує
   const free = !sources.legacy && (vehicle.source === NO_MAIN || !sources.some((x) => x.id === vehicle.source));
   // куди йде залишок, не описаний за МВО: основне джерело; для «різних» — джерело того ж пального, з якого видавали цього місяця,
@@ -371,7 +373,7 @@ export function calcRow(vehicle, entry, sources = LEGACY_SOURCES) {
   const main = free ? null : anchor;
   const r = { vehicle, entry: e, sources: list, mainId: main ? main.id : null, km: 0, normC: 0, dual,
     startBy: {}, startC: 0, issued: {}, issuedC: 0, consBy: {}, consC: 0, endBy: {}, endC: 0,
-    capped: false, errors: [], warnings: [], empty: true, keep: [], legacy: !!sources.legacy && !e.split };
+    capped: false, errors: [], warnings: [], empty: true, keep: [], legacy: !!sources.legacy && !e.split, startParts };
   // --- залишок на початок: загальний (fuel_start) + за потреби розбивка за МВО (start_mvo);
   //     старі записи з розбивкою за джерелами (start: {джерело: л}) читаються як є
   const hasStartMap = useStartMap;
@@ -720,6 +722,26 @@ export function monthVehicles(vehicles, month, sources = LEGACY_SOURCES) {
 }
 
 /** Початкові дані нового місяця з кінця попереднього (залишок — окремо за кожним джерелом). */
+/** Опис залишку на кінець тим самим записом, яким МВО описала залишок на початок
+ *  («2 с/к Ярошенко + 10 н Петрунь» → «10 н Петрунь»; «т» → «т»). Якщо на кінець пальне є в джерелі,
+ *  якого в описі не було, — порожньо (тоді опис складається автоматично). */
+const NUM_IN_PART = /(?:^|[^\d\-А-ЯҐЄІЇа-яґєіїA-Za-z])(\d+(?:[.,]\d+)?)/;
+export function styledEndText(r) {
+  const sp = r && r.startParts; if (!sp || !sp.length) return "";
+  const out = [], used = new Set();
+  for (const p of sp) {
+    let c;
+    if (p.keep) { const k = (r.keep || []).find((x) => x.label === p.part); c = k ? Math.max(k.left, 0) : 0; }
+    else { if (!p.src || used.has(p.src)) continue; used.add(p.src); c = r.endBy[p.src] || 0; }
+    if (c > 0) out.push({ p, c });
+  }
+  for (const x of r.sources || []) if ((r.endBy[x.id] || 0) > 0 && !used.has(x.id)) return "";
+  if ((r.keep || []).some((k) => Math.max(k.left, 0) > 0 && !sp.some((p) => p.keep && p.part === k.label))) return "";
+  if (!out.length) return "";
+  const n = (c) => fmtC(c);
+  return out.map(({ p, c }) => (p.hn ? p.part.replace(NUM_IN_PART, (all, num) => all.slice(0, all.length - num.length) + n(c)) : out.length > 1 ? `${n(c)} ${p.part}` : p.part)).join(" + ");
+}
+
 export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSources = sources, opt = {}) {
   if (!prevMonth) return {};
   const out = {};
@@ -741,7 +763,8 @@ export function carryOver(vehicles, prevMonth, sources = LEGACY_SOURCES, prevSou
       let endText = String(pe.end_text || "").trim();
       if (!endText && r.endC > 0) {
         // ЦЗ — короткий вид, як у його реєстрі («т», «50/н+20/т»), без МВО
-        const t = String((opt.endText ? opt.endText(r) : balanceText(r, "end")) || "").trim();
+        // вручну описаний залишок на початок — переносимо тим самим записом; інакше ЦЗ — короткий вид, решта — автоматичний опис
+        const t = String(styledEndText(r) || (opt.endText ? opt.endText(r) : balanceText(r, "end")) || "").trim();
         if (t && t.toLowerCase() !== String(v.fuel || "").trim().toLowerCase()) endText = t;
       }
       const dp = dualParts(r);
