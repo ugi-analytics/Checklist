@@ -1,16 +1,16 @@
 // Портал «Списання пального для МВО» — односторінковий застосунок (GitHub Pages + Firebase).
-import * as C from "./core.js?v=20261127a";
-import * as U from "./ui.js?v=20261127a";
-import { litresWords } from "./words.js?v=20261127a";
-import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261127a";
-import { buildCzRegister } from "./cz.js?v=20261127a";
-import { buildRegisterXlsx } from "./xlsxreg.js?v=20261127a";
-import * as ST from "./stock.js?v=20261127a";
-import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261127a";
-import * as X from "./crypto.js?v=20261127a";
-import { qrSvg } from "../vendor/qrcode.js?v=20261127a";
-import { buildXlsx } from "./xlsx.js?v=20261127a";
-import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261127a";
+import * as C from "./core.js?v=20261127b";
+import * as U from "./ui.js?v=20261127b";
+import { litresWords } from "./words.js?v=20261127b";
+import { buildRegister, buildAct, buildStock } from "./docs.js?v=20261127b";
+import { buildCzRegister } from "./cz.js?v=20261127b";
+import { buildRegisterXlsx } from "./xlsxreg.js?v=20261127b";
+import * as ST from "./stock.js?v=20261127b";
+import { FIREBASE_CONFIG, ADMIN_EMAIL } from "./config.js?v=20261127b";
+import * as X from "./crypto.js?v=20261127b";
+import { qrSvg } from "../vendor/qrcode.js?v=20261127b";
+import { buildXlsx } from "./xlsx.js?v=20261127b";
+import { buildFleetRows, FLEET_WIDTHS, nextYm, dmy } from "./fleet_export.js?v=20261127b";
 
 const $app = document.getElementById("app");
 const esc = U.esc;
@@ -25,6 +25,9 @@ function forgetSessionKeys() { state.keys = {}; state.adminPriv = null; state.su
 const keyCacheId = (unitId) => `${DEMO ? "demo" : FIREBASE_CONFIG.projectId}:${state.authUser?.uid}:${unitId}`;
 
 // ============================================================ утиліти
+// дрібні позначки в браузері (без них усе працює так само, лише з додатковими читаннями)
+function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* немає сховища */ } }
 // пошук: малі літери, латинські двійники → кирилиця, без дефісів/апострофів, пробіли — одинарні
 const LAT2CYR = { a: "а", b: "в", c: "с", e: "е", h: "н", i: "і", k: "к", m: "м", o: "о", p: "р", t: "т", x: "х", y: "у" };
 function searchNorm(t) {
@@ -580,14 +583,18 @@ async function ensurePogKeyNow(unit) {
 async function publishPogSeeds(unit, settings = unit.settings) {
   try {
     if (isDisp() || unit.kind === "pog") return;
-    const keys = await store.listPogKeys(unit.id); if (!keys.length) return;
-    const seed = C.pickSeed(settings); state.seedH = state.seedH || {};
+    // ключі ПОГ підрозділу — раз на 30 хв за сесію; уже надіслані реквізити пам'ятаються в браузері
+    state.pogKeysC = state.pogKeysC || {};
+    let kc = state.pogKeysC[unit.id];
+    if (!kc || Date.now() - kc.t > 30 * 60e3) kc = state.pogKeysC[unit.id] = { t: Date.now(), keys: await store.listPogKeys(unit.id) };
+    const keys = kc.keys; if (!keys.length) return;
+    const seed = C.pickSeed(settings); state.seedH = state.seedH || lsGet("palyvo-seedH") || {};
     for (const k of keys) {
       const h = await X.sha256(k.kid + "|" + unit.id + "|" + JSON.stringify(seed));
       if (state.seedH[k.pog_id] === h) continue;
       const sealed = await X.sealForDisp(seed, { spki: k.spki, kid: k.kid }, X.aadPogSeed(k.pog_id));
       await store.savePogSeed(k.pog_id, { ...sealed, h, parent_id: unit.id });
-      state.seedH[k.pog_id] = h;
+      state.seedH[k.pog_id] = h; lsSet("palyvo-seedH", state.seedH);
     }
   } catch (err) { console.warn("Реквізити для ПОГ не оновлено:", err && err.message); }
 }
@@ -601,10 +608,15 @@ async function publishCatalog(unit) {
     const cat = { unit: unit.kind === "pog" ? `${unit.parent_name || ""} · ${unit.name}` : unit.name, org: unit.settings.org || "", vehicles: unit.vehicles.filter((v) => v.active !== false)
       .map((v) => ({ id: v.id, name: C.vehName(v), rate: v.rate, month_norm_km: v.month_norm_km, fuel: v.fuel, ...(C.isWater(v) ? { kind: v.kind } : {}) })) };
     const h = await X.sha256(pub.kid + "|" + JSON.stringify(cat));
+    // уже звіряли в цьому браузері — без читання з сервера (економія квоти)
+    state.catH = state.catH || lsGet("palyvo-catH") || {};
+    if (state.catH[unit.id] === h) return;
     const cur = await store.getFleetCat(unit.id);
-    if (cur && cur.h === h) return;
-    const sealed = await X.sealForDisp(cat, pub, X.aadFleet(unit.id));
-    await store.saveFleetCat(unit.id, { ...sealed, h, unit_name: unit.name, n: cat.vehicles.length });
+    if (!cur || cur.h !== h) {
+      const sealed = await X.sealForDisp(cat, pub, X.aadFleet(unit.id));
+      await store.saveFleetCat(unit.id, { ...sealed, h, unit_name: unit.name, n: cat.vehicles.length });
+    }
+    state.catH[unit.id] = h; lsSet("palyvo-catH", state.catH);
   } catch (err) { console.warn("Довідник для диспетчера не оновлено:", err && err.message); }
 }
 // щойно прочитаний запис місяця (для запису одразу після читання — без повторного читання з сервера)
@@ -2489,8 +2501,8 @@ async function onAuthChanged(user) {
 // ============================================================ старт
 (async () => {
   try {
-    if (DEMO) store = (await import("./store-mock.js?v=20261127a")).createStore();
-    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261127a")).createStore(FIREBASE_CONFIG);
+    if (DEMO) store = (await import("./store-mock.js?v=20261127b")).createStore();
+    else if (FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey) store = (await import("./store-firebase.js?v=20261127b")).createStore(FIREBASE_CONFIG);
   } catch (err) {
     $app.innerHTML = `<div class="wrap"><div class="panel"><h2>Не вдалося завантажити портал</h2><p>${esc(err.message)}</p></div></div>`;
     return;
